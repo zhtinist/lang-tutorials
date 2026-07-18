@@ -495,6 +495,25 @@ class="sourceCode python"><code class="sourceCode python"><span id="cb19-1"><a h
 <span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> right():</span>
 <span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">global</span> x</span>
 <span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a>    x <span class="op">+=</span> <span class="dv">1</span>          <span class="co"># OK</span></span></code></pre></div>
+<p><strong>A closure captures the cell (the variable), not the value at
+that moment</strong>—this is the classic trap when building closures in
+a loop. The three lambdas below share the same <code>i</code> cell; by
+the time they’re actually called the loop has long finished with
+<code>i</code> stuck at <code>2</code>, so they all return
+<code>2</code>:</p>
+<div class="sourceCode" id="cb20"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>funcs <span class="op">=</span> [<span class="kw">lambda</span>: i <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">3</span>)]</span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>([f() <span class="cf">for</span> f <span class="kw">in</span> funcs])   <span class="co"># [2, 2, 2] —— all three lambdas share one i cell, reading its final value</span></span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Fix: use a default argument to &quot;snapshot&quot; the current i into each lambda&#39;s own i at definition time</span></span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>funcs <span class="op">=</span> [<span class="kw">lambda</span> i<span class="op">=</span>i: i <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">3</span>)]</span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>([f() <span class="cf">for</span> f <span class="kw">in</span> funcs])   <span class="co"># [0, 1, 2] —— the default is fixed when def is evaluated (see the previous section on defaults)</span></span></code></pre></div>
+<p>Contrast with C++: a C++ lambda capturing <code>[i]</code> by value
+copies the current <code>i</code> immediately, whereas
+<code>[&amp;i]</code> by reference shares it as Python does. A Python
+closure <strong>always “shares the cell by reference”</strong>; there is
+no by-value capture syntax—to snapshot, you rely on the default-argument
+trick.</p>
 <h2 id="the-call-stack-frame-objects">The Call Stack: frame Objects</h2>
 <p>A C stack frame is a chunk of contiguous memory with a
 compile-time-fixed layout, popped when the function returns. CPython’s
@@ -503,19 +522,19 @@ a frame containing a local-variable table, a link to the previous frame,
 and so on—it’s a <strong>heap object</strong> (since CPython 3.11 frames
 have an inlining optimization, but semantically you can still access
 them as objects), and it can even be reflected upon at runtime:</p>
-<div class="sourceCode" id="cb20"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sys</span>
-<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> inner():</span>
-<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>    frame <span class="op">=</span> sys._getframe()           <span class="co"># the current frame</span></span>
-<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">&quot;current function:&quot;</span>, frame.f_code.co_name)      <span class="co"># &#39;inner&#39;</span></span>
-<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">&quot;locals:&quot;</span>, frame.f_locals)             <span class="co"># {&#39;frame&#39;: ...}</span></span>
-<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">&quot;caller:&quot;</span>, frame.f_back.f_code.co_name)  <span class="co"># &#39;outer&#39; —— the previous frame</span></span>
-<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb20-9"><a href="#cb20-9" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> outer():</span>
-<span id="cb20-10"><a href="#cb20-10" aria-hidden="true" tabindex="-1"></a>    inner()</span>
-<span id="cb20-11"><a href="#cb20-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb20-12"><a href="#cb20-12" aria-hidden="true" tabindex="-1"></a>outer()</span></code></pre></div>
+<div class="sourceCode" id="cb21"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sys</span>
+<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> inner():</span>
+<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a>    frame <span class="op">=</span> sys._getframe()           <span class="co"># the current frame</span></span>
+<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">&quot;current function:&quot;</span>, frame.f_code.co_name)      <span class="co"># &#39;inner&#39;</span></span>
+<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">&quot;locals:&quot;</span>, frame.f_locals)             <span class="co"># {&#39;frame&#39;: ...}</span></span>
+<span id="cb21-7"><a href="#cb21-7" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">&quot;caller:&quot;</span>, frame.f_back.f_code.co_name)  <span class="co"># &#39;outer&#39; —— the previous frame</span></span>
+<span id="cb21-8"><a href="#cb21-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-9"><a href="#cb21-9" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> outer():</span>
+<span id="cb21-10"><a href="#cb21-10" aria-hidden="true" tabindex="-1"></a>    inner()</span>
+<span id="cb21-11"><a href="#cb21-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-12"><a href="#cb21-12" aria-hidden="true" tabindex="-1"></a>outer()</span></code></pre></div>
 <table>
 <colgroup>
 <col style="width: 44%" />
@@ -560,15 +579,15 @@ cost is being heavier than a C stack frame.</p>
 the C-level stack from actually overflowing, CPython sets a <strong>soft
 limit</strong>; exceeding it raises <code>RecursionError</code> instead
 of crashing:</p>
-<div class="sourceCode" id="cb21"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sys</span>
-<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.getrecursionlimit())    <span class="co"># usually 1000</span></span>
-<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> rec(n):</span>
-<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="dv">1</span> <span class="cf">if</span> n <span class="op">==</span> <span class="dv">0</span> <span class="cf">else</span> rec(n <span class="op">-</span> <span class="dv">1</span>) <span class="op">+</span> <span class="dv">1</span></span>
-<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb21-7"><a href="#cb21-7" aria-hidden="true" tabindex="-1"></a><span class="co"># rec(100000) raises RecursionError instead of segfaulting the process</span></span>
-<span id="cb21-8"><a href="#cb21-8" aria-hidden="true" tabindex="-1"></a>sys.setrecursionlimit(<span class="dv">3000</span>)       <span class="co"># can be raised, but setting it too high may still blow the C stack</span></span></code></pre></div>
+<div class="sourceCode" id="cb22"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sys</span>
+<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.getrecursionlimit())    <span class="co"># usually 1000</span></span>
+<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> rec(n):</span>
+<span id="cb22-5"><a href="#cb22-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="dv">1</span> <span class="cf">if</span> n <span class="op">==</span> <span class="dv">0</span> <span class="cf">else</span> rec(n <span class="op">-</span> <span class="dv">1</span>) <span class="op">+</span> <span class="dv">1</span></span>
+<span id="cb22-6"><a href="#cb22-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-7"><a href="#cb22-7" aria-hidden="true" tabindex="-1"></a><span class="co"># rec(100000) raises RecursionError instead of segfaulting the process</span></span>
+<span id="cb22-8"><a href="#cb22-8" aria-hidden="true" tabindex="-1"></a>sys.setrecursionlimit(<span class="dv">3000</span>)       <span class="co"># can be raised, but setting it too high may still blow the C stack</span></span></code></pre></div>
 <p>Python has <strong>no tail-call optimization</strong>; for deep
 recursion, rewrite it as iteration or use an explicit stack.</p>
 <h2 id="first-class-functions-and-how-decorators-work">First-Class
@@ -579,25 +598,25 @@ sugar for exactly this ability: <code>@deco</code> on
 <code>def foo</code> is equivalent to
 <code>foo = deco(foo)</code>—replacing the original name with
 <code>deco</code>’s return value (typically a wrapper function).</p>
-<div class="sourceCode" id="cb22"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> functools, time</span>
-<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> timer(func):</span>
-<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">@functools.wraps</span>(func)        <span class="co"># copy func&#39;s __name__/__doc__ onto the wrapper</span></span>
-<span id="cb22-5"><a href="#cb22-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> wrapper(<span class="op">*</span>args, <span class="op">**</span>kwargs):  <span class="co"># use *args/**kwargs to pass through any arguments</span></span>
-<span id="cb22-6"><a href="#cb22-6" aria-hidden="true" tabindex="-1"></a>        t0 <span class="op">=</span> time.perf_counter()</span>
-<span id="cb22-7"><a href="#cb22-7" aria-hidden="true" tabindex="-1"></a>        result <span class="op">=</span> func(<span class="op">*</span>args, <span class="op">**</span>kwargs)   <span class="co"># call the wrapped original function</span></span>
-<span id="cb22-8"><a href="#cb22-8" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="ss">f&quot;</span><span class="sc">{</span>func<span class="sc">.</span><span class="va">__name__</span><span class="sc">}</span><span class="ss"> took </span><span class="sc">{</span>time<span class="sc">.</span>perf_counter()<span class="op">-</span>t0<span class="sc">:.6f}</span><span class="ss">s&quot;</span>)</span>
-<span id="cb22-9"><a href="#cb22-9" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> result</span>
-<span id="cb22-10"><a href="#cb22-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> wrapper                 <span class="co"># return the wrapper, replacing the original name</span></span>
-<span id="cb22-11"><a href="#cb22-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-12"><a href="#cb22-12" aria-hidden="true" tabindex="-1"></a><span class="at">@timer</span></span>
-<span id="cb22-13"><a href="#cb22-13" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> work(n):</span>
-<span id="cb22-14"><a href="#cb22-14" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="bu">sum</span>(<span class="bu">range</span>(n))</span>
-<span id="cb22-15"><a href="#cb22-15" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-16"><a href="#cb22-16" aria-hidden="true" tabindex="-1"></a><span class="co"># The above is fully equivalent to: work = timer(work)</span></span>
-<span id="cb22-17"><a href="#cb22-17" aria-hidden="true" tabindex="-1"></a>work(<span class="dv">1_000_000</span>)</span>
-<span id="cb22-18"><a href="#cb22-18" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(work.<span class="va">__name__</span>)   <span class="co"># &#39;work&#39; —— thanks to functools.wraps, otherwise it would be &#39;wrapper&#39;</span></span></code></pre></div>
+<div class="sourceCode" id="cb23"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> functools, time</span>
+<span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> timer(func):</span>
+<span id="cb23-4"><a href="#cb23-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">@functools.wraps</span>(func)        <span class="co"># copy func&#39;s __name__/__doc__ onto the wrapper</span></span>
+<span id="cb23-5"><a href="#cb23-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> wrapper(<span class="op">*</span>args, <span class="op">**</span>kwargs):  <span class="co"># use *args/**kwargs to pass through any arguments</span></span>
+<span id="cb23-6"><a href="#cb23-6" aria-hidden="true" tabindex="-1"></a>        t0 <span class="op">=</span> time.perf_counter()</span>
+<span id="cb23-7"><a href="#cb23-7" aria-hidden="true" tabindex="-1"></a>        result <span class="op">=</span> func(<span class="op">*</span>args, <span class="op">**</span>kwargs)   <span class="co"># call the wrapped original function</span></span>
+<span id="cb23-8"><a href="#cb23-8" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="ss">f&quot;</span><span class="sc">{</span>func<span class="sc">.</span><span class="va">__name__</span><span class="sc">}</span><span class="ss"> took </span><span class="sc">{</span>time<span class="sc">.</span>perf_counter()<span class="op">-</span>t0<span class="sc">:.6f}</span><span class="ss">s&quot;</span>)</span>
+<span id="cb23-9"><a href="#cb23-9" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> result</span>
+<span id="cb23-10"><a href="#cb23-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> wrapper                 <span class="co"># return the wrapper, replacing the original name</span></span>
+<span id="cb23-11"><a href="#cb23-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-12"><a href="#cb23-12" aria-hidden="true" tabindex="-1"></a><span class="at">@timer</span></span>
+<span id="cb23-13"><a href="#cb23-13" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> work(n):</span>
+<span id="cb23-14"><a href="#cb23-14" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="bu">sum</span>(<span class="bu">range</span>(n))</span>
+<span id="cb23-15"><a href="#cb23-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-16"><a href="#cb23-16" aria-hidden="true" tabindex="-1"></a><span class="co"># The above is fully equivalent to: work = timer(work)</span></span>
+<span id="cb23-17"><a href="#cb23-17" aria-hidden="true" tabindex="-1"></a>work(<span class="dv">1_000_000</span>)</span>
+<span id="cb23-18"><a href="#cb23-18" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(work.<span class="va">__name__</span>)   <span class="co"># &#39;work&#39; —— thanks to functools.wraps, otherwise it would be &#39;wrapper&#39;</span></span></code></pre></div>
 <p>Seen clearly under the hood: when <code>@timer</code> runs, it
 immediately calls <code>timer(work)</code>, obtaining the new function
 object <code>wrapper</code>, then binds it to the name
@@ -610,6 +629,39 @@ functions + closures.</p>
 <code>work.__name__</code> becomes <code>'wrapper'</code>, and
 tracebacks and docs point at the wrapper function, causing confusion
 during debugging.</p>
+<p><strong>A decorator that takes arguments</strong> adds one more
+layer: in <code>@repeat(3)</code>, <code>repeat(3)</code> runs first and
+returns <strong>the actual decorator</strong>, which then decorates the
+function. So it’s three nested layers—the outermost takes the decorator
+argument, the middle takes the function being decorated, and the
+innermost takes the call arguments:</p>
+<div class="sourceCode" id="cb24"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> functools</span>
+<span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> repeat(n):                       <span class="co"># layer 1: takes the decorator argument n</span></span>
+<span id="cb24-4"><a href="#cb24-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> deco(func):                  <span class="co"># layer 2: takes the function being decorated (this is the real decorator)</span></span>
+<span id="cb24-5"><a href="#cb24-5" aria-hidden="true" tabindex="-1"></a>        <span class="at">@functools.wraps</span>(func)</span>
+<span id="cb24-6"><a href="#cb24-6" aria-hidden="true" tabindex="-1"></a>        <span class="kw">def</span> wrapper(<span class="op">*</span>args, <span class="op">**</span>kwargs):  <span class="co"># layer 3: takes the per-call arguments</span></span>
+<span id="cb24-7"><a href="#cb24-7" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(n):</span>
+<span id="cb24-8"><a href="#cb24-8" aria-hidden="true" tabindex="-1"></a>                result <span class="op">=</span> func(<span class="op">*</span>args, <span class="op">**</span>kwargs)</span>
+<span id="cb24-9"><a href="#cb24-9" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> result</span>
+<span id="cb24-10"><a href="#cb24-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> wrapper</span>
+<span id="cb24-11"><a href="#cb24-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> deco</span>
+<span id="cb24-12"><a href="#cb24-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-13"><a href="#cb24-13" aria-hidden="true" tabindex="-1"></a><span class="at">@repeat</span>(<span class="dv">3</span>)                           <span class="co"># equivalent to greet = repeat(3)(greet)</span></span>
+<span id="cb24-14"><a href="#cb24-14" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> greet(name):</span>
+<span id="cb24-15"><a href="#cb24-15" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f&quot;Hi </span><span class="sc">{</span>name<span class="sc">}</span><span class="ss">&quot;</span>)</span>
+<span id="cb24-16"><a href="#cb24-16" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> name</span>
+<span id="cb24-17"><a href="#cb24-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-18"><a href="#cb24-18" aria-hidden="true" tabindex="-1"></a>greet(<span class="st">&quot;Ann&quot;</span>)</span>
+<span id="cb24-19"><a href="#cb24-19" aria-hidden="true" tabindex="-1"></a><span class="co"># Hi Ann</span></span>
+<span id="cb24-20"><a href="#cb24-20" aria-hidden="true" tabindex="-1"></a><span class="co"># Hi Ann</span></span>
+<span id="cb24-21"><a href="#cb24-21" aria-hidden="true" tabindex="-1"></a><span class="co"># Hi Ann</span></span></code></pre></div>
+<p>See the evaluation order clearly: the <code>@repeat(3)</code> line
+first calls <code>repeat(3)</code> to get <code>deco</code>, then runs
+<code>deco(greet)</code> to get <code>wrapper</code>, and finally binds
+<code>wrapper</code> to <code>greet</code>. The argument <code>n</code>
+stays remembered by <code>wrapper</code> through the closure.</p>
 <h2 id="summary">Summary</h2>
 <ul>
 <li><code>def</code> creates a <code>function</code> object at runtime;

@@ -262,6 +262,22 @@ class="sourceCode python"><code class="sourceCode python"><span id="cb8-1"><a hr
 帮你在”最后一个引用消失的那一刻”自动
 <code>free</code>,<strong>确定且即时</strong>——这点比 Java/Go 的追踪式
 GC(回收时机不确定)更接近 C/C++ 的心智模型。</p>
+<p><strong>实测确定性即时回收</strong>:引用计数归零的瞬间
+<code>__del__</code> 就被调用,时机完全可预测:</p>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Res:</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, name): <span class="va">self</span>.name <span class="op">=</span> name</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__del__</span>(<span class="va">self</span>): <span class="bu">print</span>(<span class="ss">f&quot;</span><span class="sc">{</span><span class="va">self</span><span class="sc">.</span>name<span class="sc">}</span><span class="ss"> released&quot;</span>)</span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> Res(<span class="st">&quot;a&quot;</span>)</span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> Res(<span class="st">&quot;b&quot;</span>)</span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">&quot;before del a&quot;</span>)</span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a><span class="kw">del</span> a               <span class="co"># a 的最后一个引用消失 -&gt; 计数归零 -&gt; 立即回收</span></span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">&quot;after del a&quot;</span>)</span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a><span class="co"># before del a</span></span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a><span class="co"># a released        &lt;- 就在 del 这一刻,不是等到脚本结束</span></span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a><span class="co"># after del a</span></span>
+<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a><span class="co"># b released        &lt;- 脚本结束、b 离开作用域时</span></span></code></pre></div>
 <p>引用计数搞不定的,只有一种情况:<strong>循环引用</strong>。</p>
 <h2 id="分代-gc__del__-与-weakref">6. 分代 GC、<code>__del__</code> 与
 weakref</h2>
@@ -270,10 +286,10 @@ weakref</h2>
 0——引用计数漏了这种环。CPython
 因此再叠一层<strong>追踪式的分代垃圾回收器</strong>(<code>gc</code>
 模块)专门回收循环垃圾:</p>
-<div class="sourceCode" id="cb9"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> gc</span>
-<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(gc.get_threshold())   <span class="co"># (2000, 10, 10):第 0 代分配-释放差达 2000 触发一次回收(阈值随版本变)</span></span>
-<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>gc.collect()                <span class="co"># 手动跑一次完整回收,返回回收的不可达对象数</span></span></code></pre></div>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> gc</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(gc.get_threshold())   <span class="co"># (2000, 10, 10):第 0 代分配-释放差达 2000 触发一次回收(阈值随版本变)</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>gc.collect()                <span class="co"># 手动跑一次完整回收,返回回收的不可达对象数</span></span></code></pre></div>
 <ul>
 <li><strong>三代</strong>(0/1/2):新对象在第 0
 代,挺过一次回收就”晋升”到更老的代;越老的代扫描越不频繁。基于”大多数对象很快就死”的分代假设(和
@@ -282,12 +298,31 @@ Java/Go 的分代思路一致)。</li>
 gc 追踪;<code>int</code>、<code>str</code> 这类不可能成环的原子对象不进
 gc,只靠引用计数。</li>
 </ul>
+<p><strong>实测:纯循环引用引用计数回收不掉,要靠 gc</strong>。下面构造
+<code>a&lt;-&gt;b</code> 互引,删除外部引用后对象仍活着,直到
+<code>gc.collect()</code> 才被回收:</p>
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> gc</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Node:</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__del__</span>(<span class="va">self</span>): <span class="bu">print</span>(<span class="st">&quot;Node freed&quot;</span>)</span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>gc.collect()          <span class="co"># 先清掉解释器启动残留,让计数干净</span></span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>gc.disable()          <span class="co"># 关掉自动回收,便于观察</span></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> Node()<span class="op">;</span> b <span class="op">=</span> Node()</span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>a.ref <span class="op">=</span> b<span class="op">;</span> b.ref <span class="op">=</span> a  <span class="co"># 制造循环引用</span></span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a><span class="kw">del</span> a<span class="op">;</span> <span class="kw">del</span> b          <span class="co"># 外部引用没了,但彼此还引着 -&gt; 计数不归零</span></span>
+<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">&quot;after del, still alive&quot;</span>)   <span class="co"># 此刻两个对象都没被回收</span></span>
+<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">&quot;collected:&quot;</span>, gc.collect()) <span class="co"># 手动追踪式回收环</span></span>
+<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a><span class="co"># after del, still alive</span></span>
+<span id="cb11-13"><a href="#cb11-13" aria-hidden="true" tabindex="-1"></a><span class="co"># Node freed</span></span>
+<span id="cb11-14"><a href="#cb11-14" aria-hidden="true" tabindex="-1"></a><span class="co"># Node freed</span></span>
+<span id="cb11-15"><a href="#cb11-15" aria-hidden="true" tabindex="-1"></a><span class="co"># collected: 2        &lt;- gc 回收了 2 个不可达对象</span></span></code></pre></div>
 <p><strong><code>__del__</code>(析构钩子)不可靠,别拿它当
 RAII</strong>:</p>
-<div class="sourceCode" id="cb10"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Res:</span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__del__</span>(<span class="va">self</span>):          <span class="co"># 对象被回收时调用</span></span>
-<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="st">&quot;released&quot;</span>)       <span class="co"># 但&quot;何时&quot;调用不保证</span></span></code></pre></div>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Res:</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__del__</span>(<span class="va">self</span>):          <span class="co"># 对象被回收时调用</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="st">&quot;released&quot;</span>)       <span class="co"># 但&quot;何时&quot;调用不保证</span></span></code></pre></div>
 <ul>
 <li>触发时机取决于引用计数何时归零 / gc
 何时跑,<strong>不确定</strong>;解释器退出时甚至可能不调用。</li>
@@ -299,14 +334,14 @@ class="sourceCode python"><code class="sourceCode python"><span id="cb10-1"><a h
 </ul>
 <p><strong><code>weakref</code>——不增加引用计数的引用</strong>(对标 C++
 <code>weak_ptr</code>):</p>
-<div class="sourceCode" id="cb11"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> weakref</span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> C: <span class="cf">pass</span></span>
-<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>c <span class="op">=</span> C()</span>
-<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>r <span class="op">=</span> weakref.ref(c)     <span class="co"># r 不让 c 的计数 +1</span></span>
-<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(r() <span class="kw">is</span> c)        <span class="co"># True:目标还活着,r() 返回它</span></span>
-<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a><span class="kw">del</span> c                  <span class="co"># 唯一强引用消失,c 被回收</span></span>
-<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(r())             <span class="co"># None:弱引用自动失效</span></span></code></pre></div>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> weakref</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> C: <span class="cf">pass</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>c <span class="op">=</span> C()</span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>r <span class="op">=</span> weakref.ref(c)     <span class="co"># r 不让 c 的计数 +1</span></span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(r() <span class="kw">is</span> c)        <span class="co"># True:目标还活着,r() 返回它</span></span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a><span class="kw">del</span> c                  <span class="co"># 唯一强引用消失,c 被回收</span></span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(r())             <span class="co"># None:弱引用自动失效</span></span></code></pre></div>
 <p>用途:缓存(不想因为缓存住而阻止对象回收)、观察者、以及<strong>打破循环引用</strong>。</p>
 <h2 id="pymalloccpython-的内存池">7. pymalloc:CPython 的内存池</h2>
 <p>Python

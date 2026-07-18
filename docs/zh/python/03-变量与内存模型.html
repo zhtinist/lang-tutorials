@@ -287,28 +287,38 @@ class="sourceCode python"><code class="sourceCode python"><span id="cb8-1"><a hr
 <code>extend</code>，影响别名）；<code>b += 1</code> 对 int
 是重新绑定（不影响别名）。因为可变对象实现了原地版的
 <code>__iadd__</code>，不可变的退回 <code>b = b + 1</code>。</p>
+<p>眼见为实——同样是
+<code>+=</code>，别名跟不跟随取决于对象可变与否：</p>
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> [<span class="dv">1</span>, <span class="dv">2</span>]</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> a</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>a <span class="op">+=</span> [<span class="dv">3</span>]        <span class="co"># list 的 += 是原地扩展(__iadd__),还是同一对象</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(b)        <span class="co"># [1, 2, 3]   别名 b 跟着变</span></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> a <span class="op">+</span> [<span class="dv">4</span>]     <span class="co"># + 造一个新 list,再把 a 重新绑定过去</span></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(b)        <span class="co"># [1, 2, 3]   b 不跟随了——a 已指向别处</span></span></code></pre></div>
 <h2 id="五小整数缓存与字符串驻留">五、小整数缓存与字符串驻留</h2>
 <p>这两个是纯 <strong>CPython 实现细节</strong>，但你用 <code>is</code>
 玩的时候一定会撞见，不讲清会一头雾水。</p>
 <h3 id="小整数缓存--5-256">小整数缓存 [-5, 256]</h3>
 <p>CPython 启动时预先创建好 <code>-5</code> 到 <code>256</code>
 的所有整数对象并缓存复用。所以这个范围内相同的值是<strong>同一个对象</strong>：</p>
-<div class="sourceCode" id="cb11"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> <span class="dv">100</span></span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> <span class="dv">100</span></span>
-<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a <span class="kw">is</span> b)      <span class="co"># True！都指向缓存里那个唯一的 100 对象</span></span>
-<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>x <span class="op">=</span> <span class="dv">257</span></span>
-<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>y <span class="op">=</span> <span class="dv">257</span></span>
-<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(x <span class="kw">is</span> y)      <span class="co"># True！——但这不是靠小整数缓存</span></span>
-<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a><span class="co"># 在同一编译单元里，字面量 257 在字节码的 co_consts 常量表中只存一份，</span></span>
-<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a><span class="co"># x、y 复用同一个常量对象，所以哪怕 257 超出 [-5, 256] 缓存范围，x is y 仍是 True。</span></span>
-<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a><span class="co"># 要真正演示“超出缓存就各自新建”，得让对象在运行时构造、绕开 co_consts 复用：</span></span>
-<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a>m <span class="op">=</span> <span class="bu">int</span>(<span class="st">&quot;257&quot;</span>)</span>
-<span id="cb11-13"><a href="#cb11-13" aria-hidden="true" tabindex="-1"></a>n <span class="op">=</span> <span class="bu">int</span>(<span class="st">&quot;257&quot;</span>)</span>
-<span id="cb11-14"><a href="#cb11-14" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(m <span class="kw">is</span> n)      <span class="co"># False！两次 int() 各自在堆上新建了一个 257 对象</span></span>
-<span id="cb11-15"><a href="#cb11-15" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(m <span class="op">==</span> n)      <span class="co"># True，值当然相等</span></span></code></pre></div>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> <span class="dv">100</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> <span class="dv">100</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a <span class="kw">is</span> b)      <span class="co"># True！都指向缓存里那个唯一的 100 对象</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>x <span class="op">=</span> <span class="dv">257</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>y <span class="op">=</span> <span class="dv">257</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(x <span class="kw">is</span> y)      <span class="co"># True！——但这不是靠小整数缓存</span></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a><span class="co"># 在同一编译单元里，字面量 257 在字节码的 co_consts 常量表中只存一份，</span></span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a><span class="co"># x、y 复用同一个常量对象，所以哪怕 257 超出 [-5, 256] 缓存范围，x is y 仍是 True。</span></span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a><span class="co"># 要真正演示“超出缓存就各自新建”，得让对象在运行时构造、绕开 co_consts 复用：</span></span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a>m <span class="op">=</span> <span class="bu">int</span>(<span class="st">&quot;257&quot;</span>)</span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a>n <span class="op">=</span> <span class="bu">int</span>(<span class="st">&quot;257&quot;</span>)</span>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(m <span class="kw">is</span> n)      <span class="co"># False！两次 int() 各自在堆上新建了一个 257 对象</span></span>
+<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(m <span class="op">==</span> n)      <span class="co"># True，值当然相等</span></span></code></pre></div>
 <p>为什么缓存？小整数用得极频繁，预建好避免反复分配释放，省内存省时间。范围
 <code>[-5, 256]</code> 是写死的实现选择，别的实现或版本可能不同。</p>
 <blockquote>
@@ -319,23 +329,23 @@ class="sourceCode python"><code class="sourceCode python"><span id="cb11-1"><a h
 <h3 id="字符串驻留interning">字符串驻留（interning）</h3>
 <p>CPython
 会把某些字符串（尤其是看起来像标识符的字面量、编译期常量）<strong>驻留</strong>到一张全局表里，相同内容共享同一对象——这样比较标识符、字典查键时能先比指针（<code>is</code>）快速判等。</p>
-<div class="sourceCode" id="cb12"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> <span class="st">&quot;hello&quot;</span></span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> <span class="st">&quot;hello&quot;</span></span>
-<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a <span class="kw">is</span> b)      <span class="co"># 通常 True，被驻留了</span></span>
-<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>s <span class="op">=</span> <span class="st">&quot;hello world!&quot;</span></span>
-<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>t <span class="op">=</span> <span class="st">&quot;hello world!&quot;</span></span>
-<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(s <span class="kw">is</span> t)      <span class="co"># True——但同样是“同一编译单元里两个相同字面量共享一个 co_consts 常量”，</span></span>
-<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>                   <span class="co"># 并不代表运行时把它 intern 了；含空格/标点的串默认不会被自动驻留</span></span>
-<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a><span class="co"># 运行时构造、绕开字面量常量复用，才看得到“内容相同但不是同一对象”：</span></span>
-<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>u <span class="op">=</span> <span class="st">&quot;hello world!&quot;</span>.upper().lower()</span>
-<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a>v <span class="op">=</span> <span class="st">&quot;hello world!&quot;</span>.upper().lower()</span>
-<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(u <span class="kw">is</span> v)      <span class="co"># 通常 False</span></span>
-<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sys</span>
-<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.<span class="bu">intern</span>(u) <span class="kw">is</span> sys.<span class="bu">intern</span>(v))   <span class="co"># True——手动 intern 后共享同一对象</span></span></code></pre></div>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> <span class="st">&quot;hello&quot;</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> <span class="st">&quot;hello&quot;</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a <span class="kw">is</span> b)      <span class="co"># 通常 True，被驻留了</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>s <span class="op">=</span> <span class="st">&quot;hello world!&quot;</span></span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>t <span class="op">=</span> <span class="st">&quot;hello world!&quot;</span></span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(s <span class="kw">is</span> t)      <span class="co"># True——但同样是“同一编译单元里两个相同字面量共享一个 co_consts 常量”，</span></span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>                   <span class="co"># 并不代表运行时把它 intern 了；含空格/标点的串默认不会被自动驻留</span></span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a><span class="co"># 运行时构造、绕开字面量常量复用，才看得到“内容相同但不是同一对象”：</span></span>
+<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a>u <span class="op">=</span> <span class="st">&quot;hello world!&quot;</span>.upper().lower()</span>
+<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a>v <span class="op">=</span> <span class="st">&quot;hello world!&quot;</span>.upper().lower()</span>
+<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(u <span class="kw">is</span> v)      <span class="co"># 通常 False</span></span>
+<span id="cb13-14"><a href="#cb13-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-15"><a href="#cb13-15" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sys</span>
+<span id="cb13-16"><a href="#cb13-16" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.<span class="bu">intern</span>(u) <span class="kw">is</span> sys.<span class="bu">intern</span>(v))   <span class="co"># True——手动 intern 后共享同一对象</span></span></code></pre></div>
 <p>驻留是优化，触发条件依版本和上下文而变，<strong>永远不要依赖它</strong>。同样：字符串判等用
 <code>==</code>。</p>
 <h2
@@ -344,23 +354,37 @@ fast locals</h2>
 <p>你可能听过”Python
 的命名空间就是字典（dict）“。基本对：模块的全局命名空间、对象的属性，底层确实是
 dict（key 是名字字符串，value 是对象引用）。</p>
-<div class="sourceCode" id="cb13"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>x <span class="op">=</span> <span class="dv">10</span></span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">globals</span>()[<span class="st">&quot;x&quot;</span>])    <span class="co"># 10，全局命名空间就是个 dict</span></span></code></pre></div>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>x <span class="op">=</span> <span class="dv">10</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">globals</span>()[<span class="st">&quot;x&quot;</span>])    <span class="co"># 10，全局命名空间就是个 dict</span></span></code></pre></div>
 <p>但<strong>函数内的局部变量是个重要例外，这正是底层优化点</strong>。CPython
 编译函数时，能静态数出局部变量有几个、各是谁，于是把它们放进一个<strong>定长数组</strong>（“fast
 locals”），按<strong>下标</strong>访问，而不是每次去 dict
 里按字符串查。回顾 <a href="01-运行模型.html">第01章</a> 里
 <code>dis</code> 看到的 <code>LOAD_FAST</code>：</p>
-<div class="sourceCode" id="cb14"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> dis</span>
-<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>g <span class="op">=</span> <span class="dv">1</span></span>
-<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> f(a):</span>
-<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>    b <span class="op">=</span> a <span class="op">+</span> g       <span class="co"># a、b 是局部（fast），g 是全局</span></span>
-<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> b</span>
-<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a>dis.dis(f)</span></code></pre></div>
+<div class="sourceCode" id="cb15"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> dis</span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>g <span class="op">=</span> <span class="dv">1</span></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> f(a):</span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>    b <span class="op">=</span> a <span class="op">+</span> g       <span class="co"># a、b 是局部（fast），g 是全局</span></span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> b</span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>dis.dis(f)</span></code></pre></div>
+<p>本机 3.14 实测输出：</p>
+<pre><code>  4           RESUME                   0
+
+  5           LOAD_FAST_BORROW         0 (a)
+              LOAD_GLOBAL              0 (g)
+              BINARY_OP                0 (+)
+              STORE_FAST               1 (b)
+
+  6           LOAD_FAST_BORROW         1 (b)
+              RETURN_VALUE</code></pre>
+<p>（<code>LOAD_FAST_BORROW</code> 是 3.14
+对读取局部变量的优化变体——“借用”引用、免去 refcnt
+增减，本质仍是按数组下标取局部；写入仍是
+<code>STORE_FAST</code>，全局仍是 <code>LOAD_GLOBAL</code>。）</p>
 <p>关键指令对比： - <code>LOAD_FAST 0 (a)</code> /
 <code>STORE_FAST 1 (b)</code>：局部变量走<strong>数组下标</strong>，O(1)，无哈希、无字符串比较。快。
 - <code>LOAD_GLOBAL 1 (g)</code>：全局变量走 <strong>dict
@@ -389,20 +413,20 @@ class="sourceCode python"><code class="sourceCode python"><span id="cb14-1"><a h
 <code>copy</code>
 模块。但要分清<strong>浅</strong>和<strong>深</strong>——这跟 C++
 里”拷贝构造是浅还是深、要不要写自己的深拷贝”是同一个问题。</p>
-<div class="sourceCode" id="cb16"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> copy</span>
-<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>original <span class="op">=</span> [[<span class="dv">1</span>, <span class="dv">2</span>], [<span class="dv">3</span>, <span class="dv">4</span>]]</span>
-<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>alias    <span class="op">=</span> original                 <span class="co"># 别名，同一对象</span></span>
-<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>shallow  <span class="op">=</span> copy.copy(original)      <span class="co"># 浅拷贝：新外层，内层元素仍共享</span></span>
-<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>deep     <span class="op">=</span> copy.deepcopy(original)  <span class="co"># 深拷贝：递归复制所有层</span></span>
-<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a>original[<span class="dv">0</span>].append(<span class="dv">99</span>)              <span class="co"># 修改内层第一个子列表</span></span>
-<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(alias)    <span class="co"># [[1, 2, 99], [3, 4]]   跟着变（就是同一对象）</span></span>
-<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(shallow)  <span class="co"># [[1, 2, 99], [3, 4]]   跟着变！内层是共享的</span></span>
-<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(deep)     <span class="co"># [[1, 2], [3, 4]]       独立，没变</span></span></code></pre></div>
+<div class="sourceCode" id="cb18"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> copy</span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>original <span class="op">=</span> [[<span class="dv">1</span>, <span class="dv">2</span>], [<span class="dv">3</span>, <span class="dv">4</span>]]</span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>alias    <span class="op">=</span> original                 <span class="co"># 别名，同一对象</span></span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>shallow  <span class="op">=</span> copy.copy(original)      <span class="co"># 浅拷贝：新外层，内层元素仍共享</span></span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>deep     <span class="op">=</span> copy.deepcopy(original)  <span class="co"># 深拷贝：递归复制所有层</span></span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a>original[<span class="dv">0</span>].append(<span class="dv">99</span>)              <span class="co"># 修改内层第一个子列表</span></span>
+<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(alias)    <span class="co"># [[1, 2, 99], [3, 4]]   跟着变（就是同一对象）</span></span>
+<span id="cb18-12"><a href="#cb18-12" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(shallow)  <span class="co"># [[1, 2, 99], [3, 4]]   跟着变！内层是共享的</span></span>
+<span id="cb18-13"><a href="#cb18-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(deep)     <span class="co"># [[1, 2], [3, 4]]       独立，没变</span></span></code></pre></div>
 <p>内存图：</p>
 <pre><code>original ─► [ ●, ● ]            外层 list
               │  │
@@ -428,13 +452,13 @@ deep ─► [ ●, ● ]  ← 新外层
 <code>deepcopy</code>。深拷贝有成本（递归 + 分配），别无脑用。</p>
 <h2 id="八可变默认参数陷阱预告">八、可变默认参数陷阱（预告）</h2>
 <p>有了本章的模型，你现在能理解一个 Python 最著名的坑长什么样：</p>
-<div class="sourceCode" id="cb18"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> add_item(item, bucket<span class="op">=</span>[]):    <span class="co"># 危险！默认值 [] 只创建一次</span></span>
-<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>    bucket.append(item)</span>
-<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> bucket</span>
-<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(add_item(<span class="dv">1</span>))   <span class="co"># [1]</span></span>
-<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(add_item(<span class="dv">2</span>))   <span class="co"># [1, 2]  ← 你可能期望 [2]，但它记住了上次！</span></span></code></pre></div>
+<div class="sourceCode" id="cb20"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> add_item(item, bucket<span class="op">=</span>[]):    <span class="co"># 危险！默认值 [] 只创建一次</span></span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>    bucket.append(item)</span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> bucket</span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(add_item(<span class="dv">1</span>))   <span class="co"># [1]</span></span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(add_item(<span class="dv">2</span>))   <span class="co"># [1, 2]  ← 你可能期望 [2]，但它记住了上次！</span></span></code></pre></div>
 <p>原因就是本章讲的：默认值 <code>[]</code> 是在 <code>def</code>
 执行时<strong>创建一次的一个可变对象</strong>，被函数对象一直持有；每次不传
 <code>bucket</code> 都复用<strong>同一个 list</strong>，原地 append

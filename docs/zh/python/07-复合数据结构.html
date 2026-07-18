@@ -365,18 +365,29 @@ entries(紧凑数组,按插入顺序追加,无空洞):
 <li>相比 3.5 之前”每个槽都存完整 entry”的稀疏大表,紧凑字典节省约
 <strong>20%–25%</strong> 内存。</li>
 </ul>
+<p><strong>实测:dict
+保序,且顺序由”插入”而非”排序”决定</strong>。删除中间的键再重新插入,会追加到末尾;更新已有键则原地改值、顺序不动:</p>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>d <span class="op">=</span> {}</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>d[<span class="st">&quot;c&quot;</span>] <span class="op">=</span> <span class="dv">1</span><span class="op">;</span> d[<span class="st">&quot;a&quot;</span>] <span class="op">=</span> <span class="dv">2</span><span class="op">;</span> d[<span class="st">&quot;b&quot;</span>] <span class="op">=</span> <span class="dv">3</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">list</span>(d))     <span class="co"># [&#39;c&#39;, &#39;a&#39;, &#39;b&#39;]   按插入序,不是排序</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a><span class="kw">del</span> d[<span class="st">&quot;a&quot;</span>]         <span class="co"># 删掉中间的键</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>d[<span class="st">&quot;a&quot;</span>] <span class="op">=</span> <span class="dv">9</span>         <span class="co"># 重新插入 —— 追加到 entries 末尾</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">list</span>(d))     <span class="co"># [&#39;c&#39;, &#39;b&#39;, &#39;a&#39;]</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>d[<span class="st">&quot;c&quot;</span>] <span class="op">=</span> <span class="dv">100</span>       <span class="co"># 更新已存在的键:原地改 value,顺序不动</span></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">list</span>(d))     <span class="co"># [&#39;c&#39;, &#39;b&#39;, &#39;a&#39;]</span></span></code></pre></div>
 <p>查找过程:对 key 求哈希 → 取低位作 <code>indices</code> 下标 → 拿到
 entries 下标 → 去 entries 比对 hash 和 key(先比 hash 整数,相等再比
 <code>==</code>,因为哈希可能碰撞)。</p>
 <h3 id="探测序列">3.3 探测序列</h3>
 <p>CPython 用一种扰动探测(perturbation
 probing),兼顾散布和局部性(简化逻辑):</p>
-<div class="sourceCode" id="cb12"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>perturb <span class="op">=</span> hash<span class="op">;</span></span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>i <span class="op">=</span> hash <span class="op">&amp;</span> mask<span class="op">;</span></span>
-<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="cf">while</span> <span class="op">(</span>slot_used_and_key_differs<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>    perturb <span class="op">&gt;&gt;=</span> <span class="dv">5</span><span class="op">;</span></span>
-<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>    i <span class="op">=</span> <span class="op">(</span>i <span class="op">*</span> <span class="dv">5</span> <span class="op">+</span> perturb <span class="op">+</span> <span class="dv">1</span><span class="op">)</span> <span class="op">&amp;</span> mask<span class="op">;</span></span>
-<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb13"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>perturb <span class="op">=</span> hash<span class="op">;</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>i <span class="op">=</span> hash <span class="op">&amp;</span> mask<span class="op">;</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a><span class="cf">while</span> <span class="op">(</span>slot_used_and_key_differs<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>    perturb <span class="op">&gt;&gt;=</span> <span class="dv">5</span><span class="op">;</span></span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>    i <span class="op">=</span> <span class="op">(</span>i <span class="op">*</span> <span class="dv">5</span> <span class="op">+</span> perturb <span class="op">+</span> <span class="dv">1</span><span class="op">)</span> <span class="op">&amp;</span> mask<span class="op">;</span></span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>它不是简单线性探测,而是不断把 hash
 的高位”搅”进来,让探测序列更分散,减少聚集。</p>
 <h3 id="扩容">3.4 扩容</h3>
@@ -455,11 +466,19 @@ O(1))、去重、集合运算(<code>&amp;</code> 交、<code>|</code>
 是不可变版本,因此<strong>它自己可哈希</strong>,可以作为 dict 的 key
 或放进另一个 set。</li>
 </ul>
-<div class="sourceCode" id="cb13"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>seen <span class="op">=</span> <span class="bu">set</span>()</span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> x <span class="kw">in</span> data:</span>
-<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> x <span class="kw">not</span> <span class="kw">in</span> seen:      <span class="co"># 平均 O(1),比 list 的 O(n) in 快得多</span></span>
-<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>        seen.add(x)</span></code></pre></div>
+<p>四种集合运算实测(小整数哈希为自身,故打印顺序稳定):</p>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> {<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>, <span class="dv">4</span>}</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> {<span class="dv">3</span>, <span class="dv">4</span>, <span class="dv">5</span>, <span class="dv">6</span>}</span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a <span class="op">&amp;</span> b)   <span class="co"># {3, 4}              交集</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a <span class="op">|</span> b)   <span class="co"># {1, 2, 3, 4, 5, 6}  并集</span></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a <span class="op">-</span> b)   <span class="co"># {1, 2}              差集(在 a 不在 b)</span></span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a <span class="op">^</span> b)   <span class="co"># {1, 2, 5, 6}        对称差(恰在其一)</span></span></code></pre></div>
+<div class="sourceCode" id="cb15"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>seen <span class="op">=</span> <span class="bu">set</span>()</span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> x <span class="kw">in</span> data:</span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> x <span class="kw">not</span> <span class="kw">in</span> seen:      <span class="co"># 平均 O(1),比 list 的 O(n) in 快得多</span></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>        seen.add(x)</span></code></pre></div>
 <table>
 <thead>
 <tr>

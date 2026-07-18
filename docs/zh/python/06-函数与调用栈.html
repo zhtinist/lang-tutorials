@@ -429,24 +429,39 @@ class="sourceCode python"><code class="sourceCode python"><span id="cb19-1"><a h
 <span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> right():</span>
 <span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">global</span> x</span>
 <span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a>    x <span class="op">+=</span> <span class="dv">1</span>          <span class="co"># OK</span></span></code></pre></div>
+<p><strong>闭包捕获的是 cell(变量),不是当时的值</strong> ——
+这是循环里造闭包的经典陷阱。下面三个 lambda 共享同一个 <code>i</code>
+cell,等到真正调用时循环早已结束、<code>i</code> 停在
+<code>2</code>,于是全返回 <code>2</code>:</p>
+<div class="sourceCode" id="cb20"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>funcs <span class="op">=</span> [<span class="kw">lambda</span>: i <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">3</span>)]</span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>([f() <span class="cf">for</span> f <span class="kw">in</span> funcs])   <span class="co"># [2, 2, 2] —— 三个 lambda 共享同一个 i cell,读到的都是最终值</span></span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a><span class="co"># 修正:用默认参数,在定义那一刻就把当前 i 的值&quot;快照&quot;进各自的 i</span></span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>funcs <span class="op">=</span> [<span class="kw">lambda</span> i<span class="op">=</span>i: i <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">3</span>)]</span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>([f() <span class="cf">for</span> f <span class="kw">in</span> funcs])   <span class="co"># [0, 1, 2] —— 默认值在 def 求值时定死(见上一节的默认参数)</span></span></code></pre></div>
+<p>对照 C++:C++ 的 lambda 用 <code>[i]</code> 按值捕获会立刻拷贝当时的
+<code>i</code>,而 <code>[&amp;i]</code> 按引用捕获才会像 Python
+这样共享。Python 闭包<strong>永远是”按引用共享
+cell”</strong>,没有按值捕获语法——想要快照就得靠默认参数这个技巧。</p>
 <h2 id="调用栈frame-对象">调用栈:frame 对象</h2>
 <p>C 的栈帧是编译期固定布局的一块连续内存,函数返回即弹出。CPython
 的调用栈由 <strong>frame 对象</strong>组成,每次调用创建一个
 frame,里面有局部变量表、指向上一帧的链接等——它是<strong>堆上的对象</strong>(CPython
 3.11 起对帧做了内联优化,但语义上仍可当对象访问),甚至能在运行时反射:</p>
-<div class="sourceCode" id="cb20"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sys</span>
-<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> inner():</span>
-<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>    frame <span class="op">=</span> sys._getframe()           <span class="co"># 当前帧</span></span>
-<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">&quot;当前函数:&quot;</span>, frame.f_code.co_name)      <span class="co"># &#39;inner&#39;</span></span>
-<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">&quot;本地变量:&quot;</span>, frame.f_locals)             <span class="co"># {&#39;frame&#39;: ...}</span></span>
-<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">&quot;调用者:&quot;</span>, frame.f_back.f_code.co_name)  <span class="co"># &#39;outer&#39; —— 上一帧</span></span>
-<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb20-9"><a href="#cb20-9" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> outer():</span>
-<span id="cb20-10"><a href="#cb20-10" aria-hidden="true" tabindex="-1"></a>    inner()</span>
-<span id="cb20-11"><a href="#cb20-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb20-12"><a href="#cb20-12" aria-hidden="true" tabindex="-1"></a>outer()</span></code></pre></div>
+<div class="sourceCode" id="cb21"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sys</span>
+<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> inner():</span>
+<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a>    frame <span class="op">=</span> sys._getframe()           <span class="co"># 当前帧</span></span>
+<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">&quot;当前函数:&quot;</span>, frame.f_code.co_name)      <span class="co"># &#39;inner&#39;</span></span>
+<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">&quot;本地变量:&quot;</span>, frame.f_locals)             <span class="co"># {&#39;frame&#39;: ...}</span></span>
+<span id="cb21-7"><a href="#cb21-7" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">&quot;调用者:&quot;</span>, frame.f_back.f_code.co_name)  <span class="co"># &#39;outer&#39; —— 上一帧</span></span>
+<span id="cb21-8"><a href="#cb21-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-9"><a href="#cb21-9" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> outer():</span>
+<span id="cb21-10"><a href="#cb21-10" aria-hidden="true" tabindex="-1"></a>    inner()</span>
+<span id="cb21-11"><a href="#cb21-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-12"><a href="#cb21-12" aria-hidden="true" tabindex="-1"></a>outer()</span></code></pre></div>
 <table>
 <thead>
 <tr>
@@ -483,40 +498,40 @@ class="sourceCode python"><code class="sourceCode python"><span id="cb20-1"><a h
 <p>C 递归深到爆是栈溢出(段错误)。CPython 为防止 C
 层栈真的溢出,设了一个<strong>软限制</strong>,超过就抛
 <code>RecursionError</code> 而不是崩溃:</p>
-<div class="sourceCode" id="cb21"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sys</span>
-<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.getrecursionlimit())    <span class="co"># 通常 1000</span></span>
-<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> rec(n):</span>
-<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="dv">1</span> <span class="cf">if</span> n <span class="op">==</span> <span class="dv">0</span> <span class="cf">else</span> rec(n <span class="op">-</span> <span class="dv">1</span>) <span class="op">+</span> <span class="dv">1</span></span>
-<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb21-7"><a href="#cb21-7" aria-hidden="true" tabindex="-1"></a><span class="co"># rec(100000) 会抛 RecursionError,而不是让进程段错误</span></span>
-<span id="cb21-8"><a href="#cb21-8" aria-hidden="true" tabindex="-1"></a>sys.setrecursionlimit(<span class="dv">3000</span>)       <span class="co"># 可调大,但调太大仍可能真的爆 C 栈</span></span></code></pre></div>
+<div class="sourceCode" id="cb22"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sys</span>
+<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.getrecursionlimit())    <span class="co"># 通常 1000</span></span>
+<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> rec(n):</span>
+<span id="cb22-5"><a href="#cb22-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="dv">1</span> <span class="cf">if</span> n <span class="op">==</span> <span class="dv">0</span> <span class="cf">else</span> rec(n <span class="op">-</span> <span class="dv">1</span>) <span class="op">+</span> <span class="dv">1</span></span>
+<span id="cb22-6"><a href="#cb22-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-7"><a href="#cb22-7" aria-hidden="true" tabindex="-1"></a><span class="co"># rec(100000) 会抛 RecursionError,而不是让进程段错误</span></span>
+<span id="cb22-8"><a href="#cb22-8" aria-hidden="true" tabindex="-1"></a>sys.setrecursionlimit(<span class="dv">3000</span>)       <span class="co"># 可调大,但调太大仍可能真的爆 C 栈</span></span></code></pre></div>
 <p>Python
 <strong>没有尾调用优化</strong>,深递归请改写成迭代或显式用栈。</p>
 <h2 id="一等函数与装饰器原理">一等函数与装饰器原理</h2>
 <p>因为函数是对象,它能被别的函数接收、包装、返回。<strong>装饰器</strong>就是这套能力的语法糖:<code>@deco</code>
 加在 <code>def foo</code> 上,等价于 <code>foo = deco(foo)</code>——用
 <code>deco</code> 的返回值(通常是个包装函数)替换原名字。</p>
-<div class="sourceCode" id="cb22"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> functools, time</span>
-<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> timer(func):</span>
-<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">@functools.wraps</span>(func)        <span class="co"># 把 func 的 __name__/__doc__ 拷到 wrapper</span></span>
-<span id="cb22-5"><a href="#cb22-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> wrapper(<span class="op">*</span>args, <span class="op">**</span>kwargs):  <span class="co"># 用 *args/**kwargs 透传任意参数</span></span>
-<span id="cb22-6"><a href="#cb22-6" aria-hidden="true" tabindex="-1"></a>        t0 <span class="op">=</span> time.perf_counter()</span>
-<span id="cb22-7"><a href="#cb22-7" aria-hidden="true" tabindex="-1"></a>        result <span class="op">=</span> func(<span class="op">*</span>args, <span class="op">**</span>kwargs)   <span class="co"># 调用被包装的原函数</span></span>
-<span id="cb22-8"><a href="#cb22-8" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="ss">f&quot;</span><span class="sc">{</span>func<span class="sc">.</span><span class="va">__name__</span><span class="sc">}</span><span class="ss"> 耗时 </span><span class="sc">{</span>time<span class="sc">.</span>perf_counter()<span class="op">-</span>t0<span class="sc">:.6f}</span><span class="ss">s&quot;</span>)</span>
-<span id="cb22-9"><a href="#cb22-9" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> result</span>
-<span id="cb22-10"><a href="#cb22-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> wrapper                 <span class="co"># 返回包装函数,替换掉原来的名字</span></span>
-<span id="cb22-11"><a href="#cb22-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-12"><a href="#cb22-12" aria-hidden="true" tabindex="-1"></a><span class="at">@timer</span></span>
-<span id="cb22-13"><a href="#cb22-13" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> work(n):</span>
-<span id="cb22-14"><a href="#cb22-14" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="bu">sum</span>(<span class="bu">range</span>(n))</span>
-<span id="cb22-15"><a href="#cb22-15" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-16"><a href="#cb22-16" aria-hidden="true" tabindex="-1"></a><span class="co"># 上面完全等价于:work = timer(work)</span></span>
-<span id="cb22-17"><a href="#cb22-17" aria-hidden="true" tabindex="-1"></a>work(<span class="dv">1_000_000</span>)</span>
-<span id="cb22-18"><a href="#cb22-18" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(work.<span class="va">__name__</span>)   <span class="co"># &#39;work&#39; —— 多亏 functools.wraps,否则会是 &#39;wrapper&#39;</span></span></code></pre></div>
+<div class="sourceCode" id="cb23"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> functools, time</span>
+<span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> timer(func):</span>
+<span id="cb23-4"><a href="#cb23-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">@functools.wraps</span>(func)        <span class="co"># 把 func 的 __name__/__doc__ 拷到 wrapper</span></span>
+<span id="cb23-5"><a href="#cb23-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> wrapper(<span class="op">*</span>args, <span class="op">**</span>kwargs):  <span class="co"># 用 *args/**kwargs 透传任意参数</span></span>
+<span id="cb23-6"><a href="#cb23-6" aria-hidden="true" tabindex="-1"></a>        t0 <span class="op">=</span> time.perf_counter()</span>
+<span id="cb23-7"><a href="#cb23-7" aria-hidden="true" tabindex="-1"></a>        result <span class="op">=</span> func(<span class="op">*</span>args, <span class="op">**</span>kwargs)   <span class="co"># 调用被包装的原函数</span></span>
+<span id="cb23-8"><a href="#cb23-8" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="ss">f&quot;</span><span class="sc">{</span>func<span class="sc">.</span><span class="va">__name__</span><span class="sc">}</span><span class="ss"> 耗时 </span><span class="sc">{</span>time<span class="sc">.</span>perf_counter()<span class="op">-</span>t0<span class="sc">:.6f}</span><span class="ss">s&quot;</span>)</span>
+<span id="cb23-9"><a href="#cb23-9" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> result</span>
+<span id="cb23-10"><a href="#cb23-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> wrapper                 <span class="co"># 返回包装函数,替换掉原来的名字</span></span>
+<span id="cb23-11"><a href="#cb23-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-12"><a href="#cb23-12" aria-hidden="true" tabindex="-1"></a><span class="at">@timer</span></span>
+<span id="cb23-13"><a href="#cb23-13" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> work(n):</span>
+<span id="cb23-14"><a href="#cb23-14" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="bu">sum</span>(<span class="bu">range</span>(n))</span>
+<span id="cb23-15"><a href="#cb23-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-16"><a href="#cb23-16" aria-hidden="true" tabindex="-1"></a><span class="co"># 上面完全等价于:work = timer(work)</span></span>
+<span id="cb23-17"><a href="#cb23-17" aria-hidden="true" tabindex="-1"></a>work(<span class="dv">1_000_000</span>)</span>
+<span id="cb23-18"><a href="#cb23-18" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(work.<span class="va">__name__</span>)   <span class="co"># &#39;work&#39; —— 多亏 functools.wraps,否则会是 &#39;wrapper&#39;</span></span></code></pre></div>
 <p>底层看清楚:<code>@timer</code> 执行时立刻调用
 <code>timer(work)</code>,得到 <code>wrapper</code>
 这个新函数对象,再把它绑定到名字 <code>work</code>。此后调用
@@ -527,6 +542,36 @@ class="sourceCode python"><code class="sourceCode python"><span id="cb22-1"><a h
 <p><code>functools.wraps</code> 很重要:不加它,<code>work.__name__</code>
 会变成 <code>'wrapper'</code>,traceback
 和文档都会指向包装函数,给调试带来困惑。</p>
+<p><strong>带参数的装饰器</strong>再套一层:<code>@repeat(3)</code> 里的
+<code>repeat(3)</code>
+先执行,返回一个<strong>真正的装饰器</strong>,再拿它去装饰函数。所以是三层嵌套——最外层收装饰器参数,中间层收被装饰函数,最内层收调用实参:</p>
+<div class="sourceCode" id="cb24"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> functools</span>
+<span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> repeat(n):                       <span class="co"># 第 1 层:收装饰器参数 n</span></span>
+<span id="cb24-4"><a href="#cb24-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> deco(func):                  <span class="co"># 第 2 层:收被装饰的函数(这才是真正的装饰器)</span></span>
+<span id="cb24-5"><a href="#cb24-5" aria-hidden="true" tabindex="-1"></a>        <span class="at">@functools.wraps</span>(func)</span>
+<span id="cb24-6"><a href="#cb24-6" aria-hidden="true" tabindex="-1"></a>        <span class="kw">def</span> wrapper(<span class="op">*</span>args, <span class="op">**</span>kwargs):  <span class="co"># 第 3 层:收每次调用的实参</span></span>
+<span id="cb24-7"><a href="#cb24-7" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(n):</span>
+<span id="cb24-8"><a href="#cb24-8" aria-hidden="true" tabindex="-1"></a>                result <span class="op">=</span> func(<span class="op">*</span>args, <span class="op">**</span>kwargs)</span>
+<span id="cb24-9"><a href="#cb24-9" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> result</span>
+<span id="cb24-10"><a href="#cb24-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> wrapper</span>
+<span id="cb24-11"><a href="#cb24-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> deco</span>
+<span id="cb24-12"><a href="#cb24-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-13"><a href="#cb24-13" aria-hidden="true" tabindex="-1"></a><span class="at">@repeat</span>(<span class="dv">3</span>)                           <span class="co"># 等价于 greet = repeat(3)(greet)</span></span>
+<span id="cb24-14"><a href="#cb24-14" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> greet(name):</span>
+<span id="cb24-15"><a href="#cb24-15" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f&quot;Hi </span><span class="sc">{</span>name<span class="sc">}</span><span class="ss">&quot;</span>)</span>
+<span id="cb24-16"><a href="#cb24-16" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> name</span>
+<span id="cb24-17"><a href="#cb24-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-18"><a href="#cb24-18" aria-hidden="true" tabindex="-1"></a>greet(<span class="st">&quot;Ann&quot;</span>)</span>
+<span id="cb24-19"><a href="#cb24-19" aria-hidden="true" tabindex="-1"></a><span class="co"># Hi Ann</span></span>
+<span id="cb24-20"><a href="#cb24-20" aria-hidden="true" tabindex="-1"></a><span class="co"># Hi Ann</span></span>
+<span id="cb24-21"><a href="#cb24-21" aria-hidden="true" tabindex="-1"></a><span class="co"># Hi Ann</span></span></code></pre></div>
+<p>看清求值顺序:<code>@repeat(3)</code> 这一行先调用
+<code>repeat(3)</code> 得到 <code>deco</code>,再执行
+<code>deco(greet)</code> 得到 <code>wrapper</code>,最后把
+<code>wrapper</code> 绑定到 <code>greet</code>。参数 <code>n</code>
+靠闭包一直被 <code>wrapper</code> 记着。</p>
 <h2 id="小结">小结</h2>
 <ul>
 <li><code>def</code> 在运行时创建 <code>function</code>

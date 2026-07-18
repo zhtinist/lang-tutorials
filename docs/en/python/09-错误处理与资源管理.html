@@ -293,6 +293,23 @@ you “the moment the last reference disappears,”
 <strong>deterministically and immediately</strong>—closer to the C/C++
 mental model than the tracing GC of Java/Go (whose reclamation timing is
 nondeterministic).</p>
+<p><strong>Verified deterministic, immediate reclamation</strong>: the
+instant the refcount hits zero, <code>__del__</code> runs—the timing is
+fully predictable:</p>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Res:</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, name): <span class="va">self</span>.name <span class="op">=</span> name</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__del__</span>(<span class="va">self</span>): <span class="bu">print</span>(<span class="ss">f&quot;</span><span class="sc">{</span><span class="va">self</span><span class="sc">.</span>name<span class="sc">}</span><span class="ss"> released&quot;</span>)</span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> Res(<span class="st">&quot;a&quot;</span>)</span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> Res(<span class="st">&quot;b&quot;</span>)</span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">&quot;before del a&quot;</span>)</span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a><span class="kw">del</span> a               <span class="co"># a&#39;s last reference disappears -&gt; count hits 0 -&gt; reclaimed at once</span></span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">&quot;after del a&quot;</span>)</span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a><span class="co"># before del a</span></span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a><span class="co"># a released        &lt;- right at the del, not at script end</span></span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a><span class="co"># after del a</span></span>
+<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a><span class="co"># b released        &lt;- when the script ends and b leaves scope</span></span></code></pre></div>
 <p>There’s only one thing reference counting can’t handle:
 <strong>reference cycles</strong>.</p>
 <h2 id="generational-gc-__del__-and-weakref">6. Generational GC,
@@ -303,10 +320,10 @@ count can drop to 0—reference counting misses this cycle. CPython
 therefore adds a <strong>tracing generational garbage collector</strong>
 (the <code>gc</code> module) on top, dedicated to reclaiming cyclic
 garbage:</p>
-<div class="sourceCode" id="cb9"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> gc</span>
-<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(gc.get_threshold())   <span class="co"># (2000, 10, 10): a generation-0 alloc-minus-free difference of 2000 triggers a collection (thresholds vary by version)</span></span>
-<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>gc.collect()                <span class="co"># manually run a full collection; returns the number of unreachable objects reclaimed</span></span></code></pre></div>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> gc</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(gc.get_threshold())   <span class="co"># (2000, 10, 10): a generation-0 alloc-minus-free difference of 2000 triggers a collection (thresholds vary by version)</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>gc.collect()                <span class="co"># manually run a full collection; returns the number of unreachable objects reclaimed</span></span></code></pre></div>
 <ul>
 <li><strong>Three generations</strong> (0/1/2): new objects start in
 generation 0; surviving one collection “promotes” them to an older
@@ -318,12 +335,33 @@ Java/Go’s generational approach).</li>
 like <code>int</code> and <code>str</code> that can’t form cycles are
 not tracked, relying solely on reference counting.</li>
 </ul>
+<p><strong>Verified: pure reference cycles can’t be reclaimed by
+reference counting—they need the gc.</strong> Below,
+<code>a&lt;-&gt;b</code> reference each other; after deleting the
+external references the objects stay alive until
+<code>gc.collect()</code>:</p>
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> gc</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Node:</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__del__</span>(<span class="va">self</span>): <span class="bu">print</span>(<span class="st">&quot;Node freed&quot;</span>)</span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>gc.collect()          <span class="co"># clear interpreter startup leftovers first, for a clean count</span></span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>gc.disable()          <span class="co"># turn off automatic collection to observe clearly</span></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> Node()<span class="op">;</span> b <span class="op">=</span> Node()</span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>a.ref <span class="op">=</span> b<span class="op">;</span> b.ref <span class="op">=</span> a  <span class="co"># create a reference cycle</span></span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a><span class="kw">del</span> a<span class="op">;</span> <span class="kw">del</span> b          <span class="co"># external references gone, but they still hold each other -&gt; count never hits 0</span></span>
+<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">&quot;after del, still alive&quot;</span>)   <span class="co"># both objects are still not reclaimed here</span></span>
+<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">&quot;collected:&quot;</span>, gc.collect()) <span class="co"># manually run tracing collection on the cycle</span></span>
+<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a><span class="co"># after del, still alive</span></span>
+<span id="cb11-13"><a href="#cb11-13" aria-hidden="true" tabindex="-1"></a><span class="co"># Node freed</span></span>
+<span id="cb11-14"><a href="#cb11-14" aria-hidden="true" tabindex="-1"></a><span class="co"># Node freed</span></span>
+<span id="cb11-15"><a href="#cb11-15" aria-hidden="true" tabindex="-1"></a><span class="co"># collected: 2        &lt;- the gc reclaimed 2 unreachable objects</span></span></code></pre></div>
 <p><strong><code>__del__</code> (the destructor hook) is unreliable;
 don’t use it for RAII</strong>:</p>
-<div class="sourceCode" id="cb10"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Res:</span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__del__</span>(<span class="va">self</span>):          <span class="co"># called when the object is reclaimed</span></span>
-<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="st">&quot;released&quot;</span>)       <span class="co"># but &quot;when&quot; this happens is not guaranteed</span></span></code></pre></div>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Res:</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__del__</span>(<span class="va">self</span>):          <span class="co"># called when the object is reclaimed</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="st">&quot;released&quot;</span>)       <span class="co"># but &quot;when&quot; this happens is not guaranteed</span></span></code></pre></div>
 <ul>
 <li>The trigger timing depends on when the reference count reaches zero
 / when the gc runs—<strong>nondeterministic</strong>; it may not even be
@@ -338,14 +376,14 @@ release should still use <code>with</code>—don’t gamble on
 <p><strong><code>weakref</code>—a reference that doesn’t increment the
 reference count</strong> (the counterpart to C++’s
 <code>weak_ptr</code>):</p>
-<div class="sourceCode" id="cb11"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> weakref</span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> C: <span class="cf">pass</span></span>
-<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>c <span class="op">=</span> C()</span>
-<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>r <span class="op">=</span> weakref.ref(c)     <span class="co"># r does not bump c&#39;s count by +1</span></span>
-<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(r() <span class="kw">is</span> c)        <span class="co"># True: the target is still alive, so r() returns it</span></span>
-<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a><span class="kw">del</span> c                  <span class="co"># the only strong reference disappears, c is reclaimed</span></span>
-<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(r())             <span class="co"># None: the weak reference is automatically invalidated</span></span></code></pre></div>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> weakref</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> C: <span class="cf">pass</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>c <span class="op">=</span> C()</span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>r <span class="op">=</span> weakref.ref(c)     <span class="co"># r does not bump c&#39;s count by +1</span></span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(r() <span class="kw">is</span> c)        <span class="co"># True: the target is still alive, so r() returns it</span></span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a><span class="kw">del</span> c                  <span class="co"># the only strong reference disappears, c is reclaimed</span></span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(r())             <span class="co"># None: the weak reference is automatically invalidated</span></span></code></pre></div>
 <p>Uses: caching (you don’t want the cache to keep objects from being
 reclaimed), observers, and <strong>breaking reference
 cycles</strong>.</p>

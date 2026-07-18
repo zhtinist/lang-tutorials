@@ -328,28 +328,60 @@ class="sourceCode python"><code class="sourceCode python"><span id="cb8-1"><a hr
                    | ob[1]=20 (ptr)|
                    | ob[2]=30 (ptr)|
                    +---------------+</code></pre>
+<p><code>iter</code> 还有个鲜为人知的<strong>双参数形式</strong>
+<code>iter(callable, sentinel)</code>:它反复调用无参的
+<code>callable</code>,直到返回值等于 <code>sentinel</code> 就停(抛
+<code>StopIteration</code>)。这正是 C 里
+<code>while ((c = getchar()) != EOF)</code>
+那种「反复取直到哨兵」惯用法的直接对应,常用于按块读流:</p>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> io</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>stream <span class="op">=</span> io.StringIO(<span class="st">&quot;a</span><span class="ch">\n</span><span class="st">b</span><span class="ch">\n</span><span class="st">c</span><span class="ch">\n</span><span class="st">&quot;</span>)</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a><span class="co"># 反复调用 stream.readline,直到它返回 &quot;&quot;(文件末尾的哨兵)才停</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> line <span class="kw">in</span> <span class="bu">iter</span>(stream.readline, <span class="st">&quot;&quot;</span>):</span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="bu">repr</span>(line))</span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a><span class="co"># &#39;a\n&#39;</span></span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a><span class="co"># &#39;b\n&#39;</span></span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a><span class="co"># &#39;c\n&#39;</span></span></code></pre></div>
+<p>它把「循环取值 + 判断结束」压缩成一个迭代器,不需要写
+<code>while True</code> +
+<code>break</code>。真实文件也能这么用:<code>iter(f.readline, "")</code>、<code>iter(lambda: sock.recv(4096), b"")</code>。</p>
 <h2 id="range-是惰性对象不是数组">range 是惰性对象,不是数组</h2>
 <p>C 程序员容易把 <code>range(1000000)</code>
 想成”生成一个百万元素的数组”。不是。<code>range</code>
 是一个<strong>不可变的惰性序列对象</strong>,只存
 <code>start</code>/<code>stop</code>/<code>step</code>
 三个整数,几乎不占内存:</p>
-<div class="sourceCode" id="cb10"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sys</span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>r <span class="op">=</span> <span class="bu">range</span>(<span class="dv">1_000_000</span>)</span>
-<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.getsizeof(r))   <span class="co"># 48 字节左右,与元素个数无关</span></span>
-<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(r[<span class="dv">500</span>])             <span class="co"># 500 —— 按需 O(1) 计算,不查表</span></span>
-<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">len</span>(r))             <span class="co"># 1000000 —— 由公式算出</span></span></code></pre></div>
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sys</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>r <span class="op">=</span> <span class="bu">range</span>(<span class="dv">1_000_000</span>)</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.getsizeof(r))   <span class="co"># 48 字节左右,与元素个数无关</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(r[<span class="dv">500</span>])             <span class="co"># 500 —— 按需 O(1) 计算,不查表</span></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">len</span>(r))             <span class="co"># 1000000 —— 由公式算出</span></span></code></pre></div>
 <p>它支持索引和 <code>len</code>(实现了序列协议),但值是<strong>用
 <code>start + i*step</code> 现算的</strong>,从不物化成列表。这与 C
 里”必须先分配数组再遍历”截然不同。要真正物化才用
 <code>list(range(...))</code>。</p>
+<p>正因为一切靠公式算,<code>range</code> 的切片返回的还是
+<code>range</code>(依旧惰性),而 <code>x in range(...)</code> 也是
+<strong>O(1) 的算术判断</strong>,不遍历十亿个元素:</p>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>r <span class="op">=</span> <span class="bu">range</span>(<span class="dv">0</span>, <span class="dv">100</span>, <span class="dv">7</span>)</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(r[<span class="op">-</span><span class="dv">1</span>])                  <span class="co"># 98 —— 负索引也按公式算</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>sub <span class="op">=</span> r[<span class="dv">2</span>:<span class="dv">5</span>]                  <span class="co"># 切片不物化,返回新的 range</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sub)                    <span class="co"># range(14, 35, 7)</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">list</span>(sub))              <span class="co"># [14, 21, 28]</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="dv">70</span> <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">0</span>, <span class="dv">1_000_000_000</span>, <span class="dv">7</span>))   <span class="co"># True —— 直接算 70 是否落在等差数列上,瞬间返回</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="dv">71</span> <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">0</span>, <span class="dv">1_000_000_000</span>, <span class="dv">7</span>))   <span class="co"># False —— 71 不是 7 的倍数</span></span></code></pre></div>
+<p>对比:<code>70 in [0, 7, 14, ...]</code>(真的列表)得线性扫描;<code>range</code>
+用「是否满足 <code>start ≤ x &lt; stop</code> 且
+<code>(x-start) % step == 0</code>」一步判完。</p>
 <h2 id="推导式有独立作用域">推导式:有独立作用域</h2>
 <p>列表/字典/集合推导式不只是语法糖:它有<strong>自己的作用域</strong>,循环变量不会泄漏到外层。</p>
-<div class="sourceCode" id="cb11"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>i <span class="op">=</span> <span class="st">&quot;外层&quot;</span></span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>squares <span class="op">=</span> [i <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">3</span>)]</span>
-<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(i)          <span class="co"># &quot;外层&quot; —— 循环变量 i 不泄漏到外层!</span></span></code></pre></div>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>i <span class="op">=</span> <span class="st">&quot;外层&quot;</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>squares <span class="op">=</span> [i <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">3</span>)]</span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(i)          <span class="co"># &quot;外层&quot; —— 循环变量 i 不泄漏到外层!</span></span></code></pre></div>
 <p>而”独立作用域”具体怎么实现,<strong>分版本</strong>:</p>
 <ul>
 <li><strong>Python ≤
@@ -362,11 +394,11 @@ class="sourceCode python"><code class="sourceCode python"><span id="cb11-1"><a h
 <code>LOAD_FAST_AND_CLEAR</code> + <code>FOR_ITER</code> +
 <code>LIST_APPEND</code>:进入推导式时把外层同名变量”借走并清空”、结束后再<strong>恢复</strong>它,从而既内联(更快)又不泄漏。</li>
 </ul>
-<div class="sourceCode" id="cb12"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> dis</span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> make():</span>
-<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> [i <span class="op">*</span> <span class="dv">2</span> <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">3</span>)]</span>
-<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>dis.dis(make)     <span class="co"># 3.12+:无 MAKE_FUNCTION、无 &lt;listcomp&gt;;3.11 及更早才有</span></span></code></pre></div>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> dis</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> make():</span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> [i <span class="op">*</span> <span class="dv">2</span> <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">3</span>)]</span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>dis.dis(make)     <span class="co"># 3.12+:无 MAKE_FUNCTION、无 &lt;listcomp&gt;;3.11 及更早才有</span></span></code></pre></div>
 <p>这与 C 的块作用域不同,也与 Python 2 不同(那时推导式变量会泄漏)。</p>
 <blockquote>
 <p>注意:普通 <code>for</code>
@@ -374,25 +406,25 @@ class="sourceCode python"><code class="sourceCode python"><span id="cb12-1"><a h
 </blockquote>
 <p>生成器表达式更进一步,连结果列表都不物化,返回一个迭代器,惰性产出(注意:<strong>生成器表达式并没有被内联</strong>,它仍编译成一个独立的
 <code>&lt;genexpr&gt;</code> 函数,这也是它天然拥有独立作用域的原因):</p>
-<div class="sourceCode" id="cb13"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>gen <span class="op">=</span> (i <span class="op">*</span> <span class="dv">2</span> <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">1_000_000</span>))   <span class="co"># 不计算任何值,不分配百万列表</span></span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">next</span>(gen))   <span class="co"># 0 —— 此刻才算第一个</span></span></code></pre></div>
+<div class="sourceCode" id="cb15"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>gen <span class="op">=</span> (i <span class="op">*</span> <span class="dv">2</span> <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">1_000_000</span>))   <span class="co"># 不计算任何值,不分配百万列表</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">next</span>(gen))   <span class="co"># 0 —— 此刻才算第一个</span></span></code></pre></div>
 <h2 id="循环的-else-子句">循环的 else 子句</h2>
 <p>Python 独有:<code>for</code>/<code>while</code> 可带
 <code>else</code>,它在循环<strong>正常耗尽</strong>(没有被
 <code>break</code> 打断)时执行。理解成”没 break 就走 else”:</p>
-<div class="sourceCode" id="cb14"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> find(seq, target):</span>
-<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> x <span class="kw">in</span> seq:</span>
-<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> x <span class="op">==</span> target:</span>
-<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>            <span class="bu">print</span>(<span class="st">&quot;找到&quot;</span>, x)</span>
-<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>            <span class="cf">break</span></span>
-<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">else</span>:</span>
-<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>        <span class="co"># 只有循环跑完都没 break 才到这里</span></span>
-<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="st">&quot;没找到&quot;</span>)</span>
-<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a>find([<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>], <span class="dv">2</span>)   <span class="co"># 找到 2</span></span>
-<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a>find([<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>], <span class="dv">9</span>)   <span class="co"># 没找到</span></span></code></pre></div>
+<div class="sourceCode" id="cb16"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> find(seq, target):</span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> x <span class="kw">in</span> seq:</span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> x <span class="op">==</span> target:</span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>            <span class="bu">print</span>(<span class="st">&quot;找到&quot;</span>, x)</span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>            <span class="cf">break</span></span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">else</span>:</span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>        <span class="co"># 只有循环跑完都没 break 才到这里</span></span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="st">&quot;没找到&quot;</span>)</span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a>find([<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>], <span class="dv">2</span>)   <span class="co"># 找到 2</span></span>
+<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a>find([<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>], <span class="dv">9</span>)   <span class="co"># 没找到</span></span></code></pre></div>
 <p>这省掉了 C 里常见的”设一个 <code>found</code>
 标志变量再判断”的写法。底层上,<code>break</code> 会跳过
 <code>else</code> 块对应的字节码,正常结束则顺序落入
@@ -412,19 +444,19 @@ id="match-case结构化模式匹配3.10">match-case:结构化模式匹配(3.10+)
 就执行哪个,然后整个 <code>match</code> 结束。</p>
 <h3 id="第-1-步最简单的用法按值匹配这部分最像-switch">第 1
 步:最简单的用法——按”值”匹配(这部分最像 switch)</h3>
-<div class="sourceCode" id="cb15"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> http(code):</span>
-<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">match</span> code:               <span class="co"># 拿 code 去和下面每个 case 比</span></span>
-<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> <span class="dv">200</span>:             <span class="co"># 如果 code == 200</span></span>
-<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;OK&quot;</span></span>
-<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> <span class="dv">404</span>:</span>
-<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;Not Found&quot;</span></span>
-<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> _:               <span class="co"># _ 是通配符,谁都匹配,相当于 switch 的 default</span></span>
-<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;Unknown&quot;</span></span>
-<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(http(<span class="dv">200</span>))   <span class="co"># OK</span></span>
-<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(http(<span class="dv">404</span>))   <span class="co"># Not Found</span></span>
-<span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(http(<span class="dv">500</span>))   <span class="co"># Unknown</span></span></code></pre></div>
+<div class="sourceCode" id="cb17"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> http(code):</span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">match</span> code:               <span class="co"># 拿 code 去和下面每个 case 比</span></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> <span class="dv">200</span>:             <span class="co"># 如果 code == 200</span></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;OK&quot;</span></span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> <span class="dv">404</span>:</span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;Not Found&quot;</span></span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> _:               <span class="co"># _ 是通配符,谁都匹配,相当于 switch 的 default</span></span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;Unknown&quot;</span></span>
+<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(http(<span class="dv">200</span>))   <span class="co"># OK</span></span>
+<span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(http(<span class="dv">404</span>))   <span class="co"># Not Found</span></span>
+<span id="cb17-12"><a href="#cb17-12" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(http(<span class="dv">500</span>))   <span class="co"># Unknown</span></span></code></pre></div>
 <ul>
 <li><code>case 200:</code>
 这种写<strong>字面量</strong>(数字、字符串、<code>True</code>/<code>False</code>/<code>None</code>)时,就是”值相等就匹配”,和
@@ -437,35 +469,35 @@ class="sourceCode python"><code class="sourceCode python"><span id="cb15-1"><a h
 匹配多个值</h3>
 <p>用 <code>|</code> 把多个模式并起来,任意一个中就算匹配(比 C 里堆一串
 <code>case 400: case 401:</code> 干净):</p>
-<div class="sourceCode" id="cb16"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> kind(code):</span>
-<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">match</span> code:</span>
-<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> <span class="dv">200</span> <span class="op">|</span> <span class="dv">201</span> <span class="op">|</span> <span class="dv">204</span>:      <span class="co"># 这三个值任意一个都算 success</span></span>
-<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;success&quot;</span></span>
-<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> <span class="dv">400</span> <span class="op">|</span> <span class="dv">401</span> <span class="op">|</span> <span class="dv">404</span>:</span>
-<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;client error&quot;</span></span>
-<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> _:</span>
-<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;other&quot;</span></span>
-<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(kind(<span class="dv">201</span>))   <span class="co"># success</span></span>
-<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(kind(<span class="dv">404</span>))   <span class="co"># client error</span></span></code></pre></div>
+<div class="sourceCode" id="cb18"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> kind(code):</span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">match</span> code:</span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> <span class="dv">200</span> <span class="op">|</span> <span class="dv">201</span> <span class="op">|</span> <span class="dv">204</span>:      <span class="co"># 这三个值任意一个都算 success</span></span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;success&quot;</span></span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> <span class="dv">400</span> <span class="op">|</span> <span class="dv">401</span> <span class="op">|</span> <span class="dv">404</span>:</span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;client error&quot;</span></span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> _:</span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;other&quot;</span></span>
+<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(kind(<span class="dv">201</span>))   <span class="co"># success</span></span>
+<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(kind(<span class="dv">404</span>))   <span class="co"># client error</span></span></code></pre></div>
 <h3 id="第-3-步捕获模式一边匹配一边取值这是-match-的精髓">第 3
 步:捕获模式——一边匹配一边”取值”(这是 <code>match</code> 的精髓)</h3>
 <p>到这里才和 <code>switch</code>
 拉开差距。你可以在模式里写一个<strong>变量名</strong>,匹配成功时它会把对应的值<strong>绑定(赋值)</strong>给这个变量,后面直接用:</p>
-<div class="sourceCode" id="cb17"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> head_tail(seq):</span>
-<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">match</span> seq:</span>
-<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>        case []:                       <span class="co"># 匹配空列表</span></span>
-<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;空的&quot;</span></span>
-<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>        case [x]:                      <span class="co"># 匹配&quot;恰好一个元素的列表&quot;,并把那个元素绑定到 x</span></span>
-<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="ss">f&quot;只有一个:</span><span class="sc">{</span>x<span class="sc">}</span><span class="ss">&quot;</span></span>
-<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a>        case [first, <span class="op">*</span>rest]:           <span class="co"># 匹配&quot;至少一个元素&quot;;first=第一个,*rest=剩下的(列表)</span></span>
-<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="ss">f&quot;第一个=</span><span class="sc">{</span>first<span class="sc">}</span><span class="ss">,剩下=</span><span class="sc">{</span>rest<span class="sc">}</span><span class="ss">&quot;</span></span>
-<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(head_tail([]))          <span class="co"># 空的</span></span>
-<span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(head_tail([<span class="dv">9</span>]))         <span class="co"># 只有一个:9</span></span>
-<span id="cb17-12"><a href="#cb17-12" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(head_tail([<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>, <span class="dv">4</span>]))<span class="co"># 第一个=1,剩下=[2, 3, 4]</span></span></code></pre></div>
+<div class="sourceCode" id="cb19"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> head_tail(seq):</span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">match</span> seq:</span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>        case []:                       <span class="co"># 匹配空列表</span></span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;空的&quot;</span></span>
+<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a>        case [x]:                      <span class="co"># 匹配&quot;恰好一个元素的列表&quot;,并把那个元素绑定到 x</span></span>
+<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="ss">f&quot;只有一个:</span><span class="sc">{</span>x<span class="sc">}</span><span class="ss">&quot;</span></span>
+<span id="cb19-7"><a href="#cb19-7" aria-hidden="true" tabindex="-1"></a>        case [first, <span class="op">*</span>rest]:           <span class="co"># 匹配&quot;至少一个元素&quot;;first=第一个,*rest=剩下的(列表)</span></span>
+<span id="cb19-8"><a href="#cb19-8" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="ss">f&quot;第一个=</span><span class="sc">{</span>first<span class="sc">}</span><span class="ss">,剩下=</span><span class="sc">{</span>rest<span class="sc">}</span><span class="ss">&quot;</span></span>
+<span id="cb19-9"><a href="#cb19-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-10"><a href="#cb19-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(head_tail([]))          <span class="co"># 空的</span></span>
+<span id="cb19-11"><a href="#cb19-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(head_tail([<span class="dv">9</span>]))         <span class="co"># 只有一个:9</span></span>
+<span id="cb19-12"><a href="#cb19-12" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(head_tail([<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>, <span class="dv">4</span>]))<span class="co"># 第一个=1,剩下=[2, 3, 4]</span></span></code></pre></div>
 <ul>
 <li><code>[x]</code>、<code>[first, *rest]</code>
 这种叫<strong>序列模式</strong>:它先检查”是不是序列、长度对不对”,对了再把元素<strong>拆出来</strong>绑定到变量。<code>*rest</code>
@@ -481,34 +513,34 @@ class="sourceCode python"><code class="sourceCode python"><span id="cb17-1"><a h
 就匹配”,于是写 <code>case value:</code>。<strong>错!</strong>
 模式里的<strong>裸名字永远是”捕获绑定”</strong>,不是拿它的值去比较——它会<strong>无条件匹配</strong>,并把
 <code>n</code> 赋给一个新的 <code>value</code>,还把外层同名变量盖掉:</p>
-<div class="sourceCode" id="cb18"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>value <span class="op">=</span> <span class="dv">3</span></span>
-<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> bad(n):</span>
-<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">match</span> n:</span>
-<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> value:                    <span class="co"># 陷阱!这不是&quot;n == 3&quot;,而是&quot;把 n 绑定到 value&quot;</span></span>
-<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="ss">f&quot;绑定了 value=</span><span class="sc">{</span>value<span class="sc">}</span><span class="ss">&quot;</span></span>
-<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(bad(<span class="dv">99</span>))   <span class="co"># 绑定了 value=99   ← 证明它根本没和外层的 3 比较,什么都能匹配</span></span></code></pre></div>
+<div class="sourceCode" id="cb20"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>value <span class="op">=</span> <span class="dv">3</span></span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> bad(n):</span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">match</span> n:</span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> value:                    <span class="co"># 陷阱!这不是&quot;n == 3&quot;,而是&quot;把 n 绑定到 value&quot;</span></span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="ss">f&quot;绑定了 value=</span><span class="sc">{</span>value<span class="sc">}</span><span class="ss">&quot;</span></span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(bad(<span class="dv">99</span>))   <span class="co"># 绑定了 value=99   ← 证明它根本没和外层的 3 比较,什么都能匹配</span></span></code></pre></div>
 <p><strong>想拿一个变量的值来匹配,有两种正确写法:</strong></p>
-<div class="sourceCode" id="cb19"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>value <span class="op">=</span> <span class="dv">3</span></span>
-<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> good(n):</span>
-<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">match</span> n:</span>
-<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> v <span class="cf">if</span> v <span class="op">==</span> value:          <span class="co"># 写法一:先捕获成 v,再用 guard 比较</span></span>
-<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;等于 value&quot;</span></span>
-<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> _:</span>
-<span id="cb19-7"><a href="#cb19-7" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;不等&quot;</span></span>
-<span id="cb19-8"><a href="#cb19-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb19-9"><a href="#cb19-9" aria-hidden="true" tabindex="-1"></a><span class="co"># 写法二:用&quot;带点的名字&quot;(限定名),点号告诉 match 这是常量引用、不是绑定</span></span>
-<span id="cb19-10"><a href="#cb19-10" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> enum</span>
-<span id="cb19-11"><a href="#cb19-11" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Color(enum.Enum):</span>
-<span id="cb19-12"><a href="#cb19-12" aria-hidden="true" tabindex="-1"></a>    RED <span class="op">=</span> <span class="dv">1</span><span class="op">;</span> GREEN <span class="op">=</span> <span class="dv">2</span></span>
-<span id="cb19-13"><a href="#cb19-13" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> name(c):</span>
-<span id="cb19-14"><a href="#cb19-14" aria-hidden="true" tabindex="-1"></a>    <span class="cf">match</span> c:</span>
-<span id="cb19-15"><a href="#cb19-15" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> Color.RED:                <span class="co"># 带点 → 当作值来比较(而不是绑定)</span></span>
-<span id="cb19-16"><a href="#cb19-16" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;红&quot;</span></span>
-<span id="cb19-17"><a href="#cb19-17" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> Color.GREEN:</span>
-<span id="cb19-18"><a href="#cb19-18" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;绿&quot;</span></span></code></pre></div>
+<div class="sourceCode" id="cb21"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>value <span class="op">=</span> <span class="dv">3</span></span>
+<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> good(n):</span>
+<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">match</span> n:</span>
+<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> v <span class="cf">if</span> v <span class="op">==</span> value:          <span class="co"># 写法一:先捕获成 v,再用 guard 比较</span></span>
+<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;等于 value&quot;</span></span>
+<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> _:</span>
+<span id="cb21-7"><a href="#cb21-7" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;不等&quot;</span></span>
+<span id="cb21-8"><a href="#cb21-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-9"><a href="#cb21-9" aria-hidden="true" tabindex="-1"></a><span class="co"># 写法二:用&quot;带点的名字&quot;(限定名),点号告诉 match 这是常量引用、不是绑定</span></span>
+<span id="cb21-10"><a href="#cb21-10" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> enum</span>
+<span id="cb21-11"><a href="#cb21-11" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Color(enum.Enum):</span>
+<span id="cb21-12"><a href="#cb21-12" aria-hidden="true" tabindex="-1"></a>    RED <span class="op">=</span> <span class="dv">1</span><span class="op">;</span> GREEN <span class="op">=</span> <span class="dv">2</span></span>
+<span id="cb21-13"><a href="#cb21-13" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> name(c):</span>
+<span id="cb21-14"><a href="#cb21-14" aria-hidden="true" tabindex="-1"></a>    <span class="cf">match</span> c:</span>
+<span id="cb21-15"><a href="#cb21-15" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> Color.RED:                <span class="co"># 带点 → 当作值来比较(而不是绑定)</span></span>
+<span id="cb21-16"><a href="#cb21-16" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;红&quot;</span></span>
+<span id="cb21-17"><a href="#cb21-17" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> Color.GREEN:</span>
+<span id="cb21-18"><a href="#cb21-18" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;绿&quot;</span></span></code></pre></div>
 <p>记住一句话:<strong>模式里 <code>abc</code>
 是”绑定”,<code>X.abc</code> 才是”比较”。</strong></p>
 <h3 id="第-5-步guard给-case-加一个额外条件">第 5 步:guard——给 case
@@ -516,57 +548,57 @@ class="sourceCode python"><code class="sourceCode python"><span id="cb19-1"><a h
 <p>在 <code>case</code> 后面加 <code>if 条件</code>,叫
 <strong>guard(守卫)</strong>:只有”模式匹配 <strong>且</strong>
 条件为真”才算中。</p>
-<div class="sourceCode" id="cb20"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> sign(n):</span>
-<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">match</span> n:</span>
-<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> <span class="dv">0</span>:</span>
-<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;零&quot;</span></span>
-<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> x <span class="cf">if</span> x <span class="op">&gt;</span> <span class="dv">0</span>:        <span class="co"># 先捕获成 x,再要求 x &gt; 0</span></span>
-<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;正&quot;</span></span>
-<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> _:</span>
-<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;负&quot;</span></span>
-<span id="cb20-9"><a href="#cb20-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb20-10"><a href="#cb20-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sign(<span class="dv">0</span>), sign(<span class="dv">5</span>), sign(<span class="op">-</span><span class="dv">2</span>))   <span class="co"># 零 正 负</span></span></code></pre></div>
+<div class="sourceCode" id="cb22"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> sign(n):</span>
+<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">match</span> n:</span>
+<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> <span class="dv">0</span>:</span>
+<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;零&quot;</span></span>
+<span id="cb22-5"><a href="#cb22-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> x <span class="cf">if</span> x <span class="op">&gt;</span> <span class="dv">0</span>:        <span class="co"># 先捕获成 x,再要求 x &gt; 0</span></span>
+<span id="cb22-6"><a href="#cb22-6" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;正&quot;</span></span>
+<span id="cb22-7"><a href="#cb22-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> _:</span>
+<span id="cb22-8"><a href="#cb22-8" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;负&quot;</span></span>
+<span id="cb22-9"><a href="#cb22-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-10"><a href="#cb22-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sign(<span class="dv">0</span>), sign(<span class="dv">5</span>), sign(<span class="op">-</span><span class="dv">2</span>))   <span class="co"># 零 正 负</span></span></code></pre></div>
 <h3 id="第-6-步映射模式匹配-dict与类模式匹配对象">第 6 步:映射模式(匹配
 dict)与类模式(匹配对象)</h3>
 <p><code>match</code> 还能拆字典和自定义对象——这在处理
 JSON、AST、事件时非常好用。</p>
 <p><strong>映射模式</strong>:只关心”有没有某些键、值是什么”,多余的键忽略:</p>
-<div class="sourceCode" id="cb21"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> route(req):</span>
-<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">match</span> req:</span>
-<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a>        case {<span class="st">&quot;method&quot;</span>: <span class="st">&quot;GET&quot;</span>, <span class="st">&quot;path&quot;</span>: p}:   <span class="co"># 要求有 method==&quot;GET&quot;,并把 path 的值绑定到 p</span></span>
-<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="ss">f&quot;GET </span><span class="sc">{</span>p<span class="sc">}</span><span class="ss">&quot;</span></span>
-<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a>        case {<span class="st">&quot;method&quot;</span>: <span class="st">&quot;POST&quot;</span>}:             <span class="co"># 只要求有 method==&quot;POST&quot;,别的键不管</span></span>
-<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;POST&quot;</span></span>
-<span id="cb21-7"><a href="#cb21-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> _:</span>
-<span id="cb21-8"><a href="#cb21-8" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;未知请求&quot;</span></span>
-<span id="cb21-9"><a href="#cb21-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb21-10"><a href="#cb21-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(route({<span class="st">&quot;method&quot;</span>: <span class="st">&quot;GET&quot;</span>, <span class="st">&quot;path&quot;</span>: <span class="st">&quot;/users&quot;</span>}))   <span class="co"># GET /users</span></span></code></pre></div>
+<div class="sourceCode" id="cb23"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> route(req):</span>
+<span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">match</span> req:</span>
+<span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a>        case {<span class="st">&quot;method&quot;</span>: <span class="st">&quot;GET&quot;</span>, <span class="st">&quot;path&quot;</span>: p}:   <span class="co"># 要求有 method==&quot;GET&quot;,并把 path 的值绑定到 p</span></span>
+<span id="cb23-4"><a href="#cb23-4" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="ss">f&quot;GET </span><span class="sc">{</span>p<span class="sc">}</span><span class="ss">&quot;</span></span>
+<span id="cb23-5"><a href="#cb23-5" aria-hidden="true" tabindex="-1"></a>        case {<span class="st">&quot;method&quot;</span>: <span class="st">&quot;POST&quot;</span>}:             <span class="co"># 只要求有 method==&quot;POST&quot;,别的键不管</span></span>
+<span id="cb23-6"><a href="#cb23-6" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;POST&quot;</span></span>
+<span id="cb23-7"><a href="#cb23-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> _:</span>
+<span id="cb23-8"><a href="#cb23-8" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;未知请求&quot;</span></span>
+<span id="cb23-9"><a href="#cb23-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-10"><a href="#cb23-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(route({<span class="st">&quot;method&quot;</span>: <span class="st">&quot;GET&quot;</span>, <span class="st">&quot;path&quot;</span>: <span class="st">&quot;/users&quot;</span>}))   <span class="co"># GET /users</span></span></code></pre></div>
 <p><strong>类模式</strong>:按类型 + 属性解构对象。给类加一个
 <code>__match_args__</code>,就能像元组一样按<strong>位置</strong>写:</p>
-<div class="sourceCode" id="cb22"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Point:</span>
-<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a>    <span class="fu">__match_args__</span> <span class="op">=</span> (<span class="st">&quot;x&quot;</span>, <span class="st">&quot;y&quot;</span>)     <span class="co"># 声明:位置匹配时,第1个对应 x、第2个对应 y</span></span>
-<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, x, y):</span>
-<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.x, <span class="va">self</span>.y <span class="op">=</span> x, y</span>
-<span id="cb22-5"><a href="#cb22-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-6"><a href="#cb22-6" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> quadrant(p):</span>
-<span id="cb22-7"><a href="#cb22-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">match</span> p:</span>
-<span id="cb22-8"><a href="#cb22-8" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> Point(<span class="dv">0</span>, <span class="dv">0</span>):                    <span class="co"># 位置匹配:x==0 且 y==0</span></span>
-<span id="cb22-9"><a href="#cb22-9" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;原点&quot;</span></span>
-<span id="cb22-10"><a href="#cb22-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> Point(x<span class="op">=</span><span class="dv">0</span>, y<span class="op">=</span>yy):               <span class="co"># 关键字匹配:x==0,并把 y 绑定到 yy</span></span>
-<span id="cb22-11"><a href="#cb22-11" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="ss">f&quot;在 y 轴,y=</span><span class="sc">{</span>yy<span class="sc">}</span><span class="ss">&quot;</span></span>
-<span id="cb22-12"><a href="#cb22-12" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> Point(x, y) <span class="cf">if</span> x <span class="op">&gt;</span> <span class="dv">0</span> <span class="kw">and</span> y <span class="op">&gt;</span> <span class="dv">0</span>: <span class="co"># 位置捕获 + guard</span></span>
-<span id="cb22-13"><a href="#cb22-13" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;第一象限&quot;</span></span>
-<span id="cb22-14"><a href="#cb22-14" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> Point():                        <span class="co"># 只要是 Point 就行</span></span>
-<span id="cb22-15"><a href="#cb22-15" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;其他 Point&quot;</span></span>
-<span id="cb22-16"><a href="#cb22-16" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> _:</span>
-<span id="cb22-17"><a href="#cb22-17" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;根本不是 Point&quot;</span></span>
-<span id="cb22-18"><a href="#cb22-18" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-19"><a href="#cb22-19" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(quadrant(Point(<span class="dv">0</span>, <span class="dv">0</span>)))   <span class="co"># 原点</span></span>
-<span id="cb22-20"><a href="#cb22-20" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(quadrant(Point(<span class="dv">0</span>, <span class="dv">7</span>)))   <span class="co"># 在 y 轴,y=7</span></span>
-<span id="cb22-21"><a href="#cb22-21" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(quadrant(Point(<span class="dv">1</span>, <span class="dv">2</span>)))   <span class="co"># 第一象限</span></span></code></pre></div>
+<div class="sourceCode" id="cb24"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Point:</span>
+<span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a>    <span class="fu">__match_args__</span> <span class="op">=</span> (<span class="st">&quot;x&quot;</span>, <span class="st">&quot;y&quot;</span>)     <span class="co"># 声明:位置匹配时,第1个对应 x、第2个对应 y</span></span>
+<span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, x, y):</span>
+<span id="cb24-4"><a href="#cb24-4" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.x, <span class="va">self</span>.y <span class="op">=</span> x, y</span>
+<span id="cb24-5"><a href="#cb24-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-6"><a href="#cb24-6" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> quadrant(p):</span>
+<span id="cb24-7"><a href="#cb24-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">match</span> p:</span>
+<span id="cb24-8"><a href="#cb24-8" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> Point(<span class="dv">0</span>, <span class="dv">0</span>):                    <span class="co"># 位置匹配:x==0 且 y==0</span></span>
+<span id="cb24-9"><a href="#cb24-9" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;原点&quot;</span></span>
+<span id="cb24-10"><a href="#cb24-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> Point(x<span class="op">=</span><span class="dv">0</span>, y<span class="op">=</span>yy):               <span class="co"># 关键字匹配:x==0,并把 y 绑定到 yy</span></span>
+<span id="cb24-11"><a href="#cb24-11" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="ss">f&quot;在 y 轴,y=</span><span class="sc">{</span>yy<span class="sc">}</span><span class="ss">&quot;</span></span>
+<span id="cb24-12"><a href="#cb24-12" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> Point(x, y) <span class="cf">if</span> x <span class="op">&gt;</span> <span class="dv">0</span> <span class="kw">and</span> y <span class="op">&gt;</span> <span class="dv">0</span>: <span class="co"># 位置捕获 + guard</span></span>
+<span id="cb24-13"><a href="#cb24-13" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;第一象限&quot;</span></span>
+<span id="cb24-14"><a href="#cb24-14" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> Point():                        <span class="co"># 只要是 Point 就行</span></span>
+<span id="cb24-15"><a href="#cb24-15" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;其他 Point&quot;</span></span>
+<span id="cb24-16"><a href="#cb24-16" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> _:</span>
+<span id="cb24-17"><a href="#cb24-17" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;根本不是 Point&quot;</span></span>
+<span id="cb24-18"><a href="#cb24-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-19"><a href="#cb24-19" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(quadrant(Point(<span class="dv">0</span>, <span class="dv">0</span>)))   <span class="co"># 原点</span></span>
+<span id="cb24-20"><a href="#cb24-20" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(quadrant(Point(<span class="dv">0</span>, <span class="dv">7</span>)))   <span class="co"># 在 y 轴,y=7</span></span>
+<span id="cb24-21"><a href="#cb24-21" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(quadrant(Point(<span class="dv">1</span>, <span class="dv">2</span>)))   <span class="co"># 第一象限</span></span></code></pre></div>
 <h3 id="小抄常见模式一览">小抄:常见模式一览</h3>
 <table>
 <thead>

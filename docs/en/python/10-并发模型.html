@@ -418,6 +418,27 @@ class="sourceCode python"><code class="sourceCode python"><span id="cb10-1"><a h
   │      queue empty, epoll waits for IO/timers to become ready
   │      1s later B&#39;s timer fires --&gt; put B back on the ready queue
   └──── resume B and continue after its await ...</code></pre>
+<p>Print the concurrent interleaving explicitly—every <code>await</code>
+is a yield point, and you can watch the two coroutines take turns
+advancing at each switch:</p>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> asyncio</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="cf">async</span> <span class="kw">def</span> worker(name: <span class="bu">str</span>, steps: <span class="bu">int</span>) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(steps):</span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="ss">f&quot;</span><span class="sc">{</span>name<span class="sc">}</span><span class="ss">-</span><span class="sc">{</span>i<span class="sc">}</span><span class="ss">&quot;</span>)</span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">await</span> asyncio.sleep(<span class="dv">0</span>)   <span class="co"># yield control; the event loop runs the other coroutine</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a><span class="cf">async</span> <span class="kw">def</span> main():</span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">await</span> asyncio.gather(worker(<span class="st">&quot;A&quot;</span>, <span class="dv">3</span>), worker(<span class="st">&quot;B&quot;</span>, <span class="dv">3</span>))</span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>asyncio.run(main())</span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a><span class="co"># A-0</span></span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a><span class="co"># B-0</span></span>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a><span class="co"># A-1</span></span>
+<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a><span class="co"># B-1</span></span>
+<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a><span class="co"># A-2</span></span>
+<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a><span class="co"># B-2   —— the two coroutines alternate at each await (cooperative, deterministic order)</span></span></code></pre></div>
 <h3 id="contrast-with-threads">Contrast with Threads</h3>
 <table>
 <colgroup>
@@ -473,28 +494,45 @@ freezes the entire event loop</strong>—because there’s no
 libraries (<code>aiohttp</code>, <code>httpx</code>) or offload the
 blocking call to a thread pool:
 <code>await loop.run_in_executor(None, blocking_fn)</code>.</p>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> asyncio, time</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> blocking_io(x: <span class="bu">int</span>) <span class="op">-&gt;</span> <span class="bu">int</span>:   <span class="co"># a synchronous blocking function (e.g. sync requests.get)</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>    time.sleep(<span class="fl">0.05</span>)</span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> x <span class="op">*</span> <span class="dv">2</span></span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a><span class="cf">async</span> <span class="kw">def</span> main():</span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>    loop <span class="op">=</span> asyncio.get_running_loop()</span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>    <span class="co"># offload to the default thread pool; the blocking happens on another thread, the event loop stays alive</span></span>
+<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a>    results <span class="op">=</span> <span class="cf">await</span> asyncio.gather(</span>
+<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a>        loop.run_in_executor(<span class="va">None</span>, blocking_io, <span class="dv">1</span>),</span>
+<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a>        loop.run_in_executor(<span class="va">None</span>, blocking_io, <span class="dv">2</span>),</span>
+<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb13-14"><a href="#cb13-14" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(results)   <span class="co"># [2, 4]</span></span>
+<span id="cb13-15"><a href="#cb13-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-16"><a href="#cb13-16" aria-hidden="true" tabindex="-1"></a>asyncio.run(main())</span></code></pre></div>
 <h2 id="concurrent.futures-a-unified-high-level-interface">7.
 concurrent.futures: A Unified High-Level Interface</h2>
 <p><code>concurrent.futures</code> provides a unified API for thread
 pools and process pools; it’s the most commonly used entry point day to
 day. The <code>Future</code> object is like C++’s
 <code>std::future</code>.</p>
-<div class="sourceCode" id="cb12"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> concurrent.futures <span class="im">import</span> ThreadPoolExecutor, ProcessPoolExecutor</span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> task(x: <span class="bu">int</span>) <span class="op">-&gt;</span> <span class="bu">int</span>:</span>
-<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> x <span class="op">*</span> x</span>
-<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a><span class="co"># IO-bound: use a thread pool</span></span>
-<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> ThreadPoolExecutor(max_workers<span class="op">=</span><span class="dv">4</span>) <span class="im">as</span> ex:</span>
-<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>    results <span class="op">=</span> <span class="bu">list</span>(ex.<span class="bu">map</span>(task, <span class="bu">range</span>(<span class="dv">10</span>)))</span>
-<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a><span class="co"># CPU-bound: use a process pool (bypass the GIL)</span></span>
-<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="va">__name__</span> <span class="op">==</span> <span class="st">&quot;__main__&quot;</span>:</span>
-<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">with</span> ProcessPoolExecutor(max_workers<span class="op">=</span><span class="dv">4</span>) <span class="im">as</span> ex:</span>
-<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a>        futures <span class="op">=</span> [ex.submit(task, i) <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">10</span>)]</span>
-<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> f <span class="kw">in</span> futures:</span>
-<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a>            <span class="bu">print</span>(f.result())   <span class="co"># blocks until that task completes</span></span></code></pre></div>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> concurrent.futures <span class="im">import</span> ThreadPoolExecutor, ProcessPoolExecutor</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> task(x: <span class="bu">int</span>) <span class="op">-&gt;</span> <span class="bu">int</span>:</span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> x <span class="op">*</span> x</span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a><span class="co"># IO-bound: use a thread pool</span></span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> ThreadPoolExecutor(max_workers<span class="op">=</span><span class="dv">4</span>) <span class="im">as</span> ex:</span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a>    results <span class="op">=</span> <span class="bu">list</span>(ex.<span class="bu">map</span>(task, <span class="bu">range</span>(<span class="dv">10</span>)))</span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a><span class="co"># CPU-bound: use a process pool (bypass the GIL)</span></span>
+<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="va">__name__</span> <span class="op">==</span> <span class="st">&quot;__main__&quot;</span>:</span>
+<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">with</span> ProcessPoolExecutor(max_workers<span class="op">=</span><span class="dv">4</span>) <span class="im">as</span> ex:</span>
+<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a>        futures <span class="op">=</span> [ex.submit(task, i) <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">10</span>)]</span>
+<span id="cb14-14"><a href="#cb14-14" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> f <span class="kw">in</span> futures:</span>
+<span id="cb14-15"><a href="#cb14-15" aria-hidden="true" tabindex="-1"></a>            <span class="bu">print</span>(f.result())   <span class="co"># blocks until that task completes</span></span></code></pre></div>
 <p>Rule of thumb: <strong>CPU-bound → ProcessPool; IO-bound → ThreadPool
 or asyncio.</strong></p>
 <h2 id="free-threaded-no-gil-the-gils-twilight">8. free-threaded
