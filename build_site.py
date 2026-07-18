@@ -43,6 +43,9 @@ def navbar(lang, sub_active, lang_root):
     for _, sub, disp in TUTS:
         cls = ' style="color:var(--accent-dark);font-weight:700"' if sub == sub_active else ""
         parts.append(f'<a href="{lang_root}/{sub}/index.html"{cls}>{disp}</a>')
+    lang_label = "🌐 EN" if lang == "zh" else "🌐 中文"
+    parts.append(f'<a class="topnav-lang" href="#" onclick="switchLang();return false;" '
+                 f'title="切换语言 / Switch language">{lang_label}</a>')
     return ('<div class="topbar"><div class="wrap">' + "\n".join(parts) + '</div></div>'
             + toggle_html(lang) + '\n<div class="wrap">')
 
@@ -114,6 +117,9 @@ def home_html(lang):
                   'Author / maintainer: HTZHU 〈<a href="mailto:zhu.h4@northeastern.edu">zhu.h4@northeastern.edu</a>〉. '
                   'Source on <a href="https://github.com/zhtinist/lang-tutorials">GitHub</a>.')
     nav_items = "".join(f'<a href="{sub}/index.html">{disp}</a>' for _, sub, disp in TUTS)
+    lang_label = "🌐 EN" if lang == "zh" else "🌐 中文"
+    nav_items += (f'<a class="topnav-lang" href="#" onclick="switchLang();return false;" '
+                  f'title="切换语言 / Switch language">{lang_label}</a>')
     return f"""<!doctype html><html lang="{'zh-CN' if lang=='zh' else 'en'}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{T}</title>
