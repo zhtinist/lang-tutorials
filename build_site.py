@@ -31,17 +31,16 @@ def src_for(sub_src, lang):
 
 
 def lang_pair(lang):
-    """中/EN 语言对,当前语言高亮。侧边按钮与顶部入口共用。"""
+    """中文/EN 语言对,当前语言加粗加下划线。用于顶栏语言入口。"""
     cn = " on" if lang == "zh" else ""
     en = " on" if lang == "en" else ""
-    return (f'<span class="lp{cn}">中</span><span class="sep">/</span>'
+    return (f'<span class="lp{cn}">中文</span><span class="sep">/</span>'
             f'<span class="lp{en}">EN</span>')
 
 
 def toggle_html(lang):
-    return (f'<a class="langtoggle" href="#" onclick="switchLang();return false;" '
-            f'title="切换语言:中文 / English">{lang_pair(lang)}</a>'
-            f'<script>{TOGGLE_JS}</script>')
+    # 只注入切换脚本;可见入口在顶栏(topnav-lang),侧边按钮已移除
+    return f'<script>{TOGGLE_JS}</script>'
 
 
 def navbar(lang, sub_active, lang_root):
