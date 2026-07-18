@@ -39,7 +39,8 @@ def toggle_html(lang):
 
 
 def navbar(lang, sub_active, lang_root):
-    parts = [f'<a class="home" href="{lang_root}/index.html">📚 {HOME_TITLE[lang]}</a>']
+    parts = [f'<a class="home" href="{lang_root}/index.html">'
+             f'<span class="logo">📚</span><span class="brand">{HOME_TITLE[lang]}</span></a>']
     for _, sub, disp in TUTS:
         cls = ' style="color:var(--accent-dark);font-weight:700"' if sub == sub_active else ""
         parts.append(f'<a href="{lang_root}/{sub}/index.html"{cls}>{disp}</a>')
@@ -124,7 +125,7 @@ def home_html(lang):
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{T}</title>
 <link rel="stylesheet" href="../assets/style.css"></head><body>
-<div class="topbar"><div class="wrap"><a class="home" href="index.html">📚 {T}</a>{nav_items}</div></div>
+<div class="topbar"><div class="wrap"><a class="home" href="index.html"><span class="logo">📚</span><span class="brand">{T}</span></a>{nav_items}</div></div>
 {toggle_html(lang)}
 <div class="wrap">
 <div class="hero"><h1>{T}</h1><p>{lead}</p>{badges()}</div>
