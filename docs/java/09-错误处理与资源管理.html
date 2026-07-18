@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="zh-CN" xml:lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.10" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>错误处理与资源管理:异常与垃圾回收</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../assets/style.css" />
+</head>
+<body>
+<div class="topbar"><div class="wrap"><a class="home" href="../index.html">📚 面向 C/C++ 程序员的语言内幕教程</a>
+<a href="../python/index.html">Python</a>
+<a href="../java/index.html" style="color:var(--accent-dark);font-weight:700">Java</a>
+<a href="../go/index.html">Go</a></div></div>
+<div class="wrap">
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#错误处理与资源管理异常与垃圾回收"
+id="toc-错误处理与资源管理异常与垃圾回收">错误处理与资源管理:异常与垃圾回收</a>
+<ul>
+<li><a href="#异常体系" id="toc-异常体系">异常体系</a></li>
+<li><a href="#trycatchfinally-与栈展开"
+id="toc-trycatchfinally-与栈展开">try/catch/finally 与栈展开</a></li>
+<li><a href="#try-with-resourcesjava-的-raii"
+id="toc-try-with-resourcesjava-的-raii">try-with-resources:Java 的
+RAII</a></li>
+<li><a href="#多重捕获与异常链"
+id="toc-多重捕获与异常链">多重捕获与异常链</a></li>
+<li><a href="#垃圾回收gc" id="toc-垃圾回收gc">垃圾回收(GC)</a></li>
+<li><a href="#分代假设与堆布局"
+id="toc-分代假设与堆布局">分代假设与堆布局</a></li>
+<li><a href="#可达性分析与-gc-roots"
+id="toc-可达性分析与-gc-roots">可达性分析与 GC Roots</a></li>
+<li><a href="#收集器演进与-stw-权衡"
+id="toc-收集器演进与-stw-权衡">收集器演进与 STW 权衡</a></li>
+<li><a href="#finalize-弃用与-cleaner"
+id="toc-finalize-弃用与-cleaner">finalize 弃用与 Cleaner</a></li>
+<li><a href="#引用强度强软弱虚"
+id="toc-引用强度强软弱虚">引用强度:强/软/弱/虚</a></li>
+<li><a href="#java-里内存泄漏长什么样"
+id="toc-java-里内存泄漏长什么样">Java 里内存泄漏长什么样</a></li>
+<li><a href="#常见-oom-与调优参数" id="toc-常见-oom-与调优参数">常见 OOM
+与调优参数</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1
+id="错误处理与资源管理异常与垃圾回收">错误处理与资源管理:异常与垃圾回收</h1>
+<p>C++ 用异常做错误传播,用 RAII(析构函数)做资源释放,用手动
+<code>delete</code>/智能指针管内存。Java
+把这三件事拆成:异常体系、try-with-resources(近似
+RAII)、以及<strong>自动垃圾回收(GC)</strong>。本章讲清楚异常在栈上如何展开、资源如何确定性释放、以及堆对象在什么时候、被谁、以何种机制回收。</p>
+<h2 id="异常体系">异常体系</h2>
+<p>一切可抛出对象继承自 <code>Throwable</code>。它有两条主线:</p>
+<pre><code>                Throwable
+               /         \
+           Error        Exception
+        (JVM 层严重故障)   /       \
+     OutOfMemoryError  RuntimeException  其他(受检异常)
+     StackOverflowError  (非受检)          IOException
+                          NullPointerException  SQLException
+                          IllegalArgumentException ...</code></pre>
+<table>
+<colgroup>
+<col style="width: 18%" />
+<col style="width: 31%" />
+<col style="width: 18%" />
+<col style="width: 31%" />
+</colgroup>
+<thead>
+<tr>
+<th>类别</th>
+<th>是否受检</th>
+<th>语义</th>
+<th>C++ 类比</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Error</code></td>
+<td>否</td>
+<td>JVM 层面不可恢复(栈溢出、堆耗尽),<strong>不该 catch</strong></td>
+<td>近似 <code>std::bad_alloc</code> 之类系统级</td>
+</tr>
+<tr>
+<td><code>RuntimeException</code></td>
+<td>否</td>
+<td>编程错误(空指针、越界、非法参数),应靠代码避免</td>
+<td>逻辑错误,类似 <code>assert</code> 该拦住的</td>
+</tr>
+<tr>
+<td>受检 <code>Exception</code></td>
+<td>是</td>
+<td>可预期的外部失败(IO、网络),<strong>编译器强制处理</strong></td>
+<td>C++ 无对应,已废弃的 <code>throw()</code> 规格是反例</td>
+</tr>
+</tbody>
+</table>
+<p><strong>受检 vs 非受检</strong>是 Java
+独有的编译期约束:受检异常必须在方法签名 <code>throws</code> 声明,或就地
+<code>try/catch</code>,否则编译不过。C++
+早期的动态异常规格(<code>throw(...)</code>)因难用被废弃,Java
+保留了但也饱受争议。</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">io</span><span class="op">.*;</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Checked <span class="op">{</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 受检:必须声明 throws,否则编译错误</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="bu">String</span> <span class="fu">readFirst</span><span class="op">(</span><span class="bu">String</span> path<span class="op">)</span> <span class="kw">throws</span> <span class="bu">IOException</span> <span class="op">{</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">(</span><span class="bu">BufferedReader</span> r <span class="op">=</span> <span class="kw">new</span> <span class="bu">BufferedReader</span><span class="op">(</span><span class="kw">new</span> <span class="bu">FileReader</span><span class="op">(</span>path<span class="op">)))</span> <span class="op">{</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> r<span class="op">.</span><span class="fu">readLine</span><span class="op">();</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 非受检:无需声明,编译器不拦</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">int</span> <span class="fu">div</span><span class="op">(</span><span class="dt">int</span> a<span class="op">,</span> <span class="dt">int</span> b<span class="op">)</span> <span class="op">{</span> <span class="cf">return</span> a <span class="op">/</span> b<span class="op">;</span> <span class="op">}</span> <span class="co">// b=0 抛 ArithmeticException</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="trycatchfinally-与栈展开">try/catch/finally 与栈展开</h2>
+<p>抛出异常时,JVM 从当前方法开始查其 <strong>异常表(exception
+table)</strong>——<code>javac</code> 为每个 <code>try</code> 块生成一条
+[起始PC, 结束PC, 处理器PC, 捕获类型]
+记录。若当前帧无匹配处理器,该帧被弹出(栈展开,stack
+unwinding),沿调用链回溯,直到找到匹配的 <code>catch</code>
+或到达线程栈底(此时线程终止并打印栈轨迹)。</p>
+<p><code>finally</code> 无论正常还是异常都执行。字节码层面,编译器会把
+<code>finally</code>
+的代码<strong>复制</strong>到每条正常/异常出口路径上(或用异常表 +
+<code>athrow</code> 兜底),这是它”必然执行”的实现方式。</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Finally <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">int</span> <span class="fu">tricky</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">{</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="dv">1</span><span class="op">;</span>          <span class="co">// 先算出返回值 1 压栈</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="cf">finally</span> <span class="op">{</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="dv">2</span><span class="op">;</span>          <span class="co">// finally 的 return 覆盖它 -&gt; 实际返回 2(反模式!)</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="fu">tricky</span><span class="op">());</span> <span class="co">// 2</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<blockquote>
+<p>陷阱:<code>finally</code> 里 <code>return</code> 或抛异常会吞掉
+<code>try</code> 中的返回值/异常。切勿在 <code>finally</code> 里
+<code>return</code>。</p>
+</blockquote>
+<h2 id="try-with-resourcesjava-的-raii">try-with-resources:Java 的
+RAII</h2>
+<p>C++
+靠对象离开作用域时<strong>析构函数</strong>确定性释放资源(RAII)。Java
+对象的回收时机不确定(GC 说了算),所以不能靠 <code>finalize</code>
+关文件。JDK7 引入 <strong>try-with-resources</strong>:任何实现
+<code>AutoCloseable</code>(<code>close()</code>)的对象,在 try
+块结束时<strong>保证</strong>按声明的逆序调用 <code>close()</code>——这是
+Java 最接近 RAII 的确定性资源管理。</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">io</span><span class="op">.*;</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> TWR <span class="kw">implements</span> AutoCloseable <span class="op">{</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">private</span> <span class="dt">final</span> <span class="bu">String</span> name<span class="op">;</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">TWR</span><span class="op">(</span><span class="bu">String</span> name<span class="op">)</span> <span class="op">{</span> <span class="kw">this</span><span class="op">.</span><span class="fu">name</span> <span class="op">=</span> name<span class="op">;</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;open &quot;</span> <span class="op">+</span> name<span class="op">);</span> <span class="op">}</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">@Override</span> <span class="kw">public</span> <span class="dt">void</span> <span class="fu">close</span><span class="op">()</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;close &quot;</span> <span class="op">+</span> name<span class="op">);</span> <span class="op">}</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>        <span class="co">// 逆序关闭:先 close b,再 close a(类似 C++ 局部对象逆序析构)</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">(</span>TWR a <span class="op">=</span> <span class="kw">new</span> <span class="fu">TWR</span><span class="op">(</span><span class="st">&quot;A&quot;</span><span class="op">);</span> TWR b <span class="op">=</span> <span class="kw">new</span> <span class="fu">TWR</span><span class="op">(</span><span class="st">&quot;B&quot;</span><span class="op">))</span> <span class="op">{</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;body&quot;</span><span class="op">);</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>            <span class="cf">throw</span> <span class="kw">new</span> <span class="bu">RuntimeException</span><span class="op">(</span><span class="st">&quot;boom&quot;</span><span class="op">);</span></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="cf">catch</span> <span class="op">(</span><span class="bu">RuntimeException</span> e<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;caught: &quot;</span> <span class="op">+</span> e<span class="op">.</span><span class="fu">getMessage</span><span class="op">());</span></span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>            <span class="co">// close 抛出的异常会作为“被抑制异常”挂在主异常上:</span></span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> <span class="op">(</span><span class="bu">Throwable</span> s <span class="op">:</span> e<span class="op">.</span><span class="fu">getSuppressed</span><span class="op">())</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;suppressed: &quot;</span> <span class="op">+</span> s<span class="op">);</span></span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 输出:open A / open B / body / close B / close A / caught: boom</span></span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>区别于 C++:<code>close()</code> 的调用点由编译器插桩在 try
+出口,而<strong>对象内存本身</strong>仍由 GC
+稍后回收。即”资源(fd/句柄)确定性释放”与”内存非确定性回收”是分离的两件事。</p>
+<h2 id="多重捕获与异常链">多重捕获与异常链</h2>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> MultiCatch <span class="op">{</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">handle</span><span class="op">(</span><span class="bu">String</span> s<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">{</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>            <span class="bu">Integer</span><span class="op">.</span><span class="fu">parseInt</span><span class="op">(</span>s<span class="op">);</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="cf">catch</span> <span class="op">(</span><span class="bu">NumberFormatException</span> <span class="op">|</span> <span class="bu">NullPointerException</span> e<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>            <span class="co">// 多重捕获:一个 catch 处理多种类型,e 是隐式 final,类型为共同父类</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>            <span class="co">// 异常链:保留“根因(cause)”,便于定位原始故障</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>            <span class="cf">throw</span> <span class="kw">new</span> <span class="bu">IllegalStateException</span><span class="op">(</span><span class="st">&quot;处理失败: &quot;</span> <span class="op">+</span> s<span class="op">,</span> e<span class="op">);</span></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">{</span> <span class="fu">handle</span><span class="op">(</span><span class="kw">null</span><span class="op">);</span> <span class="op">}</span></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>        <span class="cf">catch</span> <span class="op">(</span><span class="bu">IllegalStateException</span> e<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>e<span class="op">.</span><span class="fu">getMessage</span><span class="op">());</span></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;根因: &quot;</span> <span class="op">+</span> e<span class="op">.</span><span class="fu">getCause</span><span class="op">());</span> <span class="co">// NullPointerException</span></span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>异常链(<code>initCause</code> / 带 cause
+的构造器)让你在转译异常时不丢原始堆栈,打印时会出现
+<code>Caused by:</code> 段落。</p>
+<hr />
+<h2 id="垃圾回收gc">垃圾回收(GC)</h2>
+<p>C++ 你自己
+<code>new</code>/<code>delete</code>,生命周期尽在掌握。Java 的堆对象由
+GC
+自动回收,你付出的代价是<strong>回收时机不可控</strong>和<strong>偶发停顿(STW)</strong>。理解
+GC 才能诊断内存问题、调优延迟。</p>
+<h2 id="分代假设与堆布局">分代假设与堆布局</h2>
+<p>GC 建立在<strong>弱分代假设(weak generational
+hypothesis)</strong>上:绝大多数对象朝生夕死;活得久的对象很少指向年轻对象。于是把堆分代管理:</p>
+<pre><code>                Java 堆
+ +---------------------------------------------------+
+ | 新生代 Young Gen                                  |
+ |  +----------+  +----------+  +----------+         |
+ |  |  Eden    |  | Survivor |  | Survivor |         |
+ |  | (新对象) |  |   S0     |  |   S1     |         |
+ |  +----------+  +----------+  +----------+         |
+ +---------------------------------------------------+
+ | 老年代 Old Gen (Tenured)  长寿对象               |
+ +---------------------------------------------------+
+   (元空间 Metaspace 在本地内存,存类元数据,不在堆内)</code></pre>
+<ul>
+<li>新对象在 <strong>Eden</strong>
+分配(指针碰撞,极快,类似栈顶推进)。</li>
+<li>Eden 满触发 <strong>Minor GC</strong>:存活对象复制到某个
+Survivor,年龄 +1;每熬过一次 Minor GC 年龄增长,超过阈值(默认
+15,<code>-XX:MaxTenuringThreshold</code>)晋升到老年代。两个 Survivor
+轮流做”复制目标”,始终有一个为空(复制算法,避免碎片)。</li>
+<li>老年代满触发 <strong>Major GC</strong>(老年代回收);<strong>Full
+GC</strong> 通常指整堆 + 元空间回收,最慢,应尽量避免。(注:“Major
+GC”是<strong>分代式收集器的经典术语</strong>;G1/ZGC
+等现代收集器说法不同——G1 分 young / mixed / full,其中
+<code>Full GC</code> 是它退化时的兜底全堆回收。)</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>GC 类型</th>
+<th>回收范围</th>
+<th>触发</th>
+<th>停顿</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Minor GC</td>
+<td>新生代</td>
+<td>Eden 满</td>
+<td>短</td>
+</tr>
+<tr>
+<td>Major GC</td>
+<td>老年代</td>
+<td>老年代满</td>
+<td>长</td>
+</tr>
+<tr>
+<td>Full GC</td>
+<td>整堆 + 元空间</td>
+<td>老年代/元空间不足、<code>System.gc()</code></td>
+<td>最长</td>
+</tr>
+</tbody>
+</table>
+<h2 id="可达性分析与-gc-roots">可达性分析与 GC Roots</h2>
+<p>Java
+<strong>不用引用计数</strong>(无法处理循环引用),而用<strong>可达性分析(reachability
+analysis)</strong>:从一组 <strong>GC Roots</strong>
+出发遍历引用图,凡不可达的对象即可回收。</p>
+<p>GC Roots 包括:</p>
+<ul>
+<li>各线程<strong>栈帧局部变量表</strong>中的引用(正在执行的方法引用的对象);</li>
+<li><strong>静态字段</strong>引用的对象;</li>
+<li>常量池引用、JNI 全局引用;</li>
+<li>同步锁持有的对象等。</li>
+</ul>
+<pre><code>GC Roots
+  | 线程栈局部变量  ---&gt; A ---&gt; B      (A、B 可达,存活)
+  | 静态字段        ---&gt; C
+                          C &lt;---&gt; D    (C、D 互相引用)
+                                E ---&gt; F  (E、F 互相引用但无 Root 可达 =&gt; 都回收)</code></pre>
+<p>注意最后一组:<code>E</code>、<code>F</code>
+循环引用,引用计数法会误判为存活,而可达性分析正确判定它们为垃圾。这正是
+Java 不用引用计数的原因。</p>
+<h2 id="收集器演进与-stw-权衡">收集器演进与 STW 权衡</h2>
+<p><strong>STW(Stop-The-World)</strong>:GC
+的某些阶段必须暂停所有应用线程(到达”安全点
+safepoint”),以获得一致的堆快照。收集器的进化史,本质是<strong>不断缩短
+STW</strong>的历史。</p>
+<table>
+<colgroup>
+<col style="width: 32%" />
+<col style="width: 24%" />
+<col style="width: 20%" />
+<col style="width: 24%" />
+</colgroup>
+<thead>
+<tr>
+<th>收集器</th>
+<th>特点</th>
+<th>STW</th>
+<th>适用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Serial</td>
+<td>单线程,简单</td>
+<td>全程 STW,较长</td>
+<td>小堆、客户端</td>
+</tr>
+<tr>
+<td>Parallel(吞吐优先)</td>
+<td>多线程并行回收</td>
+<td>STW 但并行</td>
+<td>批处理,重吞吐</td>
+</tr>
+<tr>
+<td>CMS(JDK9 弃用、<strong>JDK14 已移除</strong>)</td>
+<td>并发标记清除,低停顿先驱</td>
+<td>部分并发</td>
+<td>老年代低延迟(有碎片问题)</td>
+</tr>
+<tr>
+<td><strong>G1</strong>(JDK9+ 默认)</td>
+<td>Region 分区、可预测停顿目标</td>
+<td>短 STW,大部分并发</td>
+<td>大堆通用</td>
+</tr>
+<tr>
+<td>ZGC</td>
+<td>染色指针 + 读屏障</td>
+<td>停顿 &lt;1ms,与堆大小无关</td>
+<td>超大堆、低延迟</td>
+</tr>
+<tr>
+<td>Shenandoah</td>
+<td>并发压缩</td>
+<td>停顿极短</td>
+<td>低延迟</td>
+</tr>
+</tbody>
+</table>
+<p>权衡的核心是<strong>吞吐量 vs 延迟</strong>:Parallel
+追求单位时间处理最多工作(适合后台批处理);ZGC/Shenandoah
+牺牲一点吞吐换取几乎无感的停顿(适合交互/在线服务)。没有”最好”,只有”最匹配场景”。</p>
+<p>选择:<code>-XX:+UseG1GC</code>、<code>-XX:+UseZGC</code>、<code>-XX:+UseParallelGC</code>。</p>
+<h2 id="finalize-弃用与-cleaner">finalize 弃用与 Cleaner</h2>
+<p>C++ 的析构函数确定性执行。Java 的 <code>Object.finalize()</code>
+曾想扮演这个角色,但它<strong>执行时机不确定、可能永不执行、拖慢
+GC、还能复活对象</strong>,已在 JDK9 标记 <code>@Deprecated</code>,JDK18
+起进一步废弃。</p>
+<p>替代方案:<strong><code>java.lang.ref.Cleaner</code></strong>,注册一个清理动作,当对象变得幻象可达时由后台线程执行。但它仍非确定性——<strong>关键资源永远用
+try-with-resources 显式释放</strong>,Cleaner 只作最后兜底。</p>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">lang</span><span class="op">.</span><span class="im">ref</span><span class="op">.</span><span class="im">Cleaner</span><span class="op">;</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> CleanerDemo <span class="kw">implements</span> AutoCloseable <span class="op">{</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">private</span> <span class="dt">static</span> <span class="dt">final</span> Cleaner CLEANER <span class="op">=</span> Cleaner<span class="op">.</span><span class="fu">create</span><span class="op">();</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 清理动作必须是静态/独立类,绝不能持有外层对象引用,否则对象永不可回收</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">class</span> <span class="bu">State</span> <span class="kw">implements</span> <span class="bu">Runnable</span> <span class="op">{</span></span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>        <span class="kw">public</span> <span class="dt">void</span> <span class="fu">run</span><span class="op">()</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;释放本地资源(兜底)&quot;</span><span class="op">);</span> <span class="op">}</span></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>    <span class="kw">private</span> <span class="dt">final</span> Cleaner<span class="op">.</span><span class="fu">Cleanable</span> cleanable<span class="op">;</span></span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a>    <span class="fu">CleanerDemo</span><span class="op">()</span> <span class="op">{</span> cleanable <span class="op">=</span> CLEANER<span class="op">.</span><span class="fu">register</span><span class="op">(</span><span class="kw">this</span><span class="op">,</span> <span class="kw">new</span> <span class="bu">State</span><span class="op">());</span> <span class="op">}</span></span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>    <span class="at">@Override</span> <span class="kw">public</span> <span class="dt">void</span> <span class="fu">close</span><span class="op">()</span> <span class="op">{</span> cleanable<span class="op">.</span><span class="fu">clean</span><span class="op">();</span> <span class="op">}</span> <span class="co">// 显式路径:确定性释放</span></span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="引用强度强软弱虚">引用强度:强/软/弱/虚</h2>
+<p><code>java.lang.ref</code> 提供四种引用强度,决定对象在 GC
+眼中的”生存权”:</p>
+<table>
+<colgroup>
+<col style="width: 20%" />
+<col style="width: 16%" />
+<col style="width: 30%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>强度</th>
+<th>类</th>
+<th>GC 行为</th>
+<th>典型用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>强引用</td>
+<td>普通 <code>Object o = ...</code></td>
+<td>可达就绝不回收</td>
+<td>默认</td>
+</tr>
+<tr>
+<td>软引用</td>
+<td><code>SoftReference</code></td>
+<td><strong>内存不足时</strong>才回收</td>
+<td>内存敏感缓存</td>
+</tr>
+<tr>
+<td>弱引用</td>
+<td><code>WeakReference</code></td>
+<td>下次 GC 即回收</td>
+<td><code>WeakHashMap</code>、规范化映射</td>
+</tr>
+<tr>
+<td>虚引用</td>
+<td><code>PhantomReference</code></td>
+<td>永远取不到对象,仅作回收通知</td>
+<td>替代 finalize 做清理</td>
+</tr>
+</tbody>
+</table>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">lang</span><span class="op">.</span><span class="im">ref</span><span class="op">.*;</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Refs <span class="op">{</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>        <span class="bu">ReferenceQueue</span><span class="op">&lt;</span><span class="dt">byte</span><span class="op">[]&gt;</span> queue <span class="op">=</span> <span class="kw">new</span> <span class="bu">ReferenceQueue</span><span class="op">&lt;&gt;();</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>        <span class="dt">byte</span><span class="op">[]</span> data <span class="op">=</span> <span class="kw">new</span> <span class="dt">byte</span><span class="op">[</span><span class="dv">1024</span><span class="op">];</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>        <span class="co">// 弱引用 + 引用队列:对象被回收后,ref 会被入队,可据此感知回收</span></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>        <span class="bu">WeakReference</span><span class="op">&lt;</span><span class="dt">byte</span><span class="op">[]&gt;</span> weak <span class="op">=</span> <span class="kw">new</span> <span class="bu">WeakReference</span><span class="op">&lt;&gt;(</span>data<span class="op">,</span> queue<span class="op">);</span></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>        data <span class="op">=</span> <span class="kw">null</span><span class="op">;</span>          <span class="co">// 去掉唯一强引用</span></span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">gc</span><span class="op">();</span>          <span class="co">// 建议 GC(不保证立即执行)</span></span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;回收后 get(): &quot;</span> <span class="op">+</span> weak<span class="op">.</span><span class="fu">get</span><span class="op">());</span> <span class="co">// 很可能是 null</span></span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Reference</span><span class="op">&lt;?&gt;</span> polled <span class="op">=</span> queue<span class="op">.</span><span class="fu">poll</span><span class="op">();</span>                 <span class="co">// 已回收的引用被入队</span></span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;入队: &quot;</span> <span class="op">+</span> <span class="op">(</span>polled <span class="op">==</span> weak<span class="op">));</span></span>
+<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb9-14"><a href="#cb9-14" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p><strong>ReferenceQueue</strong> 是配套机制:当被引用对象被回收,对应的
+<code>Reference</code> 对象被 JVM 放入队列,你的清理线程
+<code>poll</code> 到后执行善后(Cleaner 内部正是这么实现的)。</p>
+<h2 id="java-里内存泄漏长什么样">Java 里内存泄漏长什么样</h2>
+<p>有 GC 不代表没内存泄漏。泄漏 = <strong>对象逻辑上没用了,但仍从 GC
+Roots 可达</strong>,GC 因而不回收。常见形态:</p>
+<ul>
+<li><strong>长生命周期集合只加不删</strong>:<code>static Map</code>/缓存不断
+<code>put</code>,键值永远可达。用 <code>WeakHashMap</code>
+或设容量上限(如 Guava/Caffeine 缓存)。</li>
+<li><strong>监听器/回调未注销</strong>:观察者注册后忘记
+<code>removeListener</code>,被主题对象一直引用。</li>
+<li><strong><code>ThreadLocal</code> 未
+<code>remove</code></strong>:线程池线程长期存活,<code>ThreadLocal</code>
+的 value 随线程一直可达。用完必须 <code>remove()</code>。</li>
+<li><strong>内部类隐式持有外部实例</strong>:非静态内部类/匿名类持有
+<code>Outer.this</code>,若其生命周期比外部对象长,外部对象无法回收(Cleaner
+那节的告诫同源)。</li>
+</ul>
+<h2 id="常见-oom-与调优参数">常见 OOM 与调优参数</h2>
+<p><code>OutOfMemoryError</code> 是
+<code>Error</code>,细分为不同信息:</p>
+<table>
+<colgroup>
+<col style="width: 45%" />
+<col style="width: 27%" />
+<col style="width: 27%" />
+</colgroup>
+<thead>
+<tr>
+<th>错误信息</th>
+<th>含义</th>
+<th>方向</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Java heap space</code></td>
+<td>堆放不下</td>
+<td>增大 <code>-Xmx</code> 或查泄漏(堆转储分析)</td>
+</tr>
+<tr>
+<td><code>GC overhead limit exceeded</code></td>
+<td>花 98%+ 时间 GC 却回收很少</td>
+<td>通常是泄漏或堆太小</td>
+</tr>
+<tr>
+<td><code>Metaspace</code></td>
+<td>类元数据超限(动态生成大量类)</td>
+<td><code>-XX:MaxMetaspaceSize</code>,查类加载器泄漏</td>
+</tr>
+<tr>
+<td><code>unable to create new native thread</code></td>
+<td>线程数超系统/内存限制</td>
+<td>减少线程、调 <code>-Xss</code></td>
+</tr>
+<tr>
+<td><code>Direct buffer memory</code></td>
+<td>堆外直接内存耗尽</td>
+<td><code>-XX:MaxDirectMemorySize</code></td>
+</tr>
+</tbody>
+</table>
+<p>常用参数:</p>
+<pre><code>-Xms512m -Xmx4g                  # 初始/最大堆(生产建议两者相等,避免动态扩容抖动)
+-Xss1m                           # 每线程栈大小
+-XX:MaxMetaspaceSize=256m        # 元空间上限
+-XX:+UseG1GC -XX:MaxGCPauseMillis=200  # 用 G1 并设停顿目标
+-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/tmp/dump.hprof  # OOM 时导出堆快照
+-Xlog:gc*                        # 打印 GC 日志(JDK9+ 统一日志),用于分析</code></pre>
+<p>诊断流程:<code>-Xlog:gc*</code> 看 GC 频率与停顿 → OOM 时拿
+<code>.hprof</code> → 用 MAT/VisualVM 分析支配树(dominator
+tree)找出谁在撑着大对象不放。</p>
+<hr />
+<p>小结:异常沿调用栈展开,受检异常是编译期契约;try-with-resources
+提供接近 RAII 的确定性资源释放,而内存回收交给 GC;GC
+靠可达性分析(而非引用计数)从 GC Roots
+出发判活,分代管理配合复制/标记算法;收集器进化史就是压缩 STW
+的历史;<code>finalize</code> 已弃、改用 Cleaner + 引用队列;内存泄漏在
+Java 里表现为”可达但无用”。掌握这些,你就能像管理 C++ 内存那样,自信地驾驭
+JVM 的堆。</p>
+<p><a href="08-面向对象与类型系统.html">← 上一章:面向对象与类型系统</a>
+· <a href="index.html">返回目录</a> · <a
+href="10-并发模型.html">下一章:并发模型</a> →</p>
+</div>
+</body>
+</html>

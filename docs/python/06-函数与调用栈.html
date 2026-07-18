@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="zh-CN" xml:lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.10" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>函数与调用栈</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../assets/style.css" />
+</head>
+<body>
+<div class="topbar"><div class="wrap"><a class="home" href="../index.html">📚 面向 C/C++ 程序员的语言内幕教程</a>
+<a href="../python/index.html" style="color:var(--accent-dark);font-weight:700">Python</a>
+<a href="../java/index.html">Java</a>
+<a href="../go/index.html">Go</a></div></div>
+<div class="wrap">
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#函数与调用栈" id="toc-函数与调用栈">函数与调用栈</a>
+<ul>
+<li><a href="#def-创建的是一个对象" id="toc-def-创建的是一个对象">def
+创建的是一个对象</a></li>
+<li><a href="#参数传递的真相按对象引用按共享传递"
+id="toc-参数传递的真相按对象引用按共享传递">参数传递的真相:按对象引用(按共享传递)</a></li>
+<li><a href="#参数种类位置关键字默认argskwargs"
+id="toc-参数种类位置关键字默认argskwargs">参数种类:位置、关键字、默认、*args、**kwargs</a></li>
+<li><a href="#默认参数在-def-执行时求值一次经典陷阱"
+id="toc-默认参数在-def-执行时求值一次经典陷阱">默认参数:在 def
+执行时求值一次(经典陷阱)</a></li>
+<li><a href="#返回多值其实是一个元组"
+id="toc-返回多值其实是一个元组">返回多值:其实是一个元组</a></li>
+<li><a href="#闭包与-cell-变量" id="toc-闭包与-cell-变量">闭包与 cell
+变量</a></li>
+<li><a href="#调用栈frame-对象" id="toc-调用栈frame-对象">调用栈:frame
+对象</a></li>
+<li><a href="#一等函数与装饰器原理"
+id="toc-一等函数与装饰器原理">一等函数与装饰器原理</a></li>
+<li><a href="#小结" id="toc-小结">小结</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1 id="函数与调用栈">函数与调用栈</h1>
+<p>这是全教程最需要”换脑子”的一章。C/C++
+里参数传递只有两种物理机制:按值(拷贝一份到被调栈帧)和按指针(拷贝一个地址)。C++
+又加了引用(<code>&amp;</code>,给同一块内存起别名)。你脑子里那套”值 vs
+指针 vs 引用”的模型非常清晰——但它<strong>不能直接套到
+Python</strong>。Python
+只有一种传参方式,我们必须精确地说清它是什么。</p>
+<h2 id="def-创建的是一个对象">def 创建的是一个对象</h2>
+<p>先纠正一个直觉:C 里函数是一段代码的地址(函数指针指向 text
+段),编译期就定死。Python 里 <code>def</code>
+是一条<strong>运行时执行的语句</strong>,它在执行时创建一个
+<code>function</code> 对象放到堆上,再把这个对象绑定到名字:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> add(a, b):</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> a <span class="op">+</span> b</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">type</span>(add))          <span class="co"># &lt;class &#39;function&#39;&gt;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(add.__code__)       <span class="co"># 编译好的 code 对象(字节码在这)</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(add.<span class="va">__name__</span>)       <span class="co"># &#39;add&#39;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>add_alias <span class="op">=</span> add           <span class="co"># 只是多一个名字指向同一个函数对象</span></span></code></pre></div>
+<p>一个 <code>function</code>
+对象里装着:<code>__code__</code>(不可变的字节码及元数据)、<code>__defaults__</code>(默认参数值)、<code>__globals__</code>(它能看到的全局命名空间)、<code>__closure__</code>(闭包捕获的变量)。函数是”一等公民”——能赋值、能当参数传、能当返回值、能塞进容器,因为它就是个普通对象。</p>
+<h2
+id="参数传递的真相按对象引用按共享传递">参数传递的真相:按对象引用(按共享传递)</h2>
+<p>Python 的传参机制叫 <strong>call by object reference</strong>,也叫
+<strong>call by
+sharing</strong>(按共享传递)。一句话:<strong>实参和形参指向堆上的同一个对象;传递过程拷贝的是引用(指针),不是对象本身。</strong></p>
+<p>这听起来像 C 的”传指针”,但有个关键差异:在 C 里传指针,你在函数内对形参
+<code>p = ...</code> 重新赋值不影响调用方,但你能 <code>*p = ...</code>
+改内容;而 Python
+里你手上根本没有”指针的指针”,你无法让调用方的名字改指向别处。用两个维度看最清楚:</p>
+<table>
+<colgroup>
+<col style="width: 30%" />
+<col style="width: 70%" />
+</colgroup>
+<thead>
+<tr>
+<th>维度</th>
+<th>Python 的行为</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>能否改变调用方变量的指向?</strong></td>
+<td>不能。形参重新赋值只改本地名字绑定</td>
+</tr>
+<tr>
+<td><strong>能否改变对象的内容?</strong></td>
+<td>能,但前提是对象<strong>可变</strong>(list/dict/set/自定义对象)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="维度一重新赋值形参-永远不影响调用方">维度一:重新赋值形参 ——
+永远不影响调用方</h3>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> rebind(x):</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="co"># x 原本和调用方的实参指向同一对象;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="co"># 下面这行让本地名字 x 改指向一个新对象,调用方毫不知情</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    x <span class="op">=</span> <span class="dv">999</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">&quot;函数内:&quot;</span>, x)</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>n <span class="op">=</span> <span class="dv">1</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>rebind(n)</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">&quot;函数外:&quot;</span>, n)     <span class="co"># 1 —— 没变</span></span></code></pre></div>
+<p>内存图(调用瞬间,<code>n</code> 和 <code>x</code> 指向同一个 int
+对象;赋值后 <code>x</code> 改指向新对象):</p>
+<pre><code>调用时:                        x = 999 之后:
+  n ---&gt; [int 1]                 n ---&gt; [int 1]
+  x ---&gt; [int 1]                 x ---&gt; [int 999]  (新对象)</code></pre>
+<p>这正是为什么 Python <strong>无法</strong>写出 C 的
+<code>void swap(int *a, int *b)</code>
+那种”通过参数改调用方变量”的函数。想交换,只能返回新值:<code>a, b = b, a</code>
+再由调用方接收。</p>
+<h3 id="维度二原地修改可变对象-调用方看得见">维度二:原地修改可变对象 ——
+调用方看得见</h3>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> mutate(lst):</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    <span class="co"># 没有重新绑定 lst,而是调用它的方法修改它指向的那个对象</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    lst.append(<span class="dv">4</span>)      <span class="co"># 原地修改,不产生新 list</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">&quot;函数内:&quot;</span>, lst)</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>data <span class="op">=</span> [<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>]</span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>mutate(data)</span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">&quot;函数外:&quot;</span>, data)   <span class="co"># [1, 2, 3, 4] —— 变了!</span></span></code></pre></div>
+<p>内存图(只有一个 list 对象,两个名字都指向它):</p>
+<pre><code>  data --\
+          &gt;---&gt; [list: 1,2,3] --append--&gt; [list: 1,2,3,4]
+  lst  --/</code></pre>
+<p>这和 C 传指针后 <code>*p</code> 改内容效果一致。区别只在于:Python
+里”能不能改”取决于<strong>对象本身可不可变</strong>,而不是取决于你怎么声明参数。</p>
+<h3 id="可变-vs-不可变实参对照">可变 vs 不可变实参对照</h3>
+<p>同一段”改一下参数”的代码,对可变和不可变实参表现相反:</p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> try_change(obj):</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="bu">isinstance</span>(obj, <span class="bu">list</span>):</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>        obj <span class="op">+=</span> [<span class="dv">99</span>]        <span class="co"># list 的 += 是原地 extend(改内容)</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">else</span>:</span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>        obj <span class="op">+=</span> <span class="dv">99</span>          <span class="co"># int 的 += 生成新对象再绑定给本地 obj</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> [<span class="dv">1</span>, <span class="dv">2</span>]</span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>try_change(a)</span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a)          <span class="co"># [1, 2, 99] —— 可变对象被改了</span></span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> <span class="dv">10</span></span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>try_change(b)</span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(b)          <span class="co"># 10 —— 不可变对象,调用方不受影响</span></span></code></pre></div>
+<p>陷阱就在这里:<code>obj += [99]</code> 和 <code>obj += 99</code>
+看着都是 <code>+=</code>,但对 list 是原地修改(等价
+<code>obj.extend</code>,<code>__iadd__</code> 返回自身),对 int 是”新建 +
+重绑定”(int 没有原地加法,<code>__iadd__</code> 缺失时退化为
+<code>obj = obj + 99</code>)。可变性决定一切。</p>
+<blockquote>
+<p>记忆口诀:<strong>传的永远是引用,拷贝的永远是引用本身(一个指针),从不拷贝对象。改指向不外传,改内容看可变。</strong></p>
+</blockquote>
+<h2
+id="参数种类位置关键字默认argskwargs">参数种类:位置、关键字、默认、*args、**kwargs</h2>
+<p>Python 的参数系统比 C 灵活得多。函数签名里各种符号的完整形态:</p>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> f(pos1, pos2, <span class="op">/</span>, both, <span class="op">*</span>args, kw_only, <span class="op">**</span>kwargs):</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">#   ^^^^^^^^^^   /   ^^^^  ^^^^^  ^^^^^^^   ^^^^^^^^</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    ...</span></code></pre></div>
+<ul>
+<li><code>/</code> 之前:<strong>仅限位置</strong>参数(caller 不能用
+<code>pos1=...</code> 传),3.8+;</li>
+<li><code>/</code> 与 <code>*</code> 之间:位置或关键字都行(最常见);</li>
+<li><code>*args</code>:把多余的位置实参收集成一个<strong>元组</strong>;</li>
+<li><code>*</code> 之后(或 <code>*args</code>
+之后):<strong>仅限关键字</strong>参数,必须写
+<code>kw_only=...</code>;</li>
+<li><code>**kwargs</code>:把多余的关键字实参收集成一个<strong>字典</strong>。</li>
+</ul>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> demo(a, b, <span class="op">*</span>args, sep<span class="op">=</span><span class="st">&quot;-&quot;</span>, <span class="op">**</span>kwargs):</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f&quot;a=</span><span class="sc">{</span>a<span class="sc">}</span><span class="ss"> b=</span><span class="sc">{</span>b<span class="sc">}</span><span class="ss">&quot;</span>)</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">&quot;args =&quot;</span>, args)        <span class="co"># 元组</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">&quot;kwargs =&quot;</span>, kwargs)    <span class="co"># 字典</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">&quot;sep =&quot;</span>, sep)</span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>demo(<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>, <span class="dv">4</span>, sep<span class="op">=</span><span class="st">&quot;|&quot;</span>, x<span class="op">=</span><span class="dv">10</span>, y<span class="op">=</span><span class="dv">20</span>)</span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a><span class="co"># a=1 b=2</span></span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a><span class="co"># args = (3, 4)</span></span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a><span class="co"># kwargs = {&#39;x&#39;: 10, &#39;y&#39;: 20}</span></span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a><span class="co"># sep = |</span></span></code></pre></div>
+<p>底层上,<code>*args</code>
+会<strong>分配一个新元组</strong>装那些额外实参,<code>**kwargs</code>
+会<strong>分配一个新字典</strong>。调用点的 <code>*</code> /
+<code>**</code> 是反向操作(解包):</p>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>nums <span class="op">=</span> [<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>]</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="op">*</span>nums)             <span class="co"># 等价 print(1, 2, 3),把列表解包成位置实参</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>opts <span class="op">=</span> {<span class="st">&quot;sep&quot;</span>: <span class="st">&quot;/&quot;</span>}</span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">&quot;a&quot;</span>, <span class="st">&quot;b&quot;</span>, <span class="op">**</span>opts)  <span class="co"># 把字典解包成关键字实参 -&gt; sep=&quot;/&quot;</span></span></code></pre></div>
+<h2 id="默认参数在-def-执行时求值一次经典陷阱">默认参数:在 def
+执行时求值一次(经典陷阱)</h2>
+<p>C++ 的默认实参在<strong>每次调用</strong>时求值。Python 相反:默认值在
+<strong><code>def</code> 语句执行时求值一次</strong>,结果存进函数对象的
+<code>__defaults__</code>,以后每次调用共享这同一个对象。对不可变默认值没问题,对可变默认值就是著名的坑:</p>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> bad(item, bucket<span class="op">=</span>[]):     <span class="co"># 这个 [] 只在定义时创建一次!</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>    bucket.append(item)</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> bucket</span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(bad(<span class="dv">1</span>))    <span class="co"># [1]</span></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(bad(<span class="dv">2</span>))    <span class="co"># [1, 2] —— 惊了!同一个 list 被反复复用</span></span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(bad(<span class="dv">3</span>))    <span class="co"># [1, 2, 3]</span></span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(bad.__defaults__)   <span class="co"># ([1, 2, 3],) —— 默认值就存在这里,被改花了</span></span></code></pre></div>
+<p>原因:<code>bucket</code>
+的默认值是定义时创建的<strong>那一个</strong> list 对象,存在
+<code>__defaults__</code> 里。每次不传
+<code>bucket</code>,形参就绑定到这同一个对象,<code>append</code>
+一直往它身上加。</p>
+<p>正确写法是用 <code>None</code> 哨兵,在函数体内新建:</p>
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> good(item, bucket<span class="op">=</span><span class="va">None</span>):</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> bucket <span class="kw">is</span> <span class="va">None</span>:</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>        bucket <span class="op">=</span> []           <span class="co"># 每次调用都新建,互不干扰</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>    bucket.append(item)</span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> bucket</span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(good(<span class="dv">1</span>))   <span class="co"># [1]</span></span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(good(<span class="dv">2</span>))   <span class="co"># [2]</span></span></code></pre></div>
+<p>同理,别把 <code>time.time()</code>、<code>{}</code>、<code>[]</code>
+之类当默认值期望”每次调用重新算”——它只算一次。</p>
+<h2 id="返回多值其实是一个元组">返回多值:其实是一个元组</h2>
+<p>C 要返回多个值得靠输出参数(指针)或包一个 struct。Python
+看着能”返回多个值”,底层其实是<strong>打包成一个元组再解包</strong>:</p>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> divmod2(a, b):</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> a <span class="op">//</span> b, a <span class="op">%</span> b      <span class="co"># 逗号建元组,等价 return (a//b, a%b)</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>q, r <span class="op">=</span> divmod2(<span class="dv">17</span>, <span class="dv">5</span>)         <span class="co"># 右边是元组,左边序列解包</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(q, r)                   <span class="co"># 3 2</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>t <span class="op">=</span> divmod2(<span class="dv">17</span>, <span class="dv">5</span>)</span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">type</span>(t), t)             <span class="co"># &lt;class &#39;tuple&#39;&gt; (3, 2)</span></span></code></pre></div>
+<p>没有真正的”多返回值”,只有”返回一个元组 +
+解包赋值”。所以它的成本是分配一个小元组(CPython
+对小元组有缓存优化)。</p>
+<h2 id="闭包与-cell-变量">闭包与 cell 变量</h2>
+<p>当内层函数引用了外层函数的局部变量,就形成<strong>闭包</strong>。这里
+Python 又和 C 分道扬镳:C
+的局部变量在栈帧上,函数返回即失效,你没法安全返回指向它的指针。Python
+里被闭包捕获的变量会被放进堆上的 <strong>cell
+对象</strong>,即使外层函数已返回,变量依然存活:</p>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> make_counter():</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>    count <span class="op">=</span> <span class="dv">0</span>                 <span class="co"># 被内层引用,提升为 cell 变量</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> inc():</span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>        <span class="kw">nonlocal</span> count        <span class="co"># 声明:要修改的是外层的 count,不是新建本地</span></span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>        count <span class="op">+=</span> <span class="dv">1</span></span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> count</span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> inc                <span class="co"># 外层返回后,count 依然活着</span></span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>c <span class="op">=</span> make_counter()</span>
+<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(c(), c(), c())          <span class="co"># 1 2 3</span></span>
+<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(c.__closure__)          <span class="co"># (&lt;cell at ...: int object at ...&gt;,)</span></span>
+<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(c.__closure__[<span class="dv">0</span>].cell_contents)   <span class="co"># 3 —— cell 里存着当前值</span></span></code></pre></div>
+<p>内存图:<code>count</code> 不在栈上,而在一个 cell 里,闭包
+<code>inc</code> 通过 <code>__closure__</code> 持有对该 cell 的引用:</p>
+<pre><code>   make_counter 返回后,栈帧销毁,但:
+
+   c (function inc) --__closure__--&gt; ( cell )
+                                       |
+                                       v
+                                    [int 3]   &lt;- 在堆上,存活</code></pre>
+<p><code>nonlocal</code>
+声明”我要写外层作用域的变量”;<code>global</code>
+声明”我要写模块级全局变量”。不写这两个而直接赋值,Python
+会把它当成<strong>新建本地变量</strong>(因为赋值默认创建本地绑定),从而报
+<code>UnboundLocalError</code>——这是新手常见错误:</p>
+<div class="sourceCode" id="cb15"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>x <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> wrong():</span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>    x <span class="op">+=</span> <span class="dv">1</span>          <span class="co"># UnboundLocalError:x 被当成本地变量,但读时还没绑定</span></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> right():</span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">global</span> x</span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>    x <span class="op">+=</span> <span class="dv">1</span>          <span class="co"># OK</span></span></code></pre></div>
+<h2 id="调用栈frame-对象">调用栈:frame 对象</h2>
+<p>C 的栈帧是编译期固定布局的一块连续内存,函数返回即弹出。CPython
+的调用栈由 <strong>frame 对象</strong>组成,每次调用创建一个
+frame,里面有局部变量表、指向上一帧的链接等——它是<strong>堆上的对象</strong>(CPython
+3.11 起对帧做了内联优化,但语义上仍可当对象访问),甚至能在运行时反射:</p>
+<div class="sourceCode" id="cb16"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sys</span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> inner():</span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>    frame <span class="op">=</span> sys._getframe()           <span class="co"># 当前帧</span></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">&quot;当前函数:&quot;</span>, frame.f_code.co_name)      <span class="co"># &#39;inner&#39;</span></span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">&quot;本地变量:&quot;</span>, frame.f_locals)             <span class="co"># {&#39;frame&#39;: ...}</span></span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">&quot;调用者:&quot;</span>, frame.f_back.f_code.co_name)  <span class="co"># &#39;outer&#39; —— 上一帧</span></span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> outer():</span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a>    inner()</span>
+<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a>outer()</span></code></pre></div>
+<table>
+<thead>
+<tr>
+<th>frame 属性</th>
+<th>含义(对照 C)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>f_locals</code></td>
+<td>本地变量字典(C 里是栈上一块无名内存)</td>
+</tr>
+<tr>
+<td><code>f_globals</code></td>
+<td>所在模块的全局命名空间</td>
+</tr>
+<tr>
+<td><code>f_back</code></td>
+<td>指向调用者的帧(即调用栈的上一层)</td>
+</tr>
+<tr>
+<td><code>f_code</code></td>
+<td>正在执行的 code 对象</td>
+</tr>
+<tr>
+<td><code>f_lineno</code></td>
+<td>当前行号</td>
+</tr>
+</tbody>
+</table>
+<p>这套可反射的帧结构正是 traceback、调试器、<code>logging</code>
+能打印出完整调用链的基础。代价是比 C 栈帧重。</p>
+<h3 id="递归深度限制">递归深度限制</h3>
+<p>C 递归深到爆是栈溢出(段错误)。CPython 为防止 C
+层栈真的溢出,设了一个<strong>软限制</strong>,超过就抛
+<code>RecursionError</code> 而不是崩溃:</p>
+<div class="sourceCode" id="cb17"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sys</span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.getrecursionlimit())    <span class="co"># 通常 1000</span></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> rec(n):</span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="dv">1</span> <span class="cf">if</span> n <span class="op">==</span> <span class="dv">0</span> <span class="cf">else</span> rec(n <span class="op">-</span> <span class="dv">1</span>) <span class="op">+</span> <span class="dv">1</span></span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a><span class="co"># rec(100000) 会抛 RecursionError,而不是让进程段错误</span></span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a>sys.setrecursionlimit(<span class="dv">3000</span>)       <span class="co"># 可调大,但调太大仍可能真的爆 C 栈</span></span></code></pre></div>
+<p>Python
+<strong>没有尾调用优化</strong>,深递归请改写成迭代或显式用栈。</p>
+<h2 id="一等函数与装饰器原理">一等函数与装饰器原理</h2>
+<p>因为函数是对象,它能被别的函数接收、包装、返回。<strong>装饰器</strong>就是这套能力的语法糖:<code>@deco</code>
+加在 <code>def foo</code> 上,等价于 <code>foo = deco(foo)</code>——用
+<code>deco</code> 的返回值(通常是个包装函数)替换原名字。</p>
+<div class="sourceCode" id="cb18"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> functools, time</span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> timer(func):</span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">@functools.wraps</span>(func)        <span class="co"># 把 func 的 __name__/__doc__ 拷到 wrapper</span></span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> wrapper(<span class="op">*</span>args, <span class="op">**</span>kwargs):  <span class="co"># 用 *args/**kwargs 透传任意参数</span></span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>        t0 <span class="op">=</span> time.perf_counter()</span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>        result <span class="op">=</span> func(<span class="op">*</span>args, <span class="op">**</span>kwargs)   <span class="co"># 调用被包装的原函数</span></span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="ss">f&quot;</span><span class="sc">{</span>func<span class="sc">.</span><span class="va">__name__</span><span class="sc">}</span><span class="ss"> 耗时 </span><span class="sc">{</span>time<span class="sc">.</span>perf_counter()<span class="op">-</span>t0<span class="sc">:.6f}</span><span class="ss">s&quot;</span>)</span>
+<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> result</span>
+<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> wrapper                 <span class="co"># 返回包装函数,替换掉原来的名字</span></span>
+<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-12"><a href="#cb18-12" aria-hidden="true" tabindex="-1"></a><span class="at">@timer</span></span>
+<span id="cb18-13"><a href="#cb18-13" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> work(n):</span>
+<span id="cb18-14"><a href="#cb18-14" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="bu">sum</span>(<span class="bu">range</span>(n))</span>
+<span id="cb18-15"><a href="#cb18-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-16"><a href="#cb18-16" aria-hidden="true" tabindex="-1"></a><span class="co"># 上面完全等价于:work = timer(work)</span></span>
+<span id="cb18-17"><a href="#cb18-17" aria-hidden="true" tabindex="-1"></a>work(<span class="dv">1_000_000</span>)</span>
+<span id="cb18-18"><a href="#cb18-18" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(work.<span class="va">__name__</span>)   <span class="co"># &#39;work&#39; —— 多亏 functools.wraps,否则会是 &#39;wrapper&#39;</span></span></code></pre></div>
+<p>底层看清楚:<code>@timer</code> 执行时立刻调用
+<code>timer(work)</code>,得到 <code>wrapper</code>
+这个新函数对象,再把它绑定到名字 <code>work</code>。此后调用
+<code>work(...)</code> 实际调用的是
+<code>wrapper</code>,它内部再转调原函数(通过闭包
+<code>__closure__</code> 抓住的
+<code>func</code>)。这就是”包装”——没有魔法,全是一等函数 + 闭包。</p>
+<p><code>functools.wraps</code> 很重要:不加它,<code>work.__name__</code>
+会变成 <code>'wrapper'</code>,traceback
+和文档都会指向包装函数,给调试带来困惑。</p>
+<h2 id="小结">小结</h2>
+<ul>
+<li><code>def</code> 在运行时创建 <code>function</code>
+对象;函数是一等公民。</li>
+<li>传参是<strong>按对象引用/按共享</strong>:拷贝引用(指针),不拷贝对象。改形参指向不外传;原地改对象内容,可变对象才外传。这套两维度模型是理解
+Python 传参的核心。</li>
+<li>默认参数在 <code>def</code>
+执行时求值<strong>一次</strong>,可变默认值会被跨调用复用——用
+<code>None</code> 哨兵规避。</li>
+<li>返回”多值”实为返回元组再解包;闭包变量存在堆上的 cell 里,靠
+<code>__closure__</code> 持有,<code>nonlocal</code>/<code>global</code>
+控制写外层/全局。</li>
+<li>调用栈由可反射的 frame
+对象组成(<code>f_locals</code>/<code>f_back</code>),有递归软限制,无尾调用优化;装饰器
+= 一等函数 + 闭包的语法糖。</li>
+</ul>
+<p><a href="05-控制流.html">← 上一章:控制流</a> · <a
+href="index.html">返回目录</a> · <a
+href="07-复合数据结构.html">下一章:复合数据结构</a> →</p>
+</div>
+</body>
+</html>

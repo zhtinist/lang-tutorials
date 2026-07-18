@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="zh-CN" xml:lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.10" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>并发模型</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../assets/style.css" />
+</head>
+<body>
+<div class="topbar"><div class="wrap"><a class="home" href="../index.html">📚 面向 C/C++ 程序员的语言内幕教程</a>
+<a href="../python/index.html">Python</a>
+<a href="../java/index.html" style="color:var(--accent-dark);font-weight:700">Java</a>
+<a href="../go/index.html">Go</a></div></div>
+<div class="wrap">
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#并发模型" id="toc-并发模型">并发模型</a>
+<ul>
+<li><a href="#线程创建与生命周期"
+id="toc-线程创建与生命周期">线程创建与生命周期</a></li>
+<li><a href="#java-内存模型-jmm" id="toc-java-内存模型-jmm">Java
+内存模型 JMM</a></li>
+<li><a href="#volatile" id="toc-volatile">volatile</a></li>
+<li><a href="#synchronized-与对象头"
+id="toc-synchronized-与对象头">synchronized 与对象头</a></li>
+<li><a href="#cas-与-atomic" id="toc-cas-与-atomic">CAS 与
+Atomic*</a></li>
+<li><a href="#java.util.concurrent"
+id="toc-java.util.concurrent">java.util.concurrent</a></li>
+<li><a href="#死锁与避免" id="toc-死锁与避免">死锁与避免</a></li>
+<li><a href="#虚拟线程loomjdk21"
+id="toc-虚拟线程loomjdk21">虚拟线程(Loom,JDK21)</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1 id="并发模型">并发模型</h1>
+<p>C/C++ 里并发靠
+<code>std::thread</code>、<code>pthread</code>、原子、<code>memory_order</code>
+手动控制,内存模型是 C++11 的 <code>std::memory_order_*</code>。Java
+把这一整套抽象进 <strong>JMM（Java Memory Model）</strong> 和
+<code>java.util.concurrent</code>。本章讲 JVM 层面线程如何运行、JMM
+到底约束了什么、锁在对象头里如何升级,以及 JDK21 的虚拟线程。</p>
+<h2 id="线程创建与生命周期">线程创建与生命周期</h2>
+<p>Java 的 <code>Thread</code> 在 HotSpot 上默认是 <strong>1:1
+映射到内核线程</strong>(OS thread),与 C++ <code>std::thread</code>
+一样重。创建一个平台线程会 <code>pthread_create</code>,栈默认约
+1MB(<code>-Xss</code> 可调)。</p>
+<p>三种任务载体:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// 1. 继承 Thread(不推荐:单继承被占用,任务与线程耦合)</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> MyThread <span class="kw">extends</span> <span class="bu">Thread</span> <span class="op">{</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="at">@Override</span> <span class="kw">public</span> <span class="dt">void</span> <span class="fu">run</span><span class="op">()</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;run in &quot;</span> <span class="op">+</span> <span class="fu">getName</span><span class="op">());</span> <span class="op">}</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="co">// 2. Runnable:无返回、无受检异常</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="bu">Runnable</span> r <span class="op">=</span> <span class="op">()</span> <span class="op">-&gt;</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;runnable&quot;</span><span class="op">);</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="co">// 3. Callable&lt;V&gt;:有返回值 V,可抛受检异常,配合 Future 使用</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="bu">Callable</span><span class="op">&lt;</span><span class="bu">Integer</span><span class="op">&gt;</span> c <span class="op">=</span> <span class="op">()</span> <span class="op">-&gt;</span> <span class="dv">42</span><span class="op">;</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> ThreadDemo <span class="op">{</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="kw">throws</span> <span class="bu">Exception</span> <span class="op">{</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Thread</span> t1 <span class="op">=</span> <span class="kw">new</span> <span class="fu">MyThread</span><span class="op">();</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>        t1<span class="op">.</span><span class="fu">start</span><span class="op">();</span>            <span class="co">// start() 触发 pthread_create;直接调 run() 只是普通方法调用,不开线程</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Thread</span> t2 <span class="op">=</span> <span class="kw">new</span> <span class="bu">Thread</span><span class="op">(</span>r<span class="op">);</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>        t2<span class="op">.</span><span class="fu">start</span><span class="op">();</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>        t1<span class="op">.</span><span class="fu">join</span><span class="op">();</span>             <span class="co">// 当前线程阻塞直到 t1 终止,类似 pthread_join</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>        t2<span class="op">.</span><span class="fu">join</span><span class="op">();</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<blockquote>
+<p>关键区分:<code>start()</code> 让 JVM 新建 OS 线程并回调
+<code>run()</code>;<code>run()</code> 直接调用则在当前线程串行执行。一个
+<code>Thread</code> 对象只能 <code>start()</code> 一次,再调抛
+<code>IllegalThreadStateException</code>。</p>
+</blockquote>
+<h3 id="线程状态机">线程状态机</h3>
+<p><code>Thread.State</code> 六态,与 OS 状态不是一一对应:</p>
+<pre><code>    NEW --start()--&gt; RUNNABLE &lt;----+
+                      |  ^          | notify/超时/锁获得
+    进入同步块拿不到锁 |  |          |
+                      v  |          |
+                   BLOCKED          |
+    wait()/park()   |               |
+                      v             |
+    WAITING / TIMED_WAITING --------+
+                      |
+                   TERMINATED（run 返回）</code></pre>
+<ul>
+<li><code>RUNNABLE</code> 同时涵盖”正在 CPU 上跑”和”就绪等调度”,Java
+不区分(OS 才区分)。</li>
+<li><code>BLOCKED</code>:等待 <code>synchronized</code> 监视器锁。</li>
+<li><code>WAITING</code>:<code>Object.wait()</code>、<code>Thread.join()</code>、<code>LockSupport.park()</code>
+无限等待。</li>
+<li><code>TIMED_WAITING</code>:带超时的上述调用、<code>Thread.sleep(ms)</code>。</li>
+</ul>
+<h2 id="java-内存模型-jmm">Java 内存模型 JMM</h2>
+<p>JMM 是一份<strong>规范</strong>(JLS
+第17章),不是硬件。它定义多线程读写共享变量时,什么值是合法可见的。类比
+C++11 内存模型,但 JMM 更早(2004, JSR-133)且默认更强。</p>
+<h3 id="主内存与工作内存">主内存与工作内存</h3>
+<p>JMM 抽象出:每个线程有<strong>工作内存</strong>(working
+memory),共享变量存在<strong>主内存</strong>(main
+memory)。线程操作变量必须先从主内存拷贝到工作内存,改完再写回。</p>
+<pre><code>   +----------------+        +----------------+
+   |   线程 A        |        |   线程 B        |
+   | 工作内存        |        | 工作内存        |
+   | [x=0 副本]      |        | [x=0 副本]      |
+   +-------+--------+        +--------+-------+
+           |  read/write             |
+           v                         v
+   +-------------------------------------------+
+   |            主内存  x = 0                    |
+   +-------------------------------------------+</code></pre>
+<p>这是<strong>抽象模型</strong>,不代表真实内存布局。实际中”工作内存”对应
+CPU 寄存器、store buffer、各级缓存。核心问题:A 改了 <code>x</code>,B
+不一定立刻看到——这就是<strong>可见性</strong>问题,根源是缓存 +
+编译器/CPU 重排。</p>
+<h3 id="三个特性">三个特性</h3>
+<table>
+<colgroup>
+<col style="width: 26%" />
+<col style="width: 26%" />
+<col style="width: 47%" />
+</colgroup>
+<thead>
+<tr>
+<th>特性</th>
+<th>含义</th>
+<th>靠什么保证</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>原子性</td>
+<td>操作不可分割</td>
+<td>基本读写(long/double 除外)天然原子;复合操作需 synchronized/CAS</td>
+</tr>
+<tr>
+<td>可见性</td>
+<td>一个线程的写对另一个可见</td>
+<td>volatile、synchronized、final</td>
+</tr>
+<tr>
+<td>有序性</td>
+<td>指令不被重排到破坏语义</td>
+<td>volatile、synchronized、happens-before</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><code>long</code>/<code>double</code> 的坑:JMM 只保证 32
+位读写原子,64 位变量在 32 位平台上可能被拆成两次写导致读到”半个值”,加
+<code>volatile</code> 保证 64 位原子。HotSpot 在 64 位 JVM
+上实际都原子,但规范不保证。</p>
+</blockquote>
+<h3 id="happens-before">happens-before</h3>
+<p>JMM 的核心工具。若操作 A happens-before B,则 A 的结果对 B 可见,且 A
+排在 B 前。规则:</p>
+<ol type="1">
+<li><strong>程序顺序</strong>:同一线程内,前面的操作 hb 后面的。</li>
+<li><strong>监视器锁</strong>:对锁的 <code>unlock</code> hb
+后续对同一锁的 <code>lock</code>。</li>
+<li><strong>volatile</strong>:对 volatile 变量的写 hb 后续的读。</li>
+<li><strong>传递性</strong>:A hb B, B hb C ⇒ A hb C。</li>
+<li><strong>线程启动</strong>:<code>t.start()</code> hb
+线程内的任何操作。</li>
+<li><strong>线程终止</strong>:线程内操作 hb 其他线程的
+<code>t.join()</code> 返回。</li>
+</ol>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> a <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="kw">volatile</span> <span class="dt">boolean</span> flag <span class="op">=</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="co">// 线程1</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> <span class="dv">1</span><span class="op">;</span>              <span class="co">// (1)</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>flag <span class="op">=</span> <span class="kw">true</span><span class="op">;</span>        <span class="co">// (2) volatile 写</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="co">// 线程2</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="op">(</span>flag<span class="op">)</span> <span class="op">{</span>         <span class="co">// (3) volatile 读,读到 true 则 (2) hb (3)</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>    <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>a<span class="op">);</span> <span class="co">// 必然是 1:(1)hb(2)hb(3),传递 ⇒ (1)hb(4)</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>没有 <code>volatile</code>,<code>a</code> 的写可能对线程2不可见,或
+(1)(2) 被重排,线程2看到 <code>flag==true</code> 但
+<code>a==0</code>。</p>
+<h3 id="指令重排">指令重排</h3>
+<p>编译器和 CPU
+为性能会重排指令,只要<strong>单线程语义(as-if-serial)</strong>不变。多线程下就出问题。经典是双重检查锁定(DCL):</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Singleton <span class="op">{</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">private</span> <span class="dt">static</span> <span class="kw">volatile</span> Singleton instance<span class="op">;</span> <span class="co">// volatile 不可省</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> Singleton <span class="fu">getInstance</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>instance <span class="op">==</span> <span class="kw">null</span><span class="op">)</span> <span class="op">{</span>                  <span class="co">// 第一次检查(无锁)</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>            <span class="kw">synchronized</span> <span class="op">(</span>Singleton<span class="op">.</span><span class="fu">class</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>                <span class="cf">if</span> <span class="op">(</span>instance <span class="op">==</span> <span class="kw">null</span><span class="op">)</span> <span class="op">{</span>          <span class="co">// 第二次检查</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>                    instance <span class="op">=</span> <span class="kw">new</span> <span class="fu">Singleton</span><span class="op">();</span>  <span class="co">// 见下方拆解</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>                <span class="op">}</span></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> instance<span class="op">;</span></span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p><code>instance = new Singleton()</code> 非原子,分三步:(1) 分配内存
+(2) 调用构造器初始化 (3) 将 <code>instance</code> 指向内存。无
+<code>volatile</code> 时 (2)(3) 可能重排为
+(1)(3)(2),另一线程在第一次检查看到 <code>instance != null</code>
+却拿到未初始化的对象。<code>volatile</code>
+禁止此重排(插入内存屏障),这是 JDK5 后 DCL 才正确的原因。</p>
+<h2 id="volatile">volatile</h2>
+<p><code>volatile</code> 提供两个保证,类比 C++ 的 acquire/release
+语义(但不完全等同)——注意 volatile
+变量的<strong>单次读、单次写本身就是原子的</strong>(它甚至让
+<code>long</code>/<code>double</code>
+的读写也变原子),真正<strong>不原子的是 <code>count++</code>
+这类”读-改-写”复合操作</strong>:</p>
+<ol type="1">
+<li><strong>可见性</strong>:一个线程对 volatile
+变量的写,保证随后读它的线程都能看到最新值。实现上靠<strong>内存屏障</strong>(store/load
+fence)配合 CPU
+的缓存一致性协议,而<strong>不是</strong>字面意义上”每次读写都绕过缓存、直刷主内存”(那是旧教材的简化说法)。</li>
+<li><strong>禁止重排</strong>:写前的操作不能重排到写后,读后的操作不能重排到读前(内存屏障)。</li>
+</ol>
+<p>它<strong>不保证复合操作原子</strong>:</p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="kw">volatile</span> <span class="dt">int</span> count <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>count<span class="op">++;</span>  <span class="co">// 读-改-写三步,volatile 不能防止两线程都读到同一值后各自 +1 丢更新</span></span></code></pre></div>
+<p><code>count++</code> 需要 <code>synchronized</code> 或
+<code>AtomicInteger</code>。volatile 适合”一写多读的状态标志”。</p>
+<h2 id="synchronized-与对象头">synchronized 与对象头</h2>
+<p><code>synchronized</code>
+是<strong>可重入的监视器锁</strong>(monitor)。每个 Java
+对象都能作锁,锁状态记录在<strong>对象头的 mark word</strong> 里。</p>
+<p>64 位 HotSpot 对象头布局(未压缩,普通对象):</p>
+<pre><code>对象内存布局:
++------------------+------------------+-------------+---------+
+| Mark Word (8B)   | Klass Pointer(4/8B)| 实例字段    | 对齐填充 |
++------------------+------------------+-------------+---------+</code></pre>
+<p>Mark Word 复用同一块 8 字节存不同信息(锁标志位决定解释方式):</p>
+<table>
+<thead>
+<tr>
+<th>锁状态</th>
+<th>Mark Word 内容(部分)</th>
+<th>标志位</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>无锁</td>
+<td>hashCode、GC 分代年龄</td>
+<td>01</td>
+</tr>
+<tr>
+<td>偏向锁</td>
+<td>持锁线程 ID</td>
+<td>01(偏向位1)</td>
+</tr>
+<tr>
+<td>轻量级锁</td>
+<td>指向栈中 Lock Record 指针</td>
+<td>00</td>
+</tr>
+<tr>
+<td>重量级锁</td>
+<td>指向 monitor(ObjectMonitor)指针</td>
+<td>10</td>
+</tr>
+<tr>
+<td>GC 标记</td>
+<td>—</td>
+<td>11</td>
+</tr>
+</tbody>
+</table>
+<h3 id="锁升级">锁升级</h3>
+<p>为避免每次都走重量级(OS 互斥量,涉及用户态/内核态切换,昂贵),HotSpot
+做了分级:</p>
+<pre><code>无锁 --第一个线程进入--&gt; 偏向锁(记录线程ID,后续同线程CAS都免了)
+      --别的线程竞争--&gt; 轻量级锁(自旋+CAS,乐观,适合短临界区)
+      --自旋失败/竞争激烈--&gt; 重量级锁(挂起线程,进OS等待队列)</code></pre>
+<ul>
+<li><strong>偏向锁</strong>:假设锁总被同一线程获取,首次记下线程
+ID,之后无竞争则无需 CAS。JDK15
+起默认禁用并计划移除(维护成本高、现代应用收益小)。</li>
+<li><strong>轻量级锁</strong>:多线程交替执行(非同时竞争)。线程在自己栈帧建
+Lock Record,用 CAS 把 mark word 换成指向它的指针。失败则自旋。</li>
+<li><strong>重量级锁</strong>:真正竞争。膨胀为
+<code>ObjectMonitor</code>,竞争线程被 OS 挂起,类比
+<code>pthread_mutex</code>。</li>
+</ul>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">synchronized</span> <span class="op">(</span>lock<span class="op">)</span> <span class="op">{</span>        <span class="co">// monitorenter 字节码</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 临界区</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span>                            <span class="co">// monitorexit 字节码(异常路径也会 exit)</span></span></code></pre></div>
+<p><code>wait/notify</code> 必须在 <code>synchronized</code>
+内(需持有监视器):</p>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="kw">synchronized</span> <span class="op">(</span>lock<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> <span class="op">(!</span>condition<span class="op">)</span> lock<span class="op">.</span><span class="fu">wait</span><span class="op">();</span>  <span class="co">// 释放锁并进入 WAITING,必须用 while 防虚假唤醒</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>    <span class="co">// ...</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a><span class="kw">synchronized</span> <span class="op">(</span>lock<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>    condition <span class="op">=</span> <span class="kw">true</span><span class="op">;</span></span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>    lock<span class="op">.</span><span class="fu">notifyAll</span><span class="op">();</span>               <span class="co">// 唤醒等待者(仍需重新竞争锁)</span></span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="cas-与-atomic">CAS 与 Atomic*</h2>
+<p>CAS(Compare-And-Swap)是无锁并发基石,对应 x86 的 <code>cmpxchg</code>
+指令。语义:<code>if (内存值==预期) { 内存值=新值; return true }</code>,整个过程硬件原子。</p>
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="bu">AtomicInteger</span> ai <span class="op">=</span> <span class="kw">new</span> <span class="bu">AtomicInteger</span><span class="op">(</span><span class="dv">0</span><span class="op">);</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>ai<span class="op">.</span><span class="fu">incrementAndGet</span><span class="op">();</span>               <span class="co">// 底层 CAS 自旋:do { old=get(); } while(!compareAndSet(old, old+1))</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="dt">boolean</span> ok <span class="op">=</span> ai<span class="op">.</span><span class="fu">compareAndSet</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">);</span> <span class="co">// 期望1则设2</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a><span class="co">// JDK8+ 高并发计数器,分段减少 CAS 竞争(热点分散到多个 Cell)</span></span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>LongAdder adder <span class="op">=</span> <span class="kw">new</span> <span class="fu">LongAdder</span><span class="op">();</span></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>adder<span class="op">.</span><span class="fu">increment</span><span class="op">();</span></span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a><span class="dt">long</span> sum <span class="op">=</span> adder<span class="op">.</span><span class="fu">sum</span><span class="op">();</span></span></code></pre></div>
+<p><code>Atomic*</code> 内部字段用 <code>volatile</code> +
+<code>Unsafe</code>/<code>VarHandle</code> 的 CAS 实现。</p>
+<p><strong>ABA 问题</strong>:值从 A 变 B 又变回 A,CAS 察觉不到。用
+<code>AtomicStampedReference</code>(加版本号)解决,类比无锁栈里的 tagged
+pointer。</p>
+<h2 id="java.util.concurrent">java.util.concurrent</h2>
+<h3 id="reentrantlock">ReentrantLock</h3>
+<p>比 <code>synchronized</code>
+更灵活:可中断、可超时、可公平、可多条件变量。基于
+<strong>AQS(AbstractQueuedSynchronizer)</strong>——一个
+<code>volatile int state</code> + CLH 变体等待队列。</p>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="bu">ReentrantLock</span> lock <span class="op">=</span> <span class="kw">new</span> <span class="bu">ReentrantLock</span><span class="op">();</span> <span class="co">// new ReentrantLock(true) 为公平锁</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>lock<span class="op">.</span><span class="fu">lock</span><span class="op">();</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="cf">try</span> <span class="op">{</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 临界区</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> <span class="cf">finally</span> <span class="op">{</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>    lock<span class="op">.</span><span class="fu">unlock</span><span class="op">();</span>   <span class="co">// 必须放 finally,否则异常时锁泄漏(synchronized 由 JVM 自动释放)</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a><span class="co">// 可超时,避免死锁</span></span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="op">(</span>lock<span class="op">.</span><span class="fu">tryLock</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="bu">TimeUnit</span><span class="op">.</span><span class="fu">SECONDS</span><span class="op">))</span> <span class="op">{</span></span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span> <span class="op">{</span> <span class="co">/* ... */</span> <span class="op">}</span> <span class="cf">finally</span> <span class="op">{</span> lock<span class="op">.</span><span class="fu">unlock</span><span class="op">();</span> <span class="op">}</span></span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<table>
+<thead>
+<tr>
+<th>对比</th>
+<th>synchronized</th>
+<th>ReentrantLock</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>获取方式</td>
+<td>隐式(JVM)</td>
+<td>显式 lock/unlock</td>
+</tr>
+<tr>
+<td>释放</td>
+<td>自动</td>
+<td>手动(finally)</td>
+</tr>
+<tr>
+<td>可中断</td>
+<td>否</td>
+<td>lockInterruptibly()</td>
+</tr>
+<tr>
+<td>超时</td>
+<td>否</td>
+<td>tryLock(timeout)</td>
+</tr>
+<tr>
+<td>公平锁</td>
+<td>否</td>
+<td>可选</td>
+</tr>
+<tr>
+<td>条件变量</td>
+<td>单个(wait/notify)</td>
+<td>多个 Condition</td>
+</tr>
+</tbody>
+</table>
+<h3 id="concurrenthashmap">ConcurrentHashMap</h3>
+<p>JDK8 重写:<strong>数组 + 链表/红黑树</strong>,并发控制用 <strong>CAS
++ synchronized(锁桶头结点)</strong>,而非 JDK7 的分段锁(Segment)。</p>
+<ul>
+<li>空桶插入:CAS 直接放,无锁。</li>
+<li>桶非空:<code>synchronized</code> 锁住该桶头结点,只锁一个桶,并发度 =
+桶数。</li>
+<li>链表长度 ≥8 且表容量 ≥64 时转红黑树,查询从 O(n) 降到 O(log n)。</li>
+<li><code>size()</code> 用 <code>baseCount</code> +
+<code>CounterCell[]</code>(类似 LongAdder)避免热点。</li>
+</ul>
+<p>读操作基本无锁(结点 val/next 为 volatile),写只锁单桶,吞吐远高于
+<code>Collections.synchronizedMap</code>(锁整表)。</p>
+<h3 id="线程池-threadpoolexecutor">线程池 ThreadPoolExecutor</h3>
+<p>复用线程,避免频繁创建(创建 OS 线程昂贵)。核心构造参数:</p>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="bu">ThreadPoolExecutor</span> pool <span class="op">=</span> <span class="kw">new</span> <span class="bu">ThreadPoolExecutor</span><span class="op">(</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>    <span class="dv">2</span><span class="op">,</span>                              <span class="co">// corePoolSize:核心线程数,常驻</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    <span class="dv">4</span><span class="op">,</span>                              <span class="co">// maximumPoolSize:最大线程数</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>    <span class="dv">60L</span><span class="op">,</span> <span class="bu">TimeUnit</span><span class="op">.</span><span class="fu">SECONDS</span><span class="op">,</span>          <span class="co">// keepAliveTime:非核心线程空闲存活时间</span></span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">new</span> <span class="bu">ArrayBlockingQueue</span><span class="op">&lt;&gt;(</span><span class="dv">100</span><span class="op">),</span>  <span class="co">// workQueue:任务队列</span></span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>    <span class="bu">Executors</span><span class="op">.</span><span class="fu">defaultThreadFactory</span><span class="op">(),</span></span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">new</span> <span class="bu">ThreadPoolExecutor</span><span class="op">.</span><span class="fu">CallerRunsPolicy</span><span class="op">()</span> <span class="co">// 拒绝策略</span></span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a><span class="op">);</span></span></code></pre></div>
+<p>任务提交逻辑(务必理解):</p>
+<pre><code>提交任务
+  ├─ 运行线程数 &lt; core?      → 新建核心线程执行
+  ├─ 否,队列未满?           → 入队等待
+  ├─ 否,线程数 &lt; max?       → 新建非核心线程执行
+  └─ 否                      → 触发拒绝策略</code></pre>
+<p>拒绝策略:<code>AbortPolicy</code>(抛异常,默认)、<code>CallerRunsPolicy</code>(提交者自己跑,反压)、<code>DiscardPolicy</code>、<code>DiscardOldestPolicy</code>。</p>
+<blockquote>
+<p>生产环境避免用
+<code>Executors.newFixedThreadPool</code>/<code>newCachedThreadPool</code>:前者队列无界(可能
+OOM),后者线程数无界。手动 <code>new ThreadPoolExecutor</code>
+明确参数。</p>
+</blockquote>
+<h3 id="future-与-completablefuture">Future 与 CompletableFuture</h3>
+<div class="sourceCode" id="cb15"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="bu">ExecutorService</span> es <span class="op">=</span> <span class="bu">Executors</span><span class="op">.</span><span class="fu">newFixedThreadPool</span><span class="op">(</span><span class="dv">2</span><span class="op">);</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="bu">Future</span><span class="op">&lt;</span><span class="bu">Integer</span><span class="op">&gt;</span> f <span class="op">=</span> es<span class="op">.</span><span class="fu">submit</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="dv">42</span><span class="op">);</span></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a><span class="bu">Integer</span> v <span class="op">=</span> f<span class="op">.</span><span class="fu">get</span><span class="op">();</span>   <span class="co">// 阻塞获取结果(可能抛 ExecutionException 包裹任务异常)</span></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a><span class="co">// CompletableFuture:可组合、非阻塞回调,类似 JS Promise / C++ std::future+continuation</span></span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>CompletableFuture</span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span><span class="fu">supplyAsync</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="dv">10</span><span class="op">)</span>                    <span class="co">// 异步产出</span></span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span><span class="fu">thenApply</span><span class="op">(</span>x <span class="op">-&gt;</span> x <span class="op">*</span> <span class="dv">2</span><span class="op">)</span>                    <span class="co">// 变换(同线程链式)</span></span>
+<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span><span class="fu">thenCompose</span><span class="op">(</span>x <span class="op">-&gt;</span> CompletableFuture<span class="op">.</span><span class="fu">supplyAsync</span><span class="op">(()</span> <span class="op">-&gt;</span> x <span class="op">+</span> <span class="dv">1</span><span class="op">))</span> <span class="co">// 扁平化嵌套 future</span></span>
+<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span><span class="fu">thenAccept</span><span class="op">(</span><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">::</span>println<span class="op">)</span>          <span class="co">// 消费</span></span>
+<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span><span class="fu">exceptionally</span><span class="op">(</span>ex <span class="op">-&gt;</span> <span class="op">{</span> ex<span class="op">.</span><span class="fu">printStackTrace</span><span class="op">();</span> <span class="cf">return</span> <span class="kw">null</span><span class="op">;</span> <span class="op">});</span></span>
+<span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-13"><a href="#cb15-13" aria-hidden="true" tabindex="-1"></a>CompletableFuture<span class="op">&lt;</span><span class="bu">Void</span><span class="op">&gt;</span> all <span class="op">=</span> CompletableFuture<span class="op">.</span><span class="fu">allOf</span><span class="op">(</span>f1<span class="op">,</span> f2<span class="op">);</span> <span class="co">// 等全部完成</span></span>
+<span id="cb15-14"><a href="#cb15-14" aria-hidden="true" tabindex="-1"></a>es<span class="op">.</span><span class="fu">shutdown</span><span class="op">();</span></span></code></pre></div>
+<h3 id="协调工具">协调工具</h3>
+<div class="sourceCode" id="cb16"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="co">// CountDownLatch:一次性,等 N 个事件完成(不可重置),类似 barrier 单向</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="bu">CountDownLatch</span> latch <span class="op">=</span> <span class="kw">new</span> <span class="bu">CountDownLatch</span><span class="op">(</span><span class="dv">3</span><span class="op">);</span></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a><span class="co">// worker: latch.countDown();</span></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>latch<span class="op">.</span><span class="fu">await</span><span class="op">();</span>   <span class="co">// 主线程等计数归零</span></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a><span class="co">// Semaphore:信号量,限流/限并发数</span></span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a><span class="bu">Semaphore</span> sem <span class="op">=</span> <span class="kw">new</span> <span class="bu">Semaphore</span><span class="op">(</span><span class="dv">2</span><span class="op">);</span>   <span class="co">// 最多2个同时进入</span></span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>sem<span class="op">.</span><span class="fu">acquire</span><span class="op">();</span></span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a><span class="cf">try</span> <span class="op">{</span> <span class="co">/* 受限资源 */</span> <span class="op">}</span> <span class="cf">finally</span> <span class="op">{</span> sem<span class="op">.</span><span class="fu">release</span><span class="op">();</span> <span class="op">}</span></span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a><span class="co">// CyclicBarrier:可重用,N 个线程互相等待汇合后一起继续</span></span></code></pre></div>
+<h2 id="死锁与避免">死锁与避免</h2>
+<p>死锁四条件(与 OS
+教材一致):互斥、持有并等待、不可剥夺、循环等待。典型:</p>
+<div class="sourceCode" id="cb17"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="co">// 线程1: 先锁 A 再锁 B;线程2: 先锁 B 再锁 A → 循环等待</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="kw">synchronized</span> <span class="op">(</span>A<span class="op">)</span> <span class="op">{</span> <span class="kw">synchronized</span> <span class="op">(</span>B<span class="op">)</span> <span class="op">{</span> <span class="op">}</span> <span class="op">}</span>  <span class="co">// 线程1</span></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a><span class="kw">synchronized</span> <span class="op">(</span>B<span class="op">)</span> <span class="op">{</span> <span class="kw">synchronized</span> <span class="op">(</span>A<span class="op">)</span> <span class="op">{</span> <span class="op">}</span> <span class="op">}</span>  <span class="co">// 线程2</span></span></code></pre></div>
+<p>避免手段: -
+<strong>锁排序</strong>:所有线程按固定全局顺序获取锁(破坏循环等待)。 -
+<strong>tryLock 超时</strong>:<code>ReentrantLock.tryLock</code>
+拿不到就回退释放。 -
+<strong>减小锁粒度/持有时间</strong>,尽量无锁(CAS、不可变对象)。 -
+检测:<code>jstack &lt;pid&gt;</code> 能报 “Found one Java-level
+deadlock”。</p>
+<h2 id="虚拟线程loomjdk21">虚拟线程(Loom,JDK21)</h2>
+<p>平台线程 1:1 绑内核线程,昂贵(栈
+~1MB,上下文切换走内核),几千个就吃力。<strong>虚拟线程</strong>是 JVM
+调度的<strong>用户态线程</strong>(类比 Go
+goroutine),极轻(栈按需增长,存堆上),可开百万级。</p>
+<div class="sourceCode" id="cb18"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="co">// 每个任务一个虚拟线程,阻塞 IO 时自动卸载,不占内核线程</span></span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a><span class="cf">try</span> <span class="op">(</span><span class="dt">var</span> executor <span class="op">=</span> <span class="bu">Executors</span><span class="op">.</span><span class="fu">newVirtualThreadPerTaskExecutor</span><span class="op">())</span> <span class="op">{</span></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">1_000_000</span><span class="op">;</span> i<span class="op">++)</span> <span class="op">{</span></span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>        executor<span class="op">.</span><span class="fu">submit</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="op">{</span></span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>            <span class="bu">Thread</span><span class="op">.</span><span class="fu">sleep</span><span class="op">(</span><span class="bu">Duration</span><span class="op">.</span><span class="fu">ofSeconds</span><span class="op">(</span><span class="dv">1</span><span class="op">));</span> <span class="co">// 阻塞不占载体线程</span></span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="kw">null</span><span class="op">;</span></span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>        <span class="op">});</span></span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a><span class="bu">Thread</span> vt <span class="op">=</span> <span class="bu">Thread</span><span class="op">.</span><span class="fu">ofVirtual</span><span class="op">().</span><span class="fu">start</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;virtual&quot;</span><span class="op">));</span></span>
+<span id="cb18-12"><a href="#cb18-12" aria-hidden="true" tabindex="-1"></a><span class="bu">Thread</span> pt <span class="op">=</span> <span class="bu">Thread</span><span class="op">.</span><span class="fu">ofPlatform</span><span class="op">().</span><span class="fu">start</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;platform&quot;</span><span class="op">));</span></span></code></pre></div>
+<h3 id="挂载与卸载">挂载与卸载</h3>
+<p>虚拟线程运行时<strong>挂载(mount)</strong>到一个平台线程(<strong>载体线程
+carrier</strong>,来自 ForkJoinPool)。遇到阻塞操作(如网络
+IO、sleep)时<strong>卸载(unmount)</strong>:虚拟线程的栈(continuation)被保存到堆,载体线程释放去跑别的虚拟线程。阻塞结束后再挂载到某个载体继续。</p>
+<pre><code>平台线程池(载体, ~CPU核数个)
+  Carrier-1: [VT-A 运行中] --VT-A遇到IO阻塞--&gt; 卸载VT-A, 挂载 VT-B
+  Carrier-2: [VT-C 运行中]
+             堆: [VT-A 栈快照 待唤醒] [VT-D 栈快照] ...</code></pre>
+<p>对比:平台线程阻塞时,整个内核线程被 OS
+挂起;虚拟线程阻塞时,内核线程被解放去干活。因此”一请求一线程”的同步写法也能有异步的吞吐。</p>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>平台线程</th>
+<th>虚拟线程</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>映射</td>
+<td>1:1 内核线程</td>
+<td>M:N,JVM 调度到载体</td>
+</tr>
+<tr>
+<td>数量级</td>
+<td>数千</td>
+<td>数百万</td>
+</tr>
+<tr>
+<td>栈</td>
+<td>固定 ~1MB</td>
+<td>按需,堆上可增减</td>
+</tr>
+<tr>
+<td>阻塞代价</td>
+<td>占用内核线程</td>
+<td>卸载,释放载体</td>
+</tr>
+<tr>
+<td>适用</td>
+<td>CPU 密集</td>
+<td>IO 密集、高并发</td>
+</tr>
+</tbody>
+</table>
+<p><strong>pinning(固定)陷阱</strong>:虚拟线程阻塞时若无法卸载,就会<strong>钉住</strong>载体线程,削弱优势。<strong>在
+JDK 21–23</strong>,在 <code>synchronized</code> 块内阻塞会
+pin,所以当时的建议是把 IO 相关临界区改用 <code>ReentrantLock</code>;但
+<strong>JDK 24 起(JEP 491)已基本消除 <code>synchronized</code> 造成的
+pinning</strong>,不必再为此刻意替换。调用 native(JNI)等少数情形仍可能
+pin。</p>
+<p>关于 <code>volatile</code>/CAS 的底层内存屏障,可回顾 <a
+href="03-变量与内存模型.html">03-变量与内存模型</a>。线程池提交的任务与异常传播见
+<a href="09-错误处理与资源管理.html">09-错误处理与资源管理</a>。</p>
+<hr />
+<p><a href="09-错误处理与资源管理.html">← 上一章:错误处理与资源管理</a>
+· <a href="index.html">返回目录</a> · <a
+href="11-标准库算法.html">下一章:标准库算法</a> →</p>
+</div>
+</body>
+</html>
