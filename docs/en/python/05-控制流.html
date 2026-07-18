@@ -443,63 +443,286 @@ bytecode for the <code>else</code> block, while normal completion falls
 straight through into <code>else</code>.</p>
 <h2 id="match-case-structural-pattern-matching-3.10">match-case:
 Structural Pattern Matching (3.10+)</h2>
-<p><code>match</code> is <strong>not</strong> C’s <code>switch</code>.
-C’s <code>switch</code> is a jump table keyed by integer value;
-<code>match</code> is <strong>structural destructuring +
-binding</strong>, more like pattern matching in functional languages. It
-does no fall-through and needs no <code>break</code>.</p>
+<p>We’ll explain <code>match</code> from scratch here, because it’s the
+piece of Python syntax that <strong>looks the most familiar yet behaves
+the least like you’d expect</strong>.</p>
+<p>In one sentence: <strong><code>match</code> is not C’s
+<code>switch</code></strong>. C’s <code>switch(x)</code> means “take the
+integer value of x and jump through a table” — it only compares integers
+and needs <code>break</code> to avoid fall-through. Python’s
+<code>match</code> means “look at the <strong>structure</strong> of a
+value, and pull the pieces out and <strong>bind them to
+variables</strong> along the way.” Think of it as “unpacking a parcel”:
+first check the box has the right shape, then take the contents out and
+hand them to you.</p>
+<p>It has <strong>no</strong> fall-through (you won’t accidentally run
+into the next branch by forgetting <code>break</code>), so it
+<strong>needs no <code>break</code></strong>: whichever
+<code>case</code> matches runs, and then the whole <code>match</code> is
+done.</p>
+<h3
+id="step-1-the-simplest-use-matching-by-value-this-part-is-most-like-a-switch">Step
+1: The simplest use — matching by “value” (this part is most like a
+switch)</h3>
 <div class="sourceCode" id="cb15"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> describe(point):</span>
-<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">match</span> point:</span>
-<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>        case (<span class="dv">0</span>, <span class="dv">0</span>):</span>
-<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;origin&quot;</span></span>
-<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>        case (<span class="dv">0</span>, y):                 <span class="co"># capture pattern: bind the second element to y</span></span>
-<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="ss">f&quot;on y-axis, y=</span><span class="sc">{</span>y<span class="sc">}</span><span class="ss">&quot;</span></span>
-<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>        case (x, <span class="dv">0</span>):</span>
-<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="ss">f&quot;on x-axis, x=</span><span class="sc">{</span>x<span class="sc">}</span><span class="ss">&quot;</span></span>
-<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a>        case (x, y) <span class="cf">if</span> x <span class="op">==</span> y:       <span class="co"># guard: an additional boolean condition</span></span>
-<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="ss">f&quot;diagonal </span><span class="sc">{</span>x<span class="sc">}</span><span class="ss">&quot;</span></span>
-<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a>        case (x, y):</span>
-<span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="ss">f&quot;general point (</span><span class="sc">{</span>x<span class="sc">}</span><span class="ss">,</span><span class="sc">{</span>y<span class="sc">}</span><span class="ss">)&quot;</span></span>
-<span id="cb15-13"><a href="#cb15-13" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> _:                       <span class="co"># wildcard, like default</span></span>
-<span id="cb15-14"><a href="#cb15-14" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;not a 2-tuple&quot;</span></span>
-<span id="cb15-15"><a href="#cb15-15" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-16"><a href="#cb15-16" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(describe((<span class="dv">0</span>, <span class="dv">5</span>)))    <span class="co"># on y-axis, y=5</span></span>
-<span id="cb15-17"><a href="#cb15-17" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(describe((<span class="dv">3</span>, <span class="dv">3</span>)))    <span class="co"># diagonal 3</span></span></code></pre></div>
-<p>Key point: the <code>y</code> in <code>case (0, y)</code> is a
-<strong>binding name</strong>, not a comparison target. A bare name
-<strong>always captures a binding</strong>—writing
-<code>case (0, value)</code> does not compare against an outer
-<code>value</code>; instead it creates a new binding also named
-<code>value</code>, shadowing any outer variable of the same name. To
-match against the <strong>value</strong> of a variable, you must add a
-guard: <code>case (0, y) if y == value</code>; or use a <strong>dotted
-qualified name</strong> <code>case Color.RED</code> (the dot signals a
-constant reference rather than a binding).</p>
-<p>It can also destructure objects by type and attribute (class
-patterns):</p>
+class="sourceCode python"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> http(code):</span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">match</span> code:               <span class="co"># compare code against each case below</span></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> <span class="dv">200</span>:             <span class="co"># if code == 200</span></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;OK&quot;</span></span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> <span class="dv">404</span>:</span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;Not Found&quot;</span></span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> _:               <span class="co"># _ is the wildcard, matches anything — like switch&#39;s default</span></span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;Unknown&quot;</span></span>
+<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(http(<span class="dv">200</span>))   <span class="co"># OK</span></span>
+<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(http(<span class="dv">404</span>))   <span class="co"># Not Found</span></span>
+<span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(http(<span class="dv">500</span>))   <span class="co"># Unknown</span></span></code></pre></div>
+<ul>
+<li>When you write a <strong>literal</strong> in <code>case 200:</code>
+(a number, string,
+<code>True</code>/<code>False</code>/<code>None</code>), it means “match
+if equal” — consistent with your <code>switch</code> intuition.</li>
+<li>The underscore <code>_</code> in <code>case _:</code> is the
+<strong>wildcard</strong>: put it last as a catch-all, like
+<code>default</code>.</li>
+<li>The <strong>first</strong> matching case from top to bottom wins;
+the rest are not checked.</li>
+</ul>
+<h3 id="step-2-or-patterns-one-case-matching-multiple-values">Step 2: OR
+patterns — one case matching multiple values</h3>
+<p>Join several patterns with <code>|</code>; a match on any one counts
+(cleaner than piling up <code>case 400: case 401:</code> in C):</p>
 <div class="sourceCode" id="cb16"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Point:</span>
-<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>    <span class="fu">__match_args__</span> <span class="op">=</span> (<span class="st">&quot;x&quot;</span>, <span class="st">&quot;y&quot;</span>)      <span class="co"># declare the attribute order for positional matching</span></span>
-<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, x, y):</span>
-<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.x, <span class="va">self</span>.y <span class="op">=</span> x, y</span>
-<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> quadrant(p):</span>
-<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">match</span> p:</span>
-<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> Point(x<span class="op">=</span><span class="dv">0</span>, y<span class="op">=</span><span class="dv">0</span>):</span>
-<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;origin&quot;</span></span>
-<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> Point(x, y) <span class="cf">if</span> x <span class="op">&gt;</span> <span class="dv">0</span> <span class="kw">and</span> y <span class="op">&gt;</span> <span class="dv">0</span>:   <span class="co"># positional destructuring via __match_args__</span></span>
-<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;first quadrant&quot;</span></span>
-<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> Point():</span>
-<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;other&quot;</span></span>
-<span id="cb16-14"><a href="#cb16-14" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-15"><a href="#cb16-15" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(quadrant(Point(<span class="dv">1</span>, <span class="dv">2</span>)))   <span class="co"># first quadrant</span></span></code></pre></div>
-<p>Under the hood, CPython compiles <code>match</code> into a series of
-specialized matching bytecodes (<code>MATCH_SEQUENCE</code>,
-<code>MATCH_CLASS</code>, <code>MATCH_MAPPING</code>, etc.) plus jumps,
-and the matching process may call <code>__len__</code>,
-<code>isinstance</code>, key-based lookups, and so on. It is therefore
-much heavier than C’s <code>switch</code>, but far more expressive.</p>
+class="sourceCode python"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> kind(code):</span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">match</span> code:</span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> <span class="dv">200</span> <span class="op">|</span> <span class="dv">201</span> <span class="op">|</span> <span class="dv">204</span>:      <span class="co"># any of these three counts as success</span></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;success&quot;</span></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> <span class="dv">400</span> <span class="op">|</span> <span class="dv">401</span> <span class="op">|</span> <span class="dv">404</span>:</span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;client error&quot;</span></span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> _:</span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;other&quot;</span></span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(kind(<span class="dv">201</span>))   <span class="co"># success</span></span>
+<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(kind(<span class="dv">404</span>))   <span class="co"># client error</span></span></code></pre></div>
+<h3
+id="step-3-capture-patterns-match-and-grab-a-value-at-the-same-time-the-essence-of-match">Step
+3: Capture patterns — match and “grab a value” at the same time (the
+essence of <code>match</code>)</h3>
+<p>This is where it pulls away from <code>switch</code>. You can put a
+<strong>variable name</strong> in a pattern; on a successful match it
+<strong>binds (assigns)</strong> the corresponding value to that
+variable, ready to use afterward:</p>
+<div class="sourceCode" id="cb17"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> head_tail(seq):</span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">match</span> seq:</span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>        case []:                       <span class="co"># match an empty list</span></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;empty&quot;</span></span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>        case [x]:                      <span class="co"># match a list of exactly one element, bind it to x</span></span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="ss">f&quot;just one: </span><span class="sc">{</span>x<span class="sc">}</span><span class="ss">&quot;</span></span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a>        case [first, <span class="op">*</span>rest]:           <span class="co"># match &quot;at least one element&quot;; first = the first, *rest = the remainder (a list)</span></span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="ss">f&quot;first=</span><span class="sc">{</span>first<span class="sc">}</span><span class="ss">, rest=</span><span class="sc">{</span>rest<span class="sc">}</span><span class="ss">&quot;</span></span>
+<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(head_tail([]))          <span class="co"># empty</span></span>
+<span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(head_tail([<span class="dv">9</span>]))         <span class="co"># just one: 9</span></span>
+<span id="cb17-12"><a href="#cb17-12" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(head_tail([<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>, <span class="dv">4</span>]))<span class="co"># first=1, rest=[2, 3, 4]</span></span></code></pre></div>
+<ul>
+<li><code>[x]</code>, <code>[first, *rest]</code> are <strong>sequence
+patterns</strong>: they first check “is it a sequence, is the length
+right,” then <strong>destructure</strong> the elements and bind them to
+variables. <code>*rest</code> is like <code>*args</code> in a function,
+collecting the remaining elements.</li>
+<li>Tuples work the same: <code>case (x, y):</code> matches “a
+two-element tuple” and binds the two elements to <code>x</code> and
+<code>y</code>.</li>
+</ul>
+<h3
+id="step-4-the-biggest-beginner-trap-a-bare-name-is-a-binding-not-a-comparison">⚠️
+Step 4: The biggest beginner trap — a bare name is a “binding,” not a
+“comparison”</h3>
+<p>This is the one counterintuitive point about <code>match</code> that
+almost everyone trips over, so let’s spell it out.</p>
+<p>You might think “match if <code>n</code> equals that outer variable
+<code>value</code>,” and write <code>case value:</code>.
+<strong>Wrong!</strong> A <strong>bare name in a pattern is always a
+“capture binding,”</strong> not a comparison of its value — it matches
+<strong>unconditionally</strong> and assigns <code>n</code> to a new
+<code>value</code>, shadowing the outer variable of the same name:</p>
+<div class="sourceCode" id="cb18"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>value <span class="op">=</span> <span class="dv">3</span></span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> bad(n):</span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">match</span> n:</span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> value:                    <span class="co"># trap! this is NOT &quot;n == 3&quot;, it&#39;s &quot;bind n to value&quot;</span></span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="ss">f&quot;bound value=</span><span class="sc">{</span>value<span class="sc">}</span><span class="ss">&quot;</span></span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(bad(<span class="dv">99</span>))   <span class="co"># bound value=99   ← proof it never compared against the outer 3; it matches anything</span></span></code></pre></div>
+<p><strong>To match against a variable’s value, there are two correct
+ways:</strong></p>
+<div class="sourceCode" id="cb19"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>value <span class="op">=</span> <span class="dv">3</span></span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> good(n):</span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">match</span> n:</span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> v <span class="cf">if</span> v <span class="op">==</span> value:          <span class="co"># way 1: capture as v, then compare in a guard</span></span>
+<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;equals value&quot;</span></span>
+<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> _:</span>
+<span id="cb19-7"><a href="#cb19-7" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;not equal&quot;</span></span>
+<span id="cb19-8"><a href="#cb19-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-9"><a href="#cb19-9" aria-hidden="true" tabindex="-1"></a><span class="co"># way 2: use a &quot;dotted name&quot; (qualified name); the dot tells match this is a constant reference, not a binding</span></span>
+<span id="cb19-10"><a href="#cb19-10" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> enum</span>
+<span id="cb19-11"><a href="#cb19-11" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Color(enum.Enum):</span>
+<span id="cb19-12"><a href="#cb19-12" aria-hidden="true" tabindex="-1"></a>    RED <span class="op">=</span> <span class="dv">1</span><span class="op">;</span> GREEN <span class="op">=</span> <span class="dv">2</span></span>
+<span id="cb19-13"><a href="#cb19-13" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> name(c):</span>
+<span id="cb19-14"><a href="#cb19-14" aria-hidden="true" tabindex="-1"></a>    <span class="cf">match</span> c:</span>
+<span id="cb19-15"><a href="#cb19-15" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> Color.RED:                <span class="co"># dotted → compared as a value (not bound)</span></span>
+<span id="cb19-16"><a href="#cb19-16" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;red&quot;</span></span>
+<span id="cb19-17"><a href="#cb19-17" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> Color.GREEN:</span>
+<span id="cb19-18"><a href="#cb19-18" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;green&quot;</span></span></code></pre></div>
+<p>Remember one rule: <strong>in a pattern, <code>abc</code> is a
+“binding,” and only <code>X.abc</code> is a “comparison.”</strong></p>
+<h3 id="step-5-guards-add-an-extra-condition-to-a-case">Step 5: guards —
+add an extra condition to a case</h3>
+<p>Adding <code>if condition</code> after a <code>case</code> is called
+a <strong>guard</strong>: it matches only if “the pattern matches
+<strong>and</strong> the condition is true.”</p>
+<div class="sourceCode" id="cb20"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> sign(n):</span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">match</span> n:</span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> <span class="dv">0</span>:</span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;zero&quot;</span></span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> x <span class="cf">if</span> x <span class="op">&gt;</span> <span class="dv">0</span>:        <span class="co"># capture as x, then require x &gt; 0</span></span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;positive&quot;</span></span>
+<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> _:</span>
+<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;negative&quot;</span></span>
+<span id="cb20-9"><a href="#cb20-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-10"><a href="#cb20-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sign(<span class="dv">0</span>), sign(<span class="dv">5</span>), sign(<span class="op">-</span><span class="dv">2</span>))   <span class="co"># zero positive negative</span></span></code></pre></div>
+<h3
+id="step-6-mapping-patterns-match-a-dict-and-class-patterns-match-an-object">Step
+6: mapping patterns (match a dict) and class patterns (match an
+object)</h3>
+<p><code>match</code> can also destructure dicts and custom objects —
+extremely handy for JSON, ASTs, and events.</p>
+<p><strong>Mapping patterns</strong>: care only about “are certain keys
+present and what are their values,” ignoring extra keys:</p>
+<div class="sourceCode" id="cb21"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> route(req):</span>
+<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">match</span> req:</span>
+<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a>        case {<span class="st">&quot;method&quot;</span>: <span class="st">&quot;GET&quot;</span>, <span class="st">&quot;path&quot;</span>: p}:   <span class="co"># require method==&quot;GET&quot;, bind the value of path to p</span></span>
+<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="ss">f&quot;GET </span><span class="sc">{</span>p<span class="sc">}</span><span class="ss">&quot;</span></span>
+<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a>        case {<span class="st">&quot;method&quot;</span>: <span class="st">&quot;POST&quot;</span>}:             <span class="co"># require only method==&quot;POST&quot;; other keys don&#39;t matter</span></span>
+<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;POST&quot;</span></span>
+<span id="cb21-7"><a href="#cb21-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> _:</span>
+<span id="cb21-8"><a href="#cb21-8" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;unknown request&quot;</span></span>
+<span id="cb21-9"><a href="#cb21-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-10"><a href="#cb21-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(route({<span class="st">&quot;method&quot;</span>: <span class="st">&quot;GET&quot;</span>, <span class="st">&quot;path&quot;</span>: <span class="st">&quot;/users&quot;</span>}))   <span class="co"># GET /users</span></span></code></pre></div>
+<p><strong>Class patterns</strong>: destructure objects by type +
+attributes. Give a class a <code>__match_args__</code> and you can write
+it positionally, like a tuple:</p>
+<div class="sourceCode" id="cb22"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Point:</span>
+<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a>    <span class="fu">__match_args__</span> <span class="op">=</span> (<span class="st">&quot;x&quot;</span>, <span class="st">&quot;y&quot;</span>)     <span class="co"># declare: for positional matching, 1st → x, 2nd → y</span></span>
+<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, x, y):</span>
+<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.x, <span class="va">self</span>.y <span class="op">=</span> x, y</span>
+<span id="cb22-5"><a href="#cb22-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-6"><a href="#cb22-6" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> quadrant(p):</span>
+<span id="cb22-7"><a href="#cb22-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">match</span> p:</span>
+<span id="cb22-8"><a href="#cb22-8" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> Point(<span class="dv">0</span>, <span class="dv">0</span>):                    <span class="co"># positional match: x==0 and y==0</span></span>
+<span id="cb22-9"><a href="#cb22-9" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;origin&quot;</span></span>
+<span id="cb22-10"><a href="#cb22-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> Point(x<span class="op">=</span><span class="dv">0</span>, y<span class="op">=</span>yy):               <span class="co"># keyword match: x==0, and bind y to yy</span></span>
+<span id="cb22-11"><a href="#cb22-11" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="ss">f&quot;on the y-axis, y=</span><span class="sc">{</span>yy<span class="sc">}</span><span class="ss">&quot;</span></span>
+<span id="cb22-12"><a href="#cb22-12" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> Point(x, y) <span class="cf">if</span> x <span class="op">&gt;</span> <span class="dv">0</span> <span class="kw">and</span> y <span class="op">&gt;</span> <span class="dv">0</span>: <span class="co"># positional capture + guard</span></span>
+<span id="cb22-13"><a href="#cb22-13" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;quadrant I&quot;</span></span>
+<span id="cb22-14"><a href="#cb22-14" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> Point():                        <span class="co"># just needs to be a Point</span></span>
+<span id="cb22-15"><a href="#cb22-15" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;some other Point&quot;</span></span>
+<span id="cb22-16"><a href="#cb22-16" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> _:</span>
+<span id="cb22-17"><a href="#cb22-17" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;not a Point at all&quot;</span></span>
+<span id="cb22-18"><a href="#cb22-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-19"><a href="#cb22-19" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(quadrant(Point(<span class="dv">0</span>, <span class="dv">0</span>)))   <span class="co"># origin</span></span>
+<span id="cb22-20"><a href="#cb22-20" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(quadrant(Point(<span class="dv">0</span>, <span class="dv">7</span>)))   <span class="co"># on the y-axis, y=7</span></span>
+<span id="cb22-21"><a href="#cb22-21" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(quadrant(Point(<span class="dv">1</span>, <span class="dv">2</span>)))   <span class="co"># quadrant I</span></span></code></pre></div>
+<h3 id="cheat-sheet-common-patterns-at-a-glance">Cheat sheet: common
+patterns at a glance</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>Pattern</th>
+<th>Example</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Literal</td>
+<td><code>case 200:</code></td>
+<td>equal value</td>
+</tr>
+<tr>
+<td>Wildcard</td>
+<td><code>case _:</code></td>
+<td>matches anything (catch-all)</td>
+</tr>
+<tr>
+<td>Capture</td>
+<td><code>case x:</code></td>
+<td><strong>always matches</strong>, binds the value to
+<code>x</code></td>
+</tr>
+<tr>
+<td>OR</td>
+<td><code>case 1</code> | <code>2</code></td>
+<td>any sub-pattern matches</td>
+</tr>
+<tr>
+<td>Sequence</td>
+<td><code>case [a, b, *rest]:</code></td>
+<td>is a sequence, destructured</td>
+</tr>
+<tr>
+<td>Mapping</td>
+<td><code>case {"k": v}:</code></td>
+<td>is a dict containing key <code>k</code></td>
+</tr>
+<tr>
+<td>Class</td>
+<td><code>case Point(x, y):</code></td>
+<td>is that type, destructured by attribute</td>
+</tr>
+<tr>
+<td>guard</td>
+<td><code>case x if x &gt; 0:</code></td>
+<td>pattern matches <strong>and</strong> condition holds</td>
+</tr>
+<tr>
+<td>Dotted compare</td>
+<td><code>case Color.RED:</code></td>
+<td>compares against the value of <code>Color.RED</code> (not a
+binding)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="under-the-hood-what-it-actually-does">Under the hood: what it
+actually does</h3>
+<p><code>match</code> is compiled by CPython into a sequence of
+<strong>dedicated matching bytecodes</strong>
+(<code>MATCH_SEQUENCE</code>, <code>MATCH_MAPPING</code>,
+<code>MATCH_CLASS</code>, etc.) plus jumps; matching may call
+<code>__len__</code>, <code>isinstance</code>, key/attribute lookups,
+and so on. So it’s <strong>much heavier</strong> than C’s
+<code>switch</code> (a single jump-table instruction) — but in return
+you get expressiveness over <strong>structure</strong>, which
+<code>switch</code> can’t give you. Run
+<code>import dis; dis.dis(describe)</code> to see these
+instructions.</p>
+<blockquote>
+<p>A one-line summary of <code>match</code>: <strong>literals compare by
+value, bare names bind, <code>|</code> is OR,
+<code>[]</code>/<code>{}</code>/<code>Class()</code> destructure by
+structure, <code>if</code> adds a condition, <code>_</code> is the
+catch-all.</strong></p>
+</blockquote>
 <h2 id="summary">Summary</h2>
 <ul>
 <li>The conditions of <code>if</code>/<code>while</code> go through the
