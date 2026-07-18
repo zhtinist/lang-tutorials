@@ -15,7 +15,7 @@ TUTS = [  # (源文件夹, 输出子目录, 展示名)
 ]
 
 def navbar(active):
-    links = ['<a class="home" href="{home}">📚 面向 C/C++ 程序员的语言内幕教程</a>']
+    links = ['<a class="home" href="{home}">📚 面向 C/C++ 程序员的其他语言教程</a>']
     for _, sub, disp in TUTS:
         cls = ' style="color:var(--accent-dark);font-weight:700"' if sub == active else ""
         links.append(f'<a href="{{root}}/{sub}/index.html"{cls}>{disp}</a>')
@@ -70,12 +70,12 @@ def main():
     open(os.path.join(DOCS, "_home.md"), "w", encoding="utf-8").write("placeholder")
     home = f"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>面向 C/C++ 程序员的语言内幕教程</title>
+<title>面向 C/C++ 程序员的其他语言教程</title>
 <link rel="stylesheet" href="assets/style.css"></head><body>
-<div class="topbar"><div class="wrap"><a class="home" href="index.html">📚 面向 C/C++ 程序员的语言内幕教程</a>
+<div class="topbar"><div class="wrap"><a class="home" href="index.html">📚 面向 C/C++ 程序员的其他语言教程</a>
 <a href="python/index.html">Python</a><a href="java/index.html">Java</a><a href="go/index.html">Go</a></div></div>
 <div class="wrap">
-<div class="hero"><h1>面向 C/C++ 程序员的语言内幕教程</h1>
+<div class="hero"><h1>面向 C/C++ 程序员的其他语言教程</h1>
 <p>假设你已精通 C/C++——指针、栈/堆、值传递与引用、手动内存管理。<br>
 这三套教程不重复基础语法,而是讲清 <b>每个操作在底层到底发生了什么</b>,并处处与 C/C++ 对照。</p></div>
 <div class="cards">{cards}</div>
