@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.10" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Internal Implementation of the Collections Framework</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../../assets/style.css" />
+</head>
+<body>
+<div class="topbar"><div class="wrap"><a class="home" href="../index.html">📚 Other Languages for C/C++ Programmers</a>
+<a href="../python/index.html">Python</a>
+<a href="../java/index.html" style="color:var(--accent-dark);font-weight:700">Java</a>
+<a href="../go/index.html">Go</a></div></div><a class="langtoggle" href="#" onclick="switchLang();return false;" title="切换语言 / Switch language"><b>中</b><span>中文</span></a><script>function switchLang(){var p=location.pathname,en=p.indexOf('/en/')>-1,n=en?p.replace('/en/','/zh/'):p.replace('/zh/','/en/');try{localStorage.setItem('lang',en?'zh':'en')}catch(e){}location.href=n;}</script>
+<div class="wrap">
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#internal-implementation-of-the-collections-framework"
+id="toc-internal-implementation-of-the-collections-framework">Internal
+Implementation of the Collections Framework</a>
+<ul>
+<li><a href="#arrays-the-bedrock-of-everything"
+id="toc-arrays-the-bedrock-of-everything">1. Arrays: the bedrock of
+everything</a></li>
+<li><a href="#a-panorama-of-the-collection-hierarchy"
+id="toc-a-panorama-of-the-collection-hierarchy">2. A panorama of the
+Collection hierarchy</a></li>
+<li><a href="#arraylist-vs-linkedlist"
+id="toc-arraylist-vs-linkedlist">3. ArrayList vs LinkedList</a></li>
+<li><a href="#hashmap-the-main-event" id="toc-hashmap-the-main-event">4.
+HashMap: the main event</a></li>
+<li><a href="#linkedhashmap-treemap" id="toc-linkedhashmap-treemap">5.
+LinkedHashMap / TreeMap</a></li>
+<li><a href="#hashset-arraydeque" id="toc-hashset-arraydeque">6. HashSet
+/ ArrayDeque</a></li>
+<li><a href="#generic-collections-and-the-impact-of-type-erasure"
+id="toc-generic-collections-and-the-impact-of-type-erasure">7. Generic
+collections and the impact of type erasure</a></li>
+<li><a href="#iterators-and-fail-fast"
+id="toc-iterators-and-fail-fast">8. Iterators and fail-fast</a></li>
+<li><a href="#quick-reference-java-vs-c-stl-containers"
+id="toc-quick-reference-java-vs-c-stl-containers">9. Quick reference:
+Java vs C++ STL containers</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1 id="internal-implementation-of-the-collections-framework">Internal
+Implementation of the Collections Framework</h1>
+<p>In C++ you use <code>std::vector</code>, <code>std::list</code>,
+<code>std::unordered_map</code>, <code>std::map</code>. Java’s
+collections framework (the Java Collections Framework, JCF) corresponds
+to these one-to-one conceptually, but the <strong>internal
+implementation details, memory layout, growth strategy, and iterator
+semantics</strong> all deserve to be pried apart one by one. The core of
+this chapter: what each container actually lays out on the heap, whether
+it copies values or references, and where the complexity comes from.</p>
+<p>For the basics of “reference vs value,” see <a
+href="03-变量与内存模型.html">“Variables and the Memory Model”</a>; for
+object-header layout, see <a href="04-数据类型.html">“Data Types and
+Memory Layout”</a>.</p>
+<h2 id="arrays-the-bedrock-of-everything">1. Arrays: the bedrock of
+everything</h2>
+<p>A Java array is a <strong>true object</strong>, allocated on the
+heap, unlike C where it’s just a chunk of raw memory + pointer
+arithmetic.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span><span class="op">[]</span> a <span class="op">=</span> <span class="kw">new</span> <span class="dt">int</span><span class="op">[</span><span class="dv">4</span><span class="op">];</span>        <span class="co">// heap allocation: object header + length field + 4 contiguous ints</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span><span class="op">[]</span> s <span class="op">=</span> <span class="kw">new</span> <span class="bu">String</span><span class="op">[</span><span class="dv">3</span><span class="op">];</span>  <span class="co">// on the heap: 3 contiguous &quot;reference slots&quot;, initially null</span></span></code></pre></div>
+<h3 id="memory-layout-hotspot-64-bit-compressed-pointers">Memory layout
+(HotSpot, 64-bit, compressed pointers)</h3>
+<pre><code>int[4] on the heap:
+┌──────────┬──────────┬────────┬────┬────┬────┬────┐
+│ mark word│ klass ptr│ length │ [0]│ [1]│ [2]│ [3]│
+│  8 bytes │  4 bytes │ 4 bytes│int │int │int │int │
+└──────────┴──────────┴────────┴────┴────┴────┴────┘
+       object header: 16 bytes total    elements stored contiguously, cache-friendly</code></pre>
+<p>The key differences from C:</p>
+<table>
+<colgroup>
+<col style="width: 21%" />
+<col style="width: 39%" />
+<col style="width: 39%" />
+</colgroup>
+<thead>
+<tr>
+<th>Feature</th>
+<th>C/C++ array</th>
+<th>Java array</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Nature</td>
+<td>raw memory, <code>a[i]</code> = <code>*(a+i)</code></td>
+<td>heap object, includes a length field</td>
+</tr>
+<tr>
+<td>Length</td>
+<td>compile-time constant or stored separately</td>
+<td><code>a.length</code> carried along</td>
+</tr>
+<tr>
+<td>Bounds checking</td>
+<td>none, out-of-bounds is UB</td>
+<td>checked on every access, throws
+<code>ArrayIndexOutOfBoundsException</code></td>
+</tr>
+<tr>
+<td>Storing objects</td>
+<td>can store object values (contiguous)</td>
+<td>can only store references (<code>Object[]</code> is an array of
+references)</td>
+</tr>
+<tr>
+<td>Covariance</td>
+<td>none</td>
+<td><strong>covariant</strong>: <code>Object[] o = new String[3];</code>
+is legal</td>
+</tr>
+</tbody>
+</table>
+<h3 id="the-pitfall-of-array-covariance">The pitfall of array
+covariance</h3>
+<p>Java’s array covariance means <code>String[]</code> IS-A
+<code>Object[]</code>; this passes at compile time, but every write at
+runtime requires a type check:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="bu">Object</span><span class="op">[]</span> arr <span class="op">=</span> <span class="kw">new</span> <span class="bu">String</span><span class="op">[</span><span class="dv">3</span><span class="op">];</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>arr<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="st">&quot;ok&quot;</span><span class="op">;</span>           <span class="co">// fine</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>arr<span class="op">[</span><span class="dv">1</span><span class="op">]</span> <span class="op">=</span> <span class="bu">Integer</span><span class="op">.</span><span class="fu">valueOf</span><span class="op">(</span><span class="dv">1</span><span class="op">);</span> <span class="co">// compiles! throws ArrayStoreException at runtime</span></span></code></pre></div>
+<p>C++ templates are invariant; <code>vector&lt;string&gt;</code> has
+nothing to do with <code>vector&lt;Object&gt;</code>. This Java design
+is historical baggage (before generics existed, it let
+<code>Arrays.sort(Object[])</code> work), at the cost of a runtime store
+check. Generic collections (below) are, by contrast, invariant.</p>
+<h3 id="bounds-check-cost-and-its-elimination">Bounds-check cost and its
+elimination</h3>
+<p>Every <code>a[i]</code> inserts a
+<code>0 &lt;= i &lt; a.length</code> check. The JIT has <strong>Range
+Check Elimination</strong>: in a loop like
+<code>for (int i=0;i&lt;a.length;i++)</code> that’s provably safe, C2
+hoists the check out of the loop or removes it, bringing performance
+close to C. So there’s a cost at the specification level, but it’s often
+optimized away at the implementation level.</p>
+<h2 id="a-panorama-of-the-collection-hierarchy">2. A panorama of the
+Collection hierarchy</h2>
+<pre><code>                 Iterable
+                     │
+                Collection ───────────────┐
+                 │      │                  │
+               List    Set               Queue
+              /  │  \    │  \              │   \
+     ArrayList  │  Vector│   \          ArrayDeque Deque
+     LinkedList │       HashSet         PriorityQueue
+     (LinkedList is also Queue/Deque) LinkedHashSet
+                          TreeSet (SortedSet)
+
+  Map (not part of Collection, a separate branch)
+   │    │        │
+ HashMap TreeMap LinkedHashMap
+ (SortedMap = TreeMap)</code></pre>
+<p>Key point: <code>Map</code> does <strong>not</strong> extend
+<code>Collection</code>; it’s a parallel branch.
+<code>List</code>/<code>Set</code>/<code>Queue</code> are all
+<code>Collection</code>s.</p>
+<h2 id="arraylist-vs-linkedlist">3. ArrayList vs LinkedList</h2>
+<h3 id="arraylist-a-dynamic-array">ArrayList: a dynamic array</h3>
+<p>Internally it’s just an <code>Object[] elementData</code> + an
+<code>int size</code>:</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co">// simplified JDK source structure</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="kw">transient</span> <span class="bu">Object</span><span class="op">[]</span> elementData<span class="op">;</span> <span class="co">// the array that actually stores elements</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="kw">private</span> <span class="dt">int</span> size<span class="op">;</span>               <span class="co">// logical size (&lt;= elementData.length capacity)</span></span></code></pre></div>
+<p>Memory diagram:</p>
+<pre><code>ArrayList object (heap)     elementData array (heap)
+┌───────────────┐          ┌────┬────┬────┬────┬────┬────┐
+│ elementData ──┼────────▶ │ e0 │ e1 │ e2 │null│null│null│
+│ size = 3      │          └────┴────┴────┴────┴────┴────┘
+└───────────────┘           capacity = 6, size = 3</code></pre>
+<p>Note that what’s stored are <strong>references</strong>
+(<code>Object[]</code>), with the objects themselves scattered across
+the heap — unlike C++ <code>vector&lt;Point&gt;</code>, which inlines
+the Point values contiguously. So iterating a Java
+<code>ArrayList&lt;Point&gt;</code> means “contiguous array → jumping to
+scattered heap locations one by one,” with worse cache locality than a
+value-semantics C++ vector. To store primitives contiguously, you need a
+native <code>int[]</code> or a third-party primitive collection.</p>
+<p><strong>Growth</strong>: default capacity 10; when full it grows by
+<strong>1.5×</strong>
+(<code>newCap = oldCap + (oldCap &gt;&gt; 1)</code>), with
+<code>Arrays.copyOf</code> allocating a new array and copying the
+references (a shallow copy — only the pointer values are copied, not the
+objects themselves).</p>
+<pre><code>size=10 is full, adding the 11th:
+new capacity = 10 + 5 = 15, allocate Object[15], copy 10 references over, old array awaits GC</code></pre>
+<p>Compare with C++ <code>std::vector</code>’s common 2× growth
+(libstdc++ uses 2x, MSVC uses 1.5x). Amortized O(1) append.</p>
+<h3 id="linkedlist-a-doubly-linked-list">LinkedList: a doubly linked
+list</h3>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="kw">private</span> <span class="dt">static</span> <span class="kw">class</span> <span class="bu">Node</span><span class="op">&lt;</span>E<span class="op">&gt;</span> <span class="op">{</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>    E item<span class="op">;</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    <span class="bu">Node</span><span class="op">&lt;</span>E<span class="op">&gt;</span> next<span class="op">;</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>    <span class="bu">Node</span><span class="op">&lt;</span>E<span class="op">&gt;</span> prev<span class="op">;</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Each node is an independent heap object: 16-byte object header + 3
+references (item/next/prev, 4 bytes each with compressed pointers) ≈ 32
+bytes/node, a huge overhead to store one element. Memory diagram:</p>
+<pre><code>first ─▶┌────┬────┬────┐   ┌────┬────┬────┐   ┌────┬────┬────┐◀─ last
+        │prev│item│next┼──▶│prev│item│next┼──▶│prev│item│next│
+        │null│ e0 │  ●─┘   │ ●  │ e1 │ ●─┘   │ ●  │ e2 │null│
+        └────┴────┴────┘◀──┴────┴────┴────┘◀──┴────┴────┴────┘</code></pre>
+<p>Corresponds to C++ <code>std::list</code>. Nodes are scattered across
+the heap, so traversal is cache-unfriendly. <code>get(i)</code> is O(n)
+(walking from whichever end is closer). <strong>In practice
+<code>ArrayList</code> is almost always better</strong>; even for
+frequent head insertion, <code>ArrayDeque</code> is faster than
+<code>LinkedList</code>. <code>LinkedList</code>’s only advantage is
+O(1) removal when you hold a node reference, but the collection API
+generally doesn’t give you the node.</p>
+<h3 id="complexity-comparison">Complexity comparison</h3>
+<table>
+<thead>
+<tr>
+<th>Operation</th>
+<th>ArrayList</th>
+<th>LinkedList</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>get(i)</code></td>
+<td>O(1)</td>
+<td>O(n)</td>
+</tr>
+<tr>
+<td><code>add</code> (tail)</td>
+<td>amortized O(1)</td>
+<td>O(1)</td>
+</tr>
+<tr>
+<td><code>add(i, e)</code> (middle)</td>
+<td>O(n) (shift)</td>
+<td>O(n) (locate) + O(1)</td>
+</tr>
+<tr>
+<td>Head insertion</td>
+<td>O(n)</td>
+<td>O(1)</td>
+</tr>
+<tr>
+<td><code>contains</code></td>
+<td>O(n)</td>
+<td>O(n)</td>
+</tr>
+<tr>
+<td>Memory/element</td>
+<td>1 reference + capacity slack</td>
+<td>~32-byte node</td>
+</tr>
+</tbody>
+</table>
+<h2 id="hashmap-the-main-event">4. HashMap: the main event</h2>
+<p>Corresponds to C++ <code>std::unordered_map</code>, but the
+implementation details differ greatly.</p>
+<h3 id="structure-a-bucket-array-linked-listsred-black-trees">Structure:
+a bucket array + linked lists/red-black trees</h3>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="kw">transient</span> <span class="bu">Node</span><span class="op">&lt;</span>K<span class="op">,</span>V<span class="op">&gt;[]</span> table<span class="op">;</span>  <span class="co">// the bucket array, length always a power of 2</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="dt">static</span> <span class="kw">class</span> <span class="bu">Node</span><span class="op">&lt;</span>K<span class="op">,</span>V<span class="op">&gt;</span> <span class="op">{</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">final</span> <span class="dt">int</span> hash<span class="op">;</span>   <span class="co">// the cached, perturbed hash</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">final</span> K key<span class="op">;</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>    V value<span class="op">;</span></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>    <span class="bu">Node</span><span class="op">&lt;</span>K<span class="op">,</span>V<span class="op">&gt;</span> next<span class="op">;</span>   <span class="co">// linked-list pointer (chaining to resolve collisions)</span></span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Memory diagram (chaining on collision):</p>
+<pre><code>table (Node[16])
+┌────┐
+│ 0  │──▶ null
+│ 1  │──▶ [h,k1,v1] ──▶ [h,k9,v9] ──▶ null   (bucket 1 has two colliding keys)
+│ 2  │──▶ null
+│... │
+│ 5  │──▶ [h,k5,v5] ──▶ null
+└────┘</code></pre>
+<h3 id="the-hash-perturbation-function">The hash-perturbation
+function</h3>
+<p>The bucket index = <code>hash &amp; (n-1)</code> (n being a power of
+2, equivalent to modulo but faster). If you used
+<code>key.hashCode()</code> directly, the high bits wouldn’t participate
+(because <code>&amp; (n-1)</code> keeps only the low bits), so keys
+differing in the high bits but equal in the low bits would collide.
+Perturbation XORs the high 16 bits into the low bits:</p>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="dt">static</span> <span class="dt">final</span> <span class="dt">int</span> <span class="fu">hash</span><span class="op">(</span><span class="bu">Object</span> key<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> h<span class="op">;</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="op">(</span>key <span class="op">==</span> <span class="kw">null</span><span class="op">)</span> <span class="op">?</span> <span class="dv">0</span> <span class="op">:</span> <span class="op">(</span>h <span class="op">=</span> key<span class="op">.</span><span class="fu">hashCode</span><span class="op">())</span> <span class="op">^</span> <span class="op">(</span>h <span class="op">&gt;&gt;&gt;</span> <span class="dv">16</span><span class="op">);</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="treeify-when-collisions-intensify">treeify when collisions
+intensify</h3>
+<p>When a bucket’s chain length is <strong>≥ 8</strong> and the
+<strong>table length is ≥ 64</strong>, the chain is converted into a
+<strong>red-black tree</strong>, dropping that bucket’s worst-case
+lookup from O(n) to O(log n) and guarding against hash-collision attacks
+(DoS). When the tree’s node count falls back to <strong>≤ 6</strong>, it
+degrades back into a chain (the 6/8 hysteresis interval avoids frequent
+conversion).</p>
+<pre><code>chain length &gt;= 8 and table.length &gt;= 64:
+bucket ──▶ chain ─treeify─▶ red-black tree (TreeNode)
+if the table hasn&#39;t reached 64 yet, prefer resizing over treeifying</code></pre>
+<h3 id="load-factor-and-resize-rehashing">Load factor and resize
+rehashing</h3>
+<ul>
+<li><strong>Load factor 0.75</strong>: when
+<code>size &gt; capacity * 0.75</code>, resize to
+<strong>double</strong>. 0.75 is a space/time trade-off (per
+Poisson-distribution analysis, balancing collision probability against
+memory waste).</li>
+<li><strong>Resize rehashing</strong>: allocate a bucket array 2× larger
+and rehash every element. Because the capacity is a power of 2 and
+doubles, an element’s new position is one of only two:
+<code>original position</code> or
+<code>original position + old capacity</code>. JDK 8 exploits this
+property to avoid recomputing the hash, looking only at whether that one
+bit <code>hash &amp; oldCap</code> is 0 or 1, splitting the old chain
+into two chains (lo/hi) placed at the two new-table positions. O(n) but
+with a small constant.</li>
+</ul>
+<pre><code>old table.length=16, resizing to 32:
+a bucket&#39;s chain is split by (hash &amp; 16) into two → bucket j and bucket j+16</code></pre>
+<h3 id="the-key-contract-equalshashcode">The key contract:
+equals/hashCode</h3>
+<p>A <code>HashMap</code> locates in two steps: first find the bucket by
+hash, then compare within the bucket one by one using
+<code>equals</code>. So a custom key <strong>must</strong> correctly
+override both <code>equals</code> and <code>hashCode</code>; otherwise
+equal objects scattered into different buckets can never be found again.
+See <a href="08-面向对象与类型系统.html">the equals/hashCode contract in
+“Object Orientation and the Type System”</a>. Same in C++:
+<code>unordered_map</code> needs a <code>std::hash</code> specialization
++ <code>operator==</code>.</p>
+<h3 id="complexity">Complexity</h3>
+<table>
+<thead>
+<tr>
+<th>Operation</th>
+<th>Average</th>
+<th>Worst (after treeify)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>get</code>/<code>put</code>/<code>remove</code></td>
+<td>O(1)</td>
+<td>O(log n)</td>
+</tr>
+<tr>
+<td>Traversal</td>
+<td>O(capacity + size)</td>
+<td>same</td>
+</tr>
+</tbody>
+</table>
+<p>Note: <code>HashMap</code> is <strong>not thread-safe</strong>; under
+concurrency, resizing in JDK 7 could form a cycle and loop forever (JDK
+8 fixed this but data can still be lost). For concurrency, use
+<code>ConcurrentHashMap</code>, see <a
+href="10-并发模型.html">“Concurrency Model”</a>.</p>
+<h2 id="linkedhashmap-treemap">5. LinkedHashMap / TreeMap</h2>
+<h3 id="linkedhashmap">LinkedHashMap</h3>
+<p>On top of <code>HashMap</code>’s Node it adds
+<code>before</code>/<code>after</code> doubly-linked pointers,
+maintaining <strong>insertion order</strong> (or access order with
+<code>accessOrder=true</code>, which can implement an LRU cache). Hash
+lookups are still O(1); it additionally maintains a linked list
+threading through all nodes.</p>
+<pre><code>HashMap&#39;s bucket structure + a doubly-linked list threading through all nodes (recording order)
+head ──▶ node ──▶ node ──▶ node ──▶ tail</code></pre>
+<h3 id="treemap">TreeMap</h3>
+<p>Based on a <strong>red-black tree</strong> (a self-balancing BST),
+corresponding to C++ <code>std::map</code>. Sorted by key (natural order
+or a <code>Comparator</code>). All operations are O(log n), providing
+ordered views like
+<code>firstKey</code>/<code>lastKey</code>/<code>floorKey</code>/<code>ceilingKey</code>/<code>subMap</code>.
+Keys must be comparable (<code>Comparable</code>, or pass a
+<code>Comparator</code>), see <a href="11-标准库算法.html">“Standard
+Library Algorithms”</a>.</p>
+<h2 id="hashset-arraydeque">6. HashSet / ArrayDeque</h2>
+<ul>
+<li><strong>HashSet</strong>: internally just a <code>HashMap</code>,
+with the element as the key and the value being a shared dummy
+<code>Object</code>. So everything about <code>HashSet</code> equals the
+keySet of <code>HashMap</code>. Corresponds to C++
+<code>unordered_set</code>.</li>
+<li><strong>LinkedHashSet</strong>: internally a
+<code>LinkedHashMap</code>, preserving insertion order.</li>
+<li><strong>TreeSet</strong>: internally a <code>TreeMap</code>, sorted,
+corresponding to <code>std::set</code>.</li>
+<li><strong>ArrayDeque</strong>: a double-ended queue implemented with a
+<strong>circular array</strong>; the two indices
+<code>head</code>/<code>tail</code> move around a ring buffer, doubling
+on growth. As a stack or a queue it’s faster than both
+<code>Stack</code> (obsolete, extends <code>Vector</code>, carries
+synchronization) and <code>LinkedList</code>. <strong>The preferred
+stack/queue implementation</strong>. It disallows null (null is used to
+mark an empty slot).</li>
+</ul>
+<pre><code>ArrayDeque circular array:
+┌───┬───┬───┬───┬───┬───┐
+│ e │ e │   │   │ e │ e │   head=4, tail=2 (wraps around)
+└───┴───┴───┴───┴───┴───┘</code></pre>
+<h2 id="generic-collections-and-the-impact-of-type-erasure">7. Generic
+collections and the impact of type erasure</h2>
+<p><code>ArrayList&lt;String&gt;</code> is just <code>ArrayList</code>
+at runtime, with an <code>Object[]</code> inside; generics are only
+checked at compile time, with casts inserted automatically. This is why
+you can’t <code>new T[]</code>, and why a collection always stores
+references (primitives get auto-boxed). The erasure mechanism is
+detailed in <a href="08-面向对象与类型系统.html">“Generics and Type
+Erasure”</a>.</p>
+<p>Consequence: each element of an <code>ArrayList&lt;Integer&gt;</code>
+is an <code>Integer</code> object on the heap + a reference in the
+array, so the memory and boxing/unboxing overhead is far greater than
+C++ <code>vector&lt;int&gt;</code>. In performance-sensitive code, use
+native arrays or third-party primitive collections (Eclipse Collections,
+fastutil).</p>
+<h2 id="iterators-and-fail-fast">8. Iterators and fail-fast</h2>
+<p>A collection internally maintains a <code>modCount</code> (a count of
+structural modifications). When an iterator is created it records
+<code>expectedModCount</code>, and validates it on each
+<code>next()</code>; if the collection is modified through a
+non-iterator path in the meantime, it throws
+<code>ConcurrentModificationException</code>.</p>
+<div class="sourceCode" id="cb17"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="bu">List</span><span class="op">&lt;</span><span class="bu">Integer</span><span class="op">&gt;</span> list <span class="op">=</span> <span class="kw">new</span> <span class="bu">ArrayList</span><span class="op">&lt;&gt;(</span><span class="bu">List</span><span class="op">.</span><span class="fu">of</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">));</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="bu">Integer</span> x <span class="op">:</span> list<span class="op">)</span> <span class="op">{</span>      <span class="co">// the enhanced for uses an Iterator under the hood</span></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>x <span class="op">==</span> <span class="dv">2</span><span class="op">)</span> list<span class="op">.</span><span class="fu">remove</span><span class="op">(</span>x<span class="op">);</span> <span class="co">// structural modification → modCount changes → the next next() throws</span></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a><span class="co">// correct approach: use iterator.remove() or list.removeIf(x -&gt; x == 2)</span></span></code></pre></div>
+<p>fail-fast is <strong>best-effort</strong> error detection (not
+guaranteed to trigger), not concurrency protection; for real concurrency
+use <code>CopyOnWriteArrayList</code>/<code>ConcurrentHashMap</code>
+(weakly consistent iterators that don’t throw this exception). The C++
+STL counterpart is “iterator invalidation” — but the STL leaves it UB,
+whereas Java proactively throws to help you catch it early.</p>
+<h2 id="quick-reference-java-vs-c-stl-containers">9. Quick reference:
+Java vs C++ STL containers</h2>
+<table style="width:100%;">
+<colgroup>
+<col style="width: 28%" />
+<col style="width: 42%" />
+<col style="width: 28%" />
+</colgroup>
+<thead>
+<tr>
+<th>Java</th>
+<th>C++ STL</th>
+<th>Underlying</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ArrayList</code></td>
+<td><code>vector</code></td>
+<td>dynamic array (Java stores references, C++ stores values)</td>
+</tr>
+<tr>
+<td><code>LinkedList</code></td>
+<td><code>list</code></td>
+<td>doubly linked list</td>
+</tr>
+<tr>
+<td><code>ArrayDeque</code></td>
+<td><code>deque</code></td>
+<td>circular array (C++ deque is a segmented array)</td>
+</tr>
+<tr>
+<td><code>HashMap</code></td>
+<td><code>unordered_map</code></td>
+<td>chained hashing (Java treeifies)</td>
+</tr>
+<tr>
+<td><code>TreeMap</code></td>
+<td><code>map</code></td>
+<td>red-black tree</td>
+</tr>
+<tr>
+<td><code>HashSet</code></td>
+<td><code>unordered_set</code></td>
+<td>hashing</td>
+</tr>
+<tr>
+<td><code>TreeSet</code></td>
+<td><code>set</code></td>
+<td>red-black tree</td>
+</tr>
+<tr>
+<td><code>PriorityQueue</code></td>
+<td><code>priority_queue</code></td>
+<td>binary heap</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<p><a href="06-函数与调用栈.html">← Prev: Functions and the Call
+Stack</a> · <a href="index.html">Index</a> · <a
+href="08-面向对象与类型系统.html">Next: Object Orientation and the Type
+System</a> →</p>
+</div>
+</body>
+</html>

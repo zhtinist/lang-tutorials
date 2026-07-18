@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.10" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>The Internal Implementation of Composite Data
+Structures</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../../assets/style.css" />
+</head>
+<body>
+<div class="topbar"><div class="wrap"><a class="home" href="../index.html">📚 Other Languages for C/C++ Programmers</a>
+<a href="../python/index.html">Python</a>
+<a href="../java/index.html">Java</a>
+<a href="../go/index.html" style="color:var(--accent-dark);font-weight:700">Go</a></div></div><a class="langtoggle" href="#" onclick="switchLang();return false;" title="切换语言 / Switch language"><b>中</b><span>中文</span></a><script>function switchLang(){var p=location.pathname,en=p.indexOf('/en/')>-1,n=en?p.replace('/en/','/zh/'):p.replace('/zh/','/en/');try{localStorage.setItem('lang',en?'zh':'en')}catch(e){}location.href=n;}</script>
+<div class="wrap">
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#the-internal-implementation-of-composite-data-structures"
+id="toc-the-internal-implementation-of-composite-data-structures">The
+Internal Implementation of Composite Data Structures</a>
+<ul>
+<li><a href="#i.-array-a-genuine-value-type"
+id="toc-i.-array-a-genuine-value-type">I. array: a genuine value
+type</a></li>
+<li><a href="#ii.-slice-a-three-tuple-header"
+id="toc-ii.-slice-a-three-tuple-header">II. slice: a three-tuple
+header</a></li>
+<li><a href="#iii.-map-a-hash-table" id="toc-iii.-map-a-hash-table">III.
+map: a hash table</a></li>
+<li><a href="#iv.-channel-a-locked-ring-buffer"
+id="toc-iv.-channel-a-locked-ring-buffer">IV. channel: a locked ring
+buffer</a></li>
+<li><a href="#v.-a-comparison-of-the-three"
+id="toc-v.-a-comparison-of-the-three">V. A comparison of the
+three</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1 id="the-internal-implementation-of-composite-data-structures">The
+Internal Implementation of Composite Data Structures</h1>
+<p>This chapter is the heart of the book. slice, map, and channel are
+the three siblings in Go that “look like reference types.” Understanding
+them comes down to a single sentence: <strong>each is itself a very
+small, value-copied “header” struct, and the header hides a pointer to
+the real data on the heap.</strong> (<a
+href="03-变量与内存模型.html">Recall the value-copy discussion in
+“Variables and the Memory Model”</a>)</p>
+<p>Once you understand the header’s fields, you can predict exactly what
+each assignment, argument pass, and <code>append</code> actually copies,
+whether it allocates, and whether it produces aliasing.</p>
+<h2 id="i.-array-a-genuine-value-type">I. array: a genuine value
+type</h2>
+<p>Let’s first establish a point of comparison. Go’s array
+<code>[N]T</code> has <strong>fixed length and value semantics</strong>,
+and the length is part of the type—<code>[3]int</code> and
+<code>[4]int</code> are different types.</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> a <span class="op">[</span><span class="dv">3</span><span class="op">]</span><span class="dt">int</span>          <span class="co">// 24 bytes, entirely in the current stack frame, zero value {0,0,0}</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>b <span class="op">:=</span> a                <span class="co">// copies all 24 bytes byte by byte (same as C struct assignment)</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>b<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="dv">100</span>            <span class="co">// does not affect a</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Println<span class="op">(</span>a<span class="op">,</span> b<span class="op">)</span>     <span class="co">// [0 0 0] [100 0 0]</span></span></code></pre></div>
+<p>This matches C’s <code>int a[3]; int b[3]; b = a;</code> (actually C
+doesn’t allow direct array assignment, you’d need
+<code>memcpy</code>)—<strong>it copies the whole block of
+memory</strong>. Argument passing also copies the whole block: passing a
+<code>[1024]int</code> into a function copies 8KB. So almost nobody in
+Go passes arrays directly; they all pass slices.</p>
+<pre><code>array [3]int in memory:
+┌────────┬────────┬────────┐
+│ int[0] │ int[1] │ int[2] │   contiguous 24 bytes, which is the data itself
+└────────┴────────┴────────┘</code></pre>
+<h2 id="ii.-slice-a-three-tuple-header">II. slice: a three-tuple
+header</h2>
+<p>The slice is the “dynamic array” you use daily. Its runtime
+representation is <code>runtime.slice</code> (source
+<code>runtime/slice.go</code>):</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> slice <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    array unsafe<span class="op">.</span>Pointer <span class="co">// points to the first element of the underlying array</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="bu">len</span>   <span class="dt">int</span>            <span class="co">// current length</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    <span class="bu">cap</span>   <span class="dt">int</span>            <span class="co">// capacity from array onward</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Three machine words (24 bytes on 64-bit). <strong>A slice variable
+itself is only these 24 bytes</strong>, and the data is elsewhere.</p>
+<pre><code>s := []int{10, 20, 30}
+
+slice header (on the stack, 24 bytes)      underlying array (usually on the heap)
+┌───────────┐                      ┌────┬────┬────┐
+│ array ────┼─────────────────────▶│ 10 │ 20 │ 30 │
+│ len = 3   │                      └────┴────┴────┘
+│ cap = 3   │
+└───────────┘</code></pre>
+<h3
+id="assignment-argument-passing-copy-the-header-not-the-data">Assignment
+/ argument passing: copy the header, not the data</h3>
+<div class="sourceCode" id="cb5"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>s <span class="op">:=</span> <span class="op">[]</span><span class="dt">int</span><span class="op">{</span><span class="dv">10</span><span class="op">,</span> <span class="dv">20</span><span class="op">,</span> <span class="dv">30</span><span class="op">}</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>t <span class="op">:=</span> s          <span class="co">// copies the 24-byte header; t.array and s.array point to the same array!</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>t<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="dv">999</span>      <span class="co">// modifies the shared underlying array</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Println<span class="op">(</span>s<span class="op">)</span>  <span class="co">// [999 20 30] — s changed too (aliasing)</span></span></code></pre></div>
+<p>This is exactly where C++ programmers stumble most:
+<code>t := s</code> looks like a <code>std::vector</code> deep copy, but
+it’s actually more like a <code>std::span</code> / raw-pointer
+copy—sharing the underlying buffer. Argument passing is the same: pass a
+slice into a function, and the function’s modifications to elements are
+visible to the caller (but modifications to the header itself—such as a
+reallocation triggered by <code>append</code>—are not visible, see
+below).</p>
+<h3 id="slicing-from-an-arrayslice-slowhigh">Slicing from an
+array/slice: <code>s[low:high]</code></h3>
+<p>The slice operation <strong>does not allocate and does not copy
+data</strong>; it only makes a new header pointing at a segment of the
+original array:</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>a <span class="op">:=</span> <span class="op">[</span><span class="dv">5</span><span class="op">]</span><span class="dt">int</span><span class="op">{</span><span class="dv">0</span><span class="op">,</span> <span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">,</span> <span class="dv">4</span><span class="op">}</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>s <span class="op">:=</span> a<span class="op">[</span><span class="dv">1</span><span class="op">:</span><span class="dv">3</span><span class="op">]</span>     <span class="co">// len=2, cap=4 (from index 1 to the end of the array), array points to &amp;a[1]</span></span></code></pre></div>
+<pre><code>a: ┌───┬───┬───┬───┬───┐
+   │ 0 │ 1 │ 2 │ 3 │ 4 │
+   └───┴───┴───┴───┴───┘
+         ▲
+         │ s.array
+   s = {array:&amp;a[1], len:2, cap:4}   ← cap counts all the way to the end of the underlying array</code></pre>
+<p><code>len</code> is the range you can index, <code>cap</code> is the
+range you can <code>append</code> into without reallocating. Indexing
+<code>s[i]</code> out of bounds (<code>i &gt;= len</code>) panics; this
+is Go’s bounds checking, unlike C’s “freely read garbage out of bounds”
+(the compiler elides the check when it can prove safety).</p>
+<h3 id="append-and-the-growth-strategy">append and the growth
+strategy</h3>
+<p><code>append</code> is the key to understanding slices. The
+logic:</p>
+<ol type="1">
+<li>If <code>len &lt; cap</code>: write directly to
+<code>array[len]</code>, <code>len++</code>, <strong>no allocation, no
+copy</strong>, and the returned new header shares the underlying array
+with the old one.</li>
+<li>If <code>len == cap</code>: allocate a larger new array,
+<code>memmove</code> the old data over, point the new header at the new
+array, <strong>decoupling from the old slice</strong>.</li>
+</ol>
+<div class="sourceCode" id="cb8"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>s <span class="op">:=</span> <span class="bu">make</span><span class="op">([]</span><span class="dt">int</span><span class="op">,</span> <span class="dv">0</span><span class="op">,</span> <span class="dv">2</span><span class="op">)</span> <span class="co">// len=0 cap=2</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>s <span class="op">=</span> <span class="bu">append</span><span class="op">(</span>s<span class="op">,</span> <span class="dv">1</span><span class="op">)</span>       <span class="co">// len=1, written in place, no allocation</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>s <span class="op">=</span> <span class="bu">append</span><span class="op">(</span>s<span class="op">,</span> <span class="dv">2</span><span class="op">)</span>       <span class="co">// len=2, written in place, cap full</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>s <span class="op">=</span> <span class="bu">append</span><span class="op">(</span>s<span class="op">,</span> <span class="dv">3</span><span class="op">)</span>       <span class="co">// len=3, cap insufficient → allocate new array (usually cap becomes 4), copy</span></span></code></pre></div>
+<p><strong>Growth multiplier (the gc implementation,
+<code>runtime.growslice</code>, tweaked slightly across versions, defer
+to the runtime)</strong>:</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 66%" />
+</colgroup>
+<thead>
+<tr>
+<th>Old cap</th>
+<th>New cap growth strategy</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Requirement exceeds 2× old cap</td>
+<td>Use the required value directly</td>
+</tr>
+<tr>
+<td>Old cap &lt; 256</td>
+<td>Roughly double (2×)</td>
+</tr>
+<tr>
+<td>Old cap ≥ 256</td>
+<td>Roughly 1.25×, smoothly approaching 1.25 (to avoid wasting memory on
+large slices)</td>
+</tr>
+</tbody>
+</table>
+<p>Afterward it also aligns memory by element size and rounds up to a
+size class (see <a href="09-错误处理与资源管理.html">Chapter 09,
+mspan/size class</a>). So the printed <code>cap</code> may not be
+exactly double.</p>
+<blockquote>
+<p>Rule of thumb: if you can estimate the size, use
+<code>make([]T, 0, n)</code> to reserve capacity and avoid repeated
+allocation + copying—equivalent to C++’s
+<code>vector::reserve</code>.</p>
+</blockquote>
+<h3 id="the-append-aliasing-trap-the-most-classic-pitfall">The append
+aliasing trap (the most classic pitfall)</h3>
+<p>Because “if cap suffices, write in place; only reallocate when it
+doesn’t,” the same underlying array may be shared by multiple slices,
+and <code>append</code> may silently modify someone else’s data:</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>a <span class="op">:=</span> <span class="op">[]</span><span class="dt">int</span><span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">,</span> <span class="dv">4</span><span class="op">,</span> <span class="dv">5</span><span class="op">}</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>s <span class="op">:=</span> a<span class="op">[</span><span class="dv">0</span><span class="op">:</span><span class="dv">2</span><span class="op">]</span>              <span class="co">// len=2 cap=5, shares the underlying array with a</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>s <span class="op">=</span> <span class="bu">append</span><span class="op">(</span>s<span class="op">,</span> <span class="dv">99</span><span class="op">)</span>        <span class="co">// cap is sufficient → write a[2] in place!</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Println<span class="op">(</span>a<span class="op">)</span>           <span class="co">// [1 2 99 4 5] — a was modified!</span></span></code></pre></div>
+<pre><code>before append:            after append(s, 99) (cap sufficient, in place):
+a = [1 2 3 4 5]            a = [1 2 99 4 5]   ← the 3rd element is overwritten
+s = a[0:2] ────┐          s = {len:3, cap:5}
+               │              s[2] wrote into a[2]&#39;s position</code></pre>
+<p>Conversely, if reallocation happened, the two decouple and subsequent
+modifications no longer affect each other—<strong>the behavior of the
+same piece of code depends on whether cap is sufficient at
+runtime</strong>, which is a breeding ground for bugs. Defenses:</p>
+<ul>
+<li>Use a <strong>three-index slice</strong> to cap the capacity:
+<code>s := a[0:2:2]</code> (<code>s[low:high:max]</code>,
+<code>cap = max-low</code>). Here cap==len, so the next append must
+allocate a new array and won’t touch <code>a</code>.</li>
+<li>For a truly independent copy, use <code>copy</code>:</li>
+</ul>
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>dst <span class="op">:=</span> <span class="bu">make</span><span class="op">([]</span><span class="dt">int</span><span class="op">,</span> <span class="bu">len</span><span class="op">(</span>src<span class="op">))</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="bu">copy</span><span class="op">(</span>dst<span class="op">,</span> src<span class="op">)</span>   <span class="co">// element-by-element copy, returns the number copied min(len(dst),len(src))</span></span></code></pre></div>
+<p><code>copy</code> is <code>memmove</code> underneath and allows the
+source and destination to overlap.</p>
+<h2 id="iii.-map-a-hash-table">III. map: a hash table</h2>
+<blockquote>
+<p><strong>Version note</strong>: The
+<code>hmap</code>/<code>bmap</code> described below (buckets + overflow
+buckets, load factor 6.5, incremental <code>evacuate</code> migration)
+is the <strong>classic implementation of Go ≤ 1.23</strong>.
+<strong>Since Go 1.24 the built-in map switched to a Swiss Tables
+design</strong> (derived from Abseil’s open addressing + grouped control
+words/SIMD probing, <code>internal/runtime/maps</code>), so the internal
+layout and details like “overflow buckets” and “6.5 load factor” have
+changed and it’s faster on average; but <strong>the language-level
+semantics (unordered, not concurrency-safe, <code>&amp;m[k]</code> not
+addressable, etc.) are entirely unchanged</strong>. We still cover the
+classic implementation here because it better illustrates the general
+principle of “hash table + buckets/chaining”—just read it as “one”
+implementation.</p>
+</blockquote>
+<p>The runtime type of a map is <code>*hmap</code>
+(<code>runtime/map.go</code>, Go ≤ 1.23)—note that <strong>a map
+variable is itself a pointer</strong> (one word), which is one
+difference from a slice header.</p>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> hmap <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>    count     <span class="dt">int</span>    <span class="co">// number of elements, len(m) reads this directly O(1)</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>    flags     <span class="dt">uint8</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>    B         <span class="dt">uint8</span>  <span class="co">// number of buckets = 2^B</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>    noverflow <span class="dt">uint16</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>    hash0     <span class="dt">uint32</span> <span class="co">// hash seed (random per map, to defend against hash-flooding attacks)</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>    buckets   unsafe<span class="op">.</span>Pointer <span class="co">// points to the array of 2^B bmap buckets</span></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>    oldbuckets unsafe<span class="op">.</span>Pointer <span class="co">// the old bucket array during growth</span></span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>    nevacuate <span class="dt">uintptr</span></span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>    extra     <span class="op">*</span>mapextra</span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Bucket <code>bmap</code>: each bucket has a fixed <strong>8
+slots</strong>.</p>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> bmap <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>    tophash <span class="op">[</span><span class="dv">8</span><span class="op">]</span><span class="dt">uint8</span> <span class="co">// the high 8 bits of each key&#39;s hash value (for fast comparison)</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    <span class="co">// the compiler appends afterward: keys[8], values[8], overflow *bmap</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>The memory layout is
+<code>8 tophash │ 8 keys │ 8 values │ overflow-bucket pointer</code>.
+Note that <strong>keys and values are stored contiguously in separate
+groups</strong> (not interleaved as kv/kv/kv), which avoids padding
+waste caused by alignment (e.g., interleaving
+<code>map[int8]int64</code> would waste a lot).</p>
+<pre><code>hmap ──▶ buckets: [ bucket0 | bucket1 | ... | bucket(2^B-1) ]
+                       │
+                       ▼
+  one bmap bucket:
+  ┌──────────────────────┐
+  │ tophash[0..7]        │  high 8 bits of each slot&#39;s hash (also used as empty/evacuated markers)
+  ├──────────────────────┤
+  │ key0 key1 ... key7   │  8 keys contiguous
+  ├──────────────────────┤
+  │ val0 val1 ... val7   │  8 values contiguous
+  ├──────────────────────┤
+  │ overflow ────────────┼──▶ next overflow bmap (chained)
+  └──────────────────────┘</code></pre>
+<h3 id="the-lookup-process">The lookup process</h3>
+<p><code>v := m[k]</code>:</p>
+<ol type="1">
+<li><code>hash = hasher(k, hash0)</code>.</li>
+<li>Select the bucket by the low B bits:
+<code>bucket = hash &amp; (2^B - 1)</code>.</li>
+<li>Use the high 8 bits <code>tophash</code> to quickly filter across
+the bucket’s 8 slots (compare just 1 byte, skipping most non-matches
+directly), and on a hit do a full key comparison.</li>
+<li>If not in the bucket, follow the <code>overflow</code> chain to the
+overflow bucket.</li>
+</ol>
+<p>Average O(1), worst case (many hash collisions) degrades.</p>
+<h3 id="incremental-growth-rehash">Incremental growth (rehash)</h3>
+<p>When the load factor gets too high (element count / bucket count &gt;
+6.5) or there are too many overflow buckets, growth is triggered:
+allocate a 2× new bucket array and move <code>buckets</code> to
+<code>oldbuckets</code>. <strong>Key point: it does not migrate
+everything at once</strong>, but on each subsequent write
+(<code>insert</code>/<code>delete</code>) it opportunistically migrates
+1~2 old buckets (<code>evacuate</code>), amortizing away the pause of a
+one-shot rehash on a large map. Lookups consult both the new and old
+buckets. This differs from the one-shot rehash of C++’s
+<code>std::unordered_map</code>.</p>
+<h3 id="a-few-hard-constraints-on-maps-contrary-to-cc-intuition">A few
+hard constraints on maps (contrary to C/C++ intuition)</h3>
+<p><strong>1. Iteration order is random, deliberately.</strong> Each
+<code>for k, v := range m</code> randomizes the starting bucket and
+starting slot. This is to prevent programs from depending on order
+(which would break when the implementation changes). To get order you
+must sort yourself:</p>
+<div class="sourceCode" id="cb15"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>keys <span class="op">:=</span> <span class="bu">make</span><span class="op">([]</span><span class="dt">string</span><span class="op">,</span> <span class="dv">0</span><span class="op">,</span> <span class="bu">len</span><span class="op">(</span>m<span class="op">))</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> k <span class="op">:=</span> <span class="kw">range</span> m <span class="op">{</span></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>    keys <span class="op">=</span> <span class="bu">append</span><span class="op">(</span>keys<span class="op">,</span> k<span class="op">)</span></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>sort<span class="op">.</span>Strings<span class="op">(</span>keys<span class="op">)</span> <span class="co">// see Chapter 11</span></span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> _<span class="op">,</span> k <span class="op">:=</span> <span class="kw">range</span> keys <span class="op">{</span></span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>k<span class="op">,</span> m<span class="op">[</span>k<span class="op">])</span></span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p><strong>2. Elements are not addressable.</strong>
+<code>&amp;m[k]</code> is a compile error. Because growth relocates the
+value’s memory, the pointer would become invalid. So you cannot modify a
+struct field in place:</p>
+<div class="sourceCode" id="cb16"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>m <span class="op">:=</span> <span class="kw">map</span><span class="op">[</span><span class="dt">string</span><span class="op">]</span>Point<span class="op">{</span><span class="st">&quot;a&quot;</span><span class="op">:</span> <span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">}}</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="co">// m[&quot;a&quot;].X = 10        // compile error: cannot assign to struct field</span></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>p <span class="op">:=</span> m<span class="op">[</span><span class="st">&quot;a&quot;</span><span class="op">];</span> p<span class="op">.</span>X <span class="op">=</span> <span class="dv">10</span><span class="op">;</span> m<span class="op">[</span><span class="st">&quot;a&quot;</span><span class="op">]</span> <span class="op">=</span> p   <span class="co">// read out → modify → write back</span></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a><span class="co">// or store a pointer: map[string]*Point, then m[&quot;a&quot;].X = 10 works</span></span></code></pre></div>
+<p><strong>3. Reading a missing key returns the zero value +
+ok.</strong> The comma-ok idiom:</p>
+<div class="sourceCode" id="cb17"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>v<span class="op">,</span> ok <span class="op">:=</span> m<span class="op">[</span>k<span class="op">]</span> <span class="co">// ok is false means it doesn&#39;t exist, v is the zero value</span></span></code></pre></div>
+<p><strong>4. Not concurrency-safe.</strong> A concurrent read-write
+(even one read and one write) is detected by the runtime and crashes
+directly with
+<code>fatal error: concurrent map read and map write</code> (not a
+panic, not recoverable). You must add locking yourself, or use
+<code>sync.Map</code> (for read-heavy, write-light scenarios, see <a
+href="10-并发模型.html">Chapter 10</a>).</p>
+<p><strong>5. A nil map is readable but not writable.</strong>
+<code>var m map[string]int</code> is nil; reading returns the zero
+value, writing panics. You must initialize with <code>make</code> or a
+literal.</p>
+<h2 id="iv.-channel-a-locked-ring-buffer">IV. channel: a locked ring
+buffer</h2>
+<p>The channel is Go’s core concurrency primitive, backed by
+<code>*hchan</code> (<code>runtime/chan.go</code>); a channel variable
+is also a pointer.</p>
+<div class="sourceCode" id="cb18"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> hchan <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>    qcount   <span class="dt">uint</span>           <span class="co">// current number of elements in the buffer</span></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>    dataqsiz <span class="dt">uint</span>           <span class="co">// buffer capacity (the second argument to make)</span></span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>    buf      unsafe<span class="op">.</span>Pointer <span class="co">// points to the ring buffer array (when buffered)</span></span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>    elemsize <span class="dt">uint16</span></span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>    closed   <span class="dt">uint32</span></span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>    sendx    <span class="dt">uint</span>           <span class="co">// write index of the ring buffer</span></span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a>    recvx    <span class="dt">uint</span>           <span class="co">// read index of the ring buffer</span></span>
+<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a>    recvq    waitq          <span class="co">// queue of goroutines waiting to receive</span></span>
+<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a>    sendq    waitq          <span class="co">// queue of goroutines waiting to send</span></span>
+<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a>    lock     mutex          <span class="co">// protects all the fields above</span></span>
+<span id="cb18-12"><a href="#cb18-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<pre><code>buffered channel  make(chan int, 4):
+        ┌─────────────────────────────┐
+buf ──▶ │  slot0 slot1 slot2 slot3    │  ring buffer
+        └─────────────────────────────┘
+          ▲recvx        ▲sendx
+  lock  ─ a single mutex, contended on every send/receive
+  sendq ─ [G3, G7 ...]  goroutines blocked on send
+  recvq ─ [ ]           goroutines blocked on receive</code></pre>
+<h3 id="the-blocking-semantics-of-sendreceive">The blocking semantics of
+send/receive</h3>
+<p><strong>Unbuffered channel (<code>make(chan int)</code>,
+dataqsiz=0)</strong>: send and receive must “rendezvous.” The sender
+blocks until a receiver arrives, and the data is <strong>copied directly
+from the sender goroutine to the receiver goroutine</strong> (not
+through a buffer), after which both are woken. This is the strongest
+synchronization: the send/receive is a synchronization point.</p>
+<p><strong>Buffered channel
+(<code>make(chan int, n)</code>)</strong>:</p>
+<table>
+<colgroup>
+<col style="width: 15%" />
+<col style="width: 35%" />
+<col style="width: 48%" />
+</colgroup>
+<thead>
+<tr>
+<th>Operation</th>
+<th>Buffer not full / not empty</th>
+<th>Buffer full (send) / empty (receive)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Send <code>ch &lt;- v</code></td>
+<td>Copy into buf[sendx], sendx++, return immediately</td>
+<td>The current goroutine enters sendq, blocks and is suspended</td>
+</tr>
+<tr>
+<td>Receive <code>&lt;-ch</code></td>
+<td>Copy out of buf[recvx], recvx++, return immediately</td>
+<td>The current goroutine enters recvq, blocks and is suspended</td>
+</tr>
+</tbody>
+</table>
+<p>“Blocks and is suspended” is not busy-waiting: the goroutine is
+removed by the scheduler, and the M goes off to run another G (see <a
+href="10-并发模型.html">Chapter 10, GMP</a>). When the peer operation
+happens, a goroutine in the wait queue is woken. This is the foundation
+of goroutines’ cheap concurrency—blocking a goroutine does not block an
+OS thread.</p>
+<p>One optimization: if, when sending, there is already a waiting
+receiver in recvq, the data <strong>skips the buffer and is copied
+directly to that receiver</strong> and wakes it, saving one copy.</p>
+<h3 id="close-and-nil">close and nil</h3>
+<div class="sourceCode" id="cb20"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="bu">close</span><span class="op">(</span>ch<span class="op">)</span>          <span class="co">// close; sending afterward panics; receiving returns the zero value immediately</span></span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>v<span class="op">,</span> ok <span class="op">:=</span> <span class="op">&lt;-</span>ch      <span class="co">// ok==false means the channel is closed and the buffer is empty</span></span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> v <span class="op">:=</span> <span class="kw">range</span> ch  <span class="co">// keep receiving until the channel is closed</span></span></code></pre></div>
+<p>Sending to or receiving from a nil channel <strong>blocks
+forever</strong> (commonly used to dynamically “turn off a branch” in a
+<code>select</code>).</p>
+<p>A channel transfers <strong>a copy of the element</strong> (value
+semantics): <code>ch &lt;- x</code> copies <code>x</code> into the
+buffer, <code>&lt;-ch</code> copies it out. If the element is a large
+struct, the whole block is copied; passing a pointer copies the pointer
+(in which case mind the concurrency safety of the shared data).</p>
+<h2 id="v.-a-comparison-of-the-three">V. A comparison of the three</h2>
+<table>
+<colgroup>
+<col style="width: 10%" />
+<col style="width: 23%" />
+<col style="width: 32%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+</colgroup>
+<thead>
+<tr>
+<th>Type</th>
+<th>Size of the variable itself</th>
+<th>What assignment/passing copies</th>
+<th>Where the data lives</th>
+<th>Concurrency-safe</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>[N]T</code> array</td>
+<td>N×sizeof(T)</td>
+<td>The whole block of data</td>
+<td>With the variable (stack or heap)</td>
+<td>Value semantics, naturally isolated</td>
+</tr>
+<tr>
+<td><code>[]T</code> slice</td>
+<td>3 words (24B)</td>
+<td>The header (with pointer)</td>
+<td>The underlying array is usually on the heap</td>
+<td>No, shares the underlying array</td>
+</tr>
+<tr>
+<td><code>map</code></td>
+<td>1 word (pointer)</td>
+<td>The pointer</td>
+<td>hmap + buckets on the heap</td>
+<td>No, concurrent read/write crashes</td>
+</tr>
+<tr>
+<td><code>chan</code></td>
+<td>1 word (pointer)</td>
+<td>The pointer</td>
+<td>hchan + buf on the heap</td>
+<td>Yes, internally locked</td>
+</tr>
+</tbody>
+</table>
+<p>In one sentence: <strong>except for array, which is a true value
+type, slice/map/chan all copy a “lightweight header/pointer” and share
+the data behind it</strong>—this is exactly why they “seem like
+references,” yet mechanically they are still thoroughly value
+copies.</p>
+<hr />
+<p><a href="06-函数与调用栈.html">← Previous: Functions and the Call
+Stack</a> · <a href="index.html">Index</a> · <a
+href="08-面向对象与类型系统.html">Next: The Type System and OOP</a>
+→</p>
+</div>
+</body>
+</html>

@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.10" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Runtime Model: javac, Bytecode, the JVM, and JIT</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../../assets/style.css" />
+</head>
+<body>
+<div class="topbar"><div class="wrap"><a class="home" href="../index.html">📚 Other Languages for C/C++ Programmers</a>
+<a href="../python/index.html">Python</a>
+<a href="../java/index.html" style="color:var(--accent-dark);font-weight:700">Java</a>
+<a href="../go/index.html">Go</a></div></div><a class="langtoggle" href="#" onclick="switchLang();return false;" title="切换语言 / Switch language"><b>中</b><span>中文</span></a><script>function switchLang(){var p=location.pathname,en=p.indexOf('/en/')>-1,n=en?p.replace('/en/','/zh/'):p.replace('/zh/','/en/');try{localStorage.setItem('lang',en?'zh':'en')}catch(e){}location.href=n;}</script>
+<div class="wrap">
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#runtime-model-javac-bytecode-the-jvm-and-jit"
+id="toc-runtime-model-javac-bytecode-the-jvm-and-jit">Runtime Model:
+javac, Bytecode, the JVM, and JIT</a>
+<ul>
+<li><a href="#from-source-to-bytecode-what-javac-does"
+id="toc-from-source-to-bytecode-what-javac-does">1. From Source to
+Bytecode: What javac Does</a></li>
+<li><a href="#class-loading-getting-a-.class-into-the-jvm"
+id="toc-class-loading-getting-a-.class-into-the-jvm">2. Class Loading:
+Getting a .class into the JVM</a></li>
+<li><a href="#execution-interpreter-jit-mixed-mode"
+id="toc-execution-interpreter-jit-mixed-mode">3. Execution: Interpreter
++ JIT Mixed Mode</a></li>
+<li><a href="#runtime-memory-regions" id="toc-runtime-memory-regions">4.
+Runtime Memory Regions</a></li>
+<li><a href="#aot-graalvm-native-image"
+id="toc-aot-graalvm-native-image">5. AOT: GraalVM native-image</a></li>
+<li><a href="#summary" id="toc-summary">Summary</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1 id="runtime-model-javac-bytecode-the-jvm-and-jit">Runtime Model:
+javac, Bytecode, the JVM, and JIT</h1>
+<p>As a C/C++ engineer, the compilation pipeline you know is:
+<code>.c</code> source goes through preprocessing, compilation, and
+assembly to produce an object file <code>.o</code>, which the linker
+then stitches into an executable (ELF/Mach-O/PE) targeting a
+<strong>specific CPU architecture + specific operating system</strong>.
+The CPU executes the machine code inside it directly.</p>
+<p>Java takes a <strong>two-stage</strong> path: first it compiles to a
+platform-independent intermediate code (bytecode), which is then
+executed at runtime by a “virtual CPU” (the JVM). Understanding this
+pipeline is a prerequisite for understanding all the memory behavior
+that follows.</p>
+<h2 id="from-source-to-bytecode-what-javac-does">1. From Source to
+Bytecode: What javac Does</h2>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Hello.java</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Hello <span class="op">{</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span> sum <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">10</span><span class="op">;</span> i<span class="op">++)</span> <span class="op">{</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>            sum <span class="op">+=</span> i<span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>sum<span class="op">);</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Compile:</p>
+<pre><code>javac Hello.java     # produces Hello.class</code></pre>
+<p>The <strong>essential difference</strong> between <code>javac</code>
+and <code>gcc</code>: <code>gcc</code>’s output targets a real CPU, with
+an instruction set of x86-64 / ARM64; <code>javac</code>’s output
+targets a hypothetical <strong>stack-based virtual machine</strong>,
+whose instruction set is “bytecode.” Bytecode assumes nothing about the
+number of registers, the word size, or the byte order—it targets only
+the abstract machine defined by the JVM specification. This is the
+technical foundation of “write once, run anywhere”: a
+<code>.class</code> file is <strong>byte-for-byte identical</strong> on
+Windows/Linux/macOS and on x86/ARM.</p>
+<p>A <code>.class</code> file is a binary container with a strict format
+(beginning with the magic number <code>0xCAFEBABE</code>),
+containing:</p>
+<table>
+<colgroup>
+<col style="width: 26%" />
+<col style="width: 26%" />
+<col style="width: 47%" />
+</colgroup>
+<thead>
+<tr>
+<th>Section</th>
+<th>Contents</th>
+<th>C/C++ analogy</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>constant pool</td>
+<td>symbolic references to strings, class names, method names,
+literals</td>
+<td>like <code>.rodata</code> + the symbol table, but more
+structured</td>
+</tr>
+<tr>
+<td>field table</td>
+<td>the class’s field declarations</td>
+<td>struct member layout information</td>
+</tr>
+<tr>
+<td>method table</td>
+<td>each method’s bytecode + metadata</td>
+<td>function bodies, but with full type signatures</td>
+</tr>
+<tr>
+<td>attribute table</td>
+<td>line number table, local variable table, annotations, etc.</td>
+<td>debug info (like DWARF), but built in</td>
+</tr>
+</tbody>
+</table>
+<p>Key point: <strong>the <code>.class</code> file retains complete type
+and symbol information</strong>. After you <code>strip</code> a C
+program almost nothing but machine code remains, with symbols gone; a
+<code>.class</code> file inherently carries class names, method
+signatures, and field types—this is the material basis on which
+reflection, dynamic loading, and runtime type checking can exist.</p>
+<h3 id="viewing-bytecode-with-javap">Viewing Bytecode with javap</h3>
+<p><code>javap</code> is the disassembler that ships with the JDK, the
+Java world’s equivalent of <code>objdump -d</code>:</p>
+<pre><code>javap -c Hello.class</code></pre>
+<p>The bytecode of the <code>main</code> method looks roughly like this
+(comments added by me):</p>
+<pre><code>0:  iconst_0        // push the constant 0 onto the operand stack
+1:  istore_1        // pop the top of the stack into local variable slot 1 (i.e. sum)
+2:  iconst_0        // push the constant 0
+3:  istore_2        // store into slot 2 (i.e. i)
+4:  iload_2         // load i onto the stack
+5:  bipush 10       // push the constant 10
+7:  if_icmpge 20    // if i &gt;= 10 jump to offset 20 (exit the loop)
+10: iload_1         // load sum
+11: iload_2         // load i
+12: iadd            // add the top two stack values, result left on the stack
+13: istore_1        // store back into sum
+14: iinc 2, 1       // increment slot 2 (i) by 1 directly, without going through the operand stack
+17: goto 4          // back to the loop test
+20: getstatic ...   // fetch System.out
+23: iload_1
+24: invokevirtual println
+27: return</code></pre>
+<p>Notice that instructions like
+<code>iconst</code>/<code>istore</code>/<code>iload</code>/<code>iadd</code>
+<strong>have no register operands</strong>. The JVM is a <strong>stack
+machine</strong>: the inputs and outputs of operations flow across the
+“operand stack,” rather than naming registers as x86 does with
+<code>add eax, ebx</code>. The <code>i</code> prefix means the operation
+is on the int type; there are also <code>l</code> (long), <code>f</code>
+(float), <code>d</code> (double), and <code>a</code>
+(reference/address). <code>iinc</code> is one of the rare instructions
+that modifies the local variable table directly.</p>
+<blockquote>
+<p>Every method declares in its bytecode how large an operand stack it
+needs (<code>stack=</code>) and how many local variable slots
+(<code>locals=</code>). These are fixed values computed at compile time,
+and the JVM allocates stack frames accordingly—see <a
+href="06-函数与调用栈.html">Methods and the Call Stack</a>.</p>
+</blockquote>
+<h2 id="class-loading-getting-a-.class-into-the-jvm">2. Class Loading:
+Getting a .class into the JVM</h2>
+<p>When a C program starts, the loader maps the ELF segments into
+memory, does relocation, and binds dynamic-library symbols—all at once.
+Java’s class loading is <strong>lazy, on-demand, and happens at
+runtime</strong>, in three phases:</p>
+<h3 id="loading">1. Loading</h3>
+<p>Based on a class’s fully qualified name, find the <code>.class</code>
+byte stream (from the filesystem, a jar, the network, or even generated
+at runtime), parse it into an internal data structure in the method area
+/ metaspace, and create a <code>java.lang.Class</code> object on the
+heap to represent that class. This step is like <code>dlopen</code>
+opening a library, but at the granularity of a single class.</p>
+<h3 id="linking-three-sub-steps">2. Linking (three sub-steps)</h3>
+<ul>
+<li><strong>Verification</strong>: check that the bytecode is legal,
+that types are safe, and that the stack will not overflow/underflow.
+C/C++ has no counterpart—it trusts the machine code produced by the
+compiler; because the JVM may load bytecode of unknown origin, it must
+perform this layer of security checking.</li>
+<li><strong>Preparation</strong>: allocate space for static fields and
+set them to their <strong>zero values</strong> (int→0, reference→null).
+Note that user-supplied assignments are not executed at this point.</li>
+<li><strong>Resolution</strong>: replace the <strong>symbolic
+references</strong> in the constant pool (“method foo of class A”) with
+<strong>direct references</strong> (memory addresses/offsets). This is
+the equivalent of C’s link-time symbol resolution, but it happens at
+runtime and can be deferred until first use.</li>
+</ul>
+<h3 id="initialization">3. Initialization</h3>
+<p>Execute the static initializer blocks and the assignments to static
+fields (i.e. the <code>&lt;clinit&gt;</code> method). Triggers include:
+the first <code>new</code>, accessing a static field/method, reflection,
+etc. The JVM guarantees <code>&lt;clinit&gt;</code> <strong>runs exactly
+once</strong> under multithreading (with a lock), which is why the
+“static singleton + class loading” idiom is thread-safe.</p>
+<h3 id="parent-delegation-model">Parent Delegation Model</h3>
+<p>The JVM has multiple class loaders, forming a hierarchy:</p>
+<pre><code>        Bootstrap ClassLoader   (implemented in C++, loads the java.* core classes)
+              ▲  delegate
+        Platform ClassLoader    (JDK platform modules)
+              ▲  delegate
+        Application ClassLoader (your classpath)
+              ▲  delegate
+        Custom ClassLoader</code></pre>
+<p>When loading a class, a child loader <strong>first delegates
+upward</strong> to its parent to try; only if the parent cannot load it
+does the child load it itself. The benefit: core classes (such as
+<code>java.lang.String</code>) are always loaded by the Bootstrap
+loader, and you cannot substitute a forged <code>java.lang.String</code>
+for the system class—this is a guarantee of security and consistency. In
+C/C++, if two <code>.so</code> files each carry a symbol of the same
+name, the behavior depends on link order and is prone to problems;
+parent delegation mechanically prevents core classes from being
+“hijacked.”</p>
+<h2 id="execution-interpreter-jit-mixed-mode">3. Execution: Interpreter
++ JIT Mixed Mode</h2>
+<p>Once it has the bytecode, how does the JVM execute it? It uses two
+means together (HotSpot’s default “mixed mode”):</p>
+<h3 id="interpretation">Interpretation</h3>
+<p>The JVM has a built-in bytecode interpreter that reads bytecode one
+instruction at a time, looks it up in a table, and executes the
+corresponding C++ logic. It starts fast (no waiting for compilation),
+but every instruction carries interpretation overhead, making it one to
+two orders of magnitude slower than native machine code.</p>
+<h3 id="hot-spot-detection-jit-compilation">Hot-Spot Detection + JIT
+Compilation</h3>
+<p>The name HotSpot comes from its strategy: <strong>detecting hot
+code</strong> (Hot Spots). The JVM maintains counters for each method
+(number of method invocations + number of loop back-edges), and once
+these exceed a threshold, it deems the method “hot” and hands that
+bytecode to the <strong>JIT (Just-In-Time) compiler</strong>, which
+compiles it <strong>at runtime</strong> into native machine code; from
+then on the machine code executes directly.</p>
+<p>HotSpot has two JIT compilers (Tiered Compilation uses them
+cooperatively):</p>
+<table>
+<colgroup>
+<col style="width: 40%" />
+<col style="width: 30%" />
+<col style="width: 30%" />
+</colgroup>
+<thead>
+<tr>
+<th>Compiler</th>
+<th>Role</th>
+<th>Characteristics</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>C1 (Client)</td>
+<td>fast compilation</td>
+<td>few optimizations, fast to compile, steps in first</td>
+</tr>
+<tr>
+<td>C2 (Server)</td>
+<td>deep optimization</td>
+<td>aggressive optimizations, slow to compile, used for the hottest
+code</td>
+</tr>
+</tbody>
+</table>
+<p>Typical path: interpretation → C1 compilation (with performance
+counters) → C2 recompiles the hottest parts.</p>
+<p><strong>This is why Java “gets faster the longer it runs,” and can
+sometimes approach or even locally exceed C</strong>: the JIT has
+<strong>runtime information</strong>—which branch is actually taken,
+that a virtual method actually only ever calls one implementing class,
+what a loop’s bounds are. Based on this it can perform
+<strong>speculative optimizations</strong> that a static compiler
+cannot; if it bets wrong, it “de-optimizes” (deoptimization) back to
+interpretation. <code>gcc</code>, by contrast, knows nothing about
+runtime at compile time and can only be conservative.</p>
+<h3
+id="a-few-key-jit-optimizations-with-large-effects-on-memory-behavior">A
+Few Key JIT Optimizations (with Large Effects on Memory Behavior)</h3>
+<ul>
+<li><strong>Inlining</strong>: embed the callee’s method body directly
+at the call site, eliminating call overhead and opening up the horizon
+for subsequent optimizations. Equivalent to C’s <code>inline</code>, but
+the JIT decides automatically <strong>at runtime</strong> based on
+hotness.</li>
+<li><strong>Escape Analysis</strong>: analyze whether a reference to an
+object “escapes” the current method (whether it is returned, stored into
+another object on the heap, or made visible to other threads). If it
+<strong>does not escape</strong>, the JVM can do:
+<ul>
+<li><strong>Scalar Replacement</strong>: <strong>break apart</strong> an
+object that would otherwise be <code>new</code>’d on the heap into its
+individual fields, treating them as ordinary local variables placed
+directly into <strong>stack-frame slots or even registers</strong>. Note
+this is not “moving the whole object onto the stack”; rather, the object
+as a whole <strong>no longer exists at all</strong>—so there is neither
+heap allocation nor GC reclamation. (HotSpot has no true “whole-object
+stack allocation”; the mechanism that can save the heap allocation is
+scalar replacement.)</li>
+</ul></li>
+</ul>
+<p>This point is important for understanding Java memory: at the
+language level “objects always live on the heap,” but at the HotSpot
+implementation level, escape analysis may keep short-lived, non-escaping
+objects out of the heap entirely. This closes part of the performance
+gap between Java and C (which puts structs on the stack). See <a
+href="03-变量与内存模型.html">Variables and the Memory Model</a>.</p>
+<h2 id="runtime-memory-regions">4. Runtime Memory Regions</h2>
+<p>A running JVM divides memory into several regions (defined by the JVM
+spec, implemented by HotSpot):</p>
+<pre><code>┌───────────────────────────────────────────────────────┐
+│                        JVM process                      │
+│                                                         │
+│  Shared by all threads ↓                                │
+│  ┌─────────────────────┐   ┌───────────────────────┐   │
+│  │        Heap          │   │  Method Area / Metaspace│  │
+│  │  all objects, arrays │   │  class metadata,       │   │
+│  │  GC&#39;s main battlefield│  │  method bytecode       │   │
+│  │  (everything new&#39;d   │   │  runtime constant pool │   │
+│  │   lives here)        │   │  (metaspace in native  │   │
+│  │                      │   │   memory)              │   │
+│  └─────────────────────┘   └───────────────────────┘   │
+│                                                         │
+│  Private to each thread ↓                               │
+│  ┌───────────┐ ┌───────────┐ ┌──────────┐ ┌──────────┐ │
+│  │ JVM stack │ │ PC register│ │Native    │ │ ...      │ │
+│  │ a pile of │ │ current    │ │method stk│ │one per   │ │
+│  │ stack     │ │ instruction│ │for JNI   │ │thread    │ │
+│  │ frames    │ │            │ │          │ │          │ │
+│  └───────────┘ └───────────┘ └──────────┘ └──────────┘ │
+└───────────────────────────────────────────────────────┘</code></pre>
+<table>
+<colgroup>
+<col style="width: 19%" />
+<col style="width: 19%" />
+<col style="width: 25%" />
+<col style="width: 35%" />
+</colgroup>
+<thead>
+<tr>
+<th>Region</th>
+<th>Whose</th>
+<th>Stores</th>
+<th>C/C++ analogy</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Heap</td>
+<td>shared</td>
+<td>all object and array instances</td>
+<td>the malloc heap, but reclaimed automatically by GC</td>
+</tr>
+<tr>
+<td>Method Area / Metaspace</td>
+<td>shared</td>
+<td>class structures, method bytecode, runtime constant pool, the
+<strong>metadata</strong> of static fields (the <strong>values</strong>
+of the fields live in the <code>Class</code> mirror object on the heap,
+not in metaspace)</td>
+<td>code segment + read-only data segment (but can grow at runtime)</td>
+</tr>
+<tr>
+<td>JVM stack</td>
+<td>per-thread</td>
+<td>stack frames (local variable table, operand stack)</td>
+<td>the thread call stack, logically identical</td>
+</tr>
+<tr>
+<td>PC register</td>
+<td>per-thread</td>
+<td>the bytecode address currently being executed</td>
+<td>the program counter PC/RIP</td>
+</tr>
+<tr>
+<td>Native method stack</td>
+<td>per-thread</td>
+<td>the stack used when executing native (JNI) methods</td>
+<td>the native stack on the C side</td>
+</tr>
+</tbody>
+</table>
+<p>A few contrasts with C: - <strong>Metaspace lives in native
+memory</strong>, not in the GC heap (this design dates from JDK 8,
+replacing the old “PermGen”/permanent generation). - <strong>Heap
+reclamation is automatic</strong>: there is no
+<code>free</code>/<code>delete</code>; the GC reclaims what it
+determines to be unreachable. You almost never manage heap lifetimes
+manually—this is the biggest mental difference from C, and it is why in
+<a href="09-错误处理与资源管理.html">Error Handling and Resource
+Management</a>, <code>try-with-resources</code> targets only “non-memory
+resources” (files/sockets): memory is left to the GC, but handles still
+need to be closed explicitly. - <strong>The semantics of the stack are
+almost identical to C’s</strong>: each method call pushes a stack frame,
+which is popped on return; if the stack gets too deep it triggers a
+<code>StackOverflowError</code> (the counterpart of C’s stack overflow,
+but the JVM throws an exception rather than segfaulting directly).</p>
+<h2 id="aot-graalvm-native-image">5. AOT: GraalVM native-image</h2>
+<p>Java can also, like C, be <strong>compiled Ahead-Of-Time
+(AOT)</strong> into a native executable. <strong>GraalVM’s
+<code>native-image</code></strong> performs closure analysis at build
+time, statically compiling the classes and methods used—along with a
+slimmed-down runtime (including a GC)—into a single standalone
+executable:</p>
+<pre><code>native-image Hello        # produces a native executable, hello
+./hello                   # no JVM needed, millisecond startup</code></pre>
+<p>Costs and trade-offs: - <strong>Advantages</strong>: extremely fast
+startup, small memory footprint, no JVM to distribute—suitable for CLI
+tools and Serverless/function-compute cold starts. Here its distribution
+model closely resembles C’s: a single native binary. -
+<strong>Costs</strong>: the build must know all the classes that will be
+used, so <strong>reflection, dynamic proxies, and runtime-generated
+classes</strong> need extra configuration; you lose the JIT’s runtime
+speculative optimizations, so peak throughput <strong>may be lower
+than</strong> C2’s after a long warm-up.</p>
+<p>So, as a memory aid: - <code>javac</code> → bytecode, cross-platform,
+relies on JVM + JIT runtime optimization (the mainstream for
+long-running services). - <code>native-image</code> → native code, bound
+to a platform, fixed at build time (the choice for fast-starting,
+short-lived processes). - <code>gcc/clang</code> → native code, bound to
+a platform, fixed at compile time (the only path for C/C++).</p>
+<h2 id="summary">Summary</h2>
+<ul>
+<li><code>javac</code> produces <strong>platform-independent
+bytecode</strong>, not machine code; executing it requires the JVM, a
+stack-based virtual machine.</li>
+<li>Class loading is <strong>runtime, lazy, and layered (parent
+delegation)</strong>, and retains complete type information.</li>
+<li>HotSpot <strong>interprets first, then JIT-compiles after detecting
+hot spots</strong> (C1/C2, inlining, escape analysis); escape analysis
+can perform <strong>scalar replacement</strong> on non-escaping objects
+(breaking them into scalars placed in stack-frame slots/registers,
+rather than whole-object stack allocation).</li>
+<li>Runtime memory is divided into a <strong>shared
+heap/metaspace</strong> and <strong>per-thread JVM stack/PC/native
+stack</strong>; the heap is reclaimed automatically by the GC.</li>
+<li>When you need a C-style fast-starting native binary, use GraalVM
+<code>native-image</code> for AOT, at the cost of runtime dynamism and
+peak optimization.</li>
+</ul>
+<p>This model is the stage for every chapter that follows. Especially
+“heap vs. stack” and “reference vs. value”—read the next chapter with
+this chapter’s memory-partition diagram in mind.</p>
+<hr />
+<p><a href="index.html">← Prev: Index</a> · <a
+href="index.html">Index</a> · <a href="02-基础语法.html">Next: Basic
+Syntax</a> →</p>
+</div>
+</body>
+</html>

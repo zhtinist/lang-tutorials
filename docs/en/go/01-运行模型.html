@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.10" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Runtime Model: Compilation, Linking, Runtime</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../../assets/style.css" />
+</head>
+<body>
+<div class="topbar"><div class="wrap"><a class="home" href="../index.html">📚 Other Languages for C/C++ Programmers</a>
+<a href="../python/index.html">Python</a>
+<a href="../java/index.html">Java</a>
+<a href="../go/index.html" style="color:var(--accent-dark);font-weight:700">Go</a></div></div><a class="langtoggle" href="#" onclick="switchLang();return false;" title="切换语言 / Switch language"><b>中</b><span>中文</span></a><script>function switchLang(){var p=location.pathname,en=p.indexOf('/en/')>-1,n=en?p.replace('/en/','/zh/'):p.replace('/zh/','/en/');try{localStorage.setItem('lang',en?'zh':'en')}catch(e){}location.href=n;}</script>
+<div class="wrap">
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#runtime-model-compilation-linking-runtime"
+id="toc-runtime-model-compilation-linking-runtime">Runtime Model:
+Compilation, Linking, Runtime</a>
+<ul>
+<li><a
+href="#overview-a-go-binary-your-code-runtime-standard-library-statically-packaged"
+id="toc-overview-a-go-binary-your-code-runtime-standard-library-statically-packaged">1.
+Overview: A Go Binary = Your Code + Runtime + Standard Library,
+Statically Packaged</a></li>
+<li><a href="#go-build-a-native-binary-in-one-step"
+id="toc-go-build-a-native-binary-in-one-step">2. <code>go build</code>:
+A Native Binary in One Step</a></li>
+<li><a href="#what-exactly-is-inside-the-runtime"
+id="toc-what-exactly-is-inside-the-runtime">3. What Exactly Is Inside
+the Runtime</a></li>
+<li><a href="#why-go-compiles-so-fast"
+id="toc-why-go-compiles-so-fast">4. Why Go Compiles So Fast</a></li>
+<li><a href="#common-commands-go-run-build-mod"
+id="toc-common-commands-go-run-build-mod">5. Common Commands:
+<code>go run</code> / <code>build</code> / <code>mod</code></a></li>
+<li><a href="#cross-compilation-just-change-two-environment-variables"
+id="toc-cross-compilation-just-change-two-environment-variables">6.
+Cross-Compilation: Just Change Two Environment Variables</a></li>
+<li><a href="#the-final-contrast-with-c-a-single-self-contained-binary"
+id="toc-the-final-contrast-with-c-a-single-self-contained-binary">7. The
+Final Contrast with C: A Single Self-Contained Binary</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1 id="runtime-model-compilation-linking-runtime">Runtime Model:
+Compilation, Linking, Runtime</h1>
+<p>As a C/C++ programmer, you have a very clear mental model of “how a
+program becomes something runnable”: preprocess → compile to
+<code>.o</code> → link (static or dynamic) → produce an ELF/Mach-O
+executable → loaded by the kernel and bootstrapped into
+<code>main</code> by libc’s <code>_start</code>. Go’s model is both like
+and unlike this one. What’s the same: <strong>the final artifact is a
+native machine-code executable—no virtual machine, no bytecode
+interpreter</strong>. What’s different: this binary additionally
+statically links in a <strong>runtime</strong>, which has already
+started running before your <code>main</code>.</p>
+<p>The goal of this chapter: make the “compile → link → run” chain of Go
+clear, contrasting it with C’s model at every step.</p>
+<h2
+id="overview-a-go-binary-your-code-runtime-standard-library-statically-packaged">1.
+Overview: A Go Binary = Your Code + Runtime + Standard Library,
+Statically Packaged</h2>
+<p>First the conclusion, in a comparison table:</p>
+<table>
+<colgroup>
+<col style="width: 11%" />
+<col style="width: 35%" />
+<col style="width: 30%" />
+<col style="width: 22%" />
+</colgroup>
+<thead>
+<tr>
+<th>Dimension</th>
+<th>C/C++ (gcc/clang)</th>
+<th>Go (gc toolchain)</th>
+<th>JVM (Java)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Final artifact</td>
+<td>Native machine code</td>
+<td>Native machine code</td>
+<td>Bytecode <code>.class</code>/<code>.jar</code></td>
+</tr>
+<tr>
+<td>Execution</td>
+<td>Directly executed by the CPU</td>
+<td>Directly executed by the CPU</td>
+<td>JVM interpretation + JIT</td>
+</tr>
+<tr>
+<td>Has a runtime?</td>
+<td>Extremely thin (crt0 + libc, usually dynamically linked)</td>
+<td><strong>Yes, fairly thick, and statically linked in by
+default</strong></td>
+<td>Yes, a separately installed JVM</td>
+</tr>
+<tr>
+<td>Default linking</td>
+<td>Dynamically links libc</td>
+<td><strong>Static</strong> (no libc dependency on Linux + pure Go;
+macOS still links libSystem)</td>
+<td>N/A</td>
+</tr>
+<tr>
+<td>Deployment</td>
+<td>Requires a matching .so on the target machine</td>
+<td><strong>A single self-contained file—copy it over and it
+runs</strong></td>
+<td>Requires a JRE on the target machine</td>
+</tr>
+<tr>
+<td>GC</td>
+<td>None (manual <code>malloc/free</code>)</td>
+<td>Yes (concurrent tricolor mark)</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Threading model</td>
+<td>1:1 mapping to OS threads</td>
+<td>M:N, goroutines multiplexed onto OS threads</td>
+<td>Platform threads / virtual threads</td>
+</tr>
+</tbody>
+</table>
+<p>The key mental model: <strong>Go sits between C and the JVM.</strong>
+Like C, it compiles to machine code executed directly by the CPU (no
+interpretation, no JIT warm-up), but like the JVM it ships with a
+runtime responsible for scheduling, GC, and memory allocation. The
+difference is that this runtime is not an external process, but is
+<strong>statically linked into your binary, existing as ordinary
+functions and code segments</strong>.</p>
+<pre><code>   Address space of a C program      Address space of a Go program
+ ┌────────────────────┐         ┌────────────────────┐
+ │  your .text        │         │  your .text        │
+ │  libc (often dyn.) │         │  runtime .text     │  ← scheduler/GC/allocator
+ │  crt0 bootstrap    │         │  stdlib .text      │  (all compiled in statically)
+ ├────────────────────┤         ├────────────────────┤
+ │  heap (malloc/free)│         │  heap (runtime-mgd) │
+ │  one/more thread   │         │  many goroutine    │  ← ~2KB each to start, growable
+ │  stacks            │         │  stacks            │
+ └────────────────────┘         └────────────────────┘</code></pre>
+<h2 id="go-build-a-native-binary-in-one-step">2. <code>go build</code>:
+A Native Binary in One Step</h2>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> build <span class="at">-o</span> hello ./...   <span class="co"># produces an executable named hello</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="fu">file</span> hello                <span class="co"># Mach-O 64-bit executable / ELF 64-bit</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="ex">./hello</span>                   <span class="co"># runs directly, no external dependencies needed</span></span></code></pre></div>
+<p>The most immediately striking thing for a C programmer is
+<strong>static linking by default</strong> (more precisely, this mainly
+refers to the <strong>Linux + <code>CGO_ENABLED=0</code></strong> case).
+Write a pure-Go <code>hello</code> and on Linux, <code>ldd hello</code>
+will tell you <code>not a dynamic executable</code>—it hasn’t linked
+libc, it doesn’t even need <code>libc.so.6</code>. (<strong>macOS is an
+exception</strong>: Apple does not support statically linking libSystem,
+so a Go binary on macOS will always dynamically link
+<code>/usr/lib/libSystem.B.dylib</code>, visible with
+<code>otool -L</code>.) This means (on Linux):</p>
+<ul>
+<li>You can <code>scp</code> this binary directly to another Linux
+machine of the same architecture and run it, even if that machine has no
+runtime libraries installed at all (in the extreme case: put just this
+one file in an empty <code>FROM scratch</code> Docker image and it
+runs).</li>
+<li>The cost is size: a <code>hello world</code> Go binary is typically
+1–2 MB, because the runtime and the standard-library packages you use
+are all compiled in. A dynamically-linked C <code>hello</code> might be
+only a few dozen KB (but it depends on the several MB of libc on the
+system).</li>
+</ul>
+<h3 id="when-does-go-link-dynamically">When Does Go Link
+Dynamically?</h3>
+<p>It’s not absolutely static. Two common situations introduce dynamic
+linking: 1. <strong>cgo</strong>: once you use <code>import "C"</code>
+to call a C library (such as certain resolution paths in
+<code>net</code> or <code>os/user</code>, or a third-party C
+dependency), libc gets linked and produces a dynamic dependency. You can
+force cgo off with <code>CGO_ENABLED=0</code> to return to fully static.
+2. Explicit <code>-linkmode=external</code> or linking against system
+libraries.</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="va">CGO_ENABLED</span><span class="op">=</span>0 <span class="ex">go</span> build <span class="at">-o</span> hello   <span class="co"># force fully static, commonly used when building Docker images</span></span></code></pre></div>
+<h2 id="what-exactly-is-inside-the-runtime">3. What Exactly Is Inside
+the Runtime</h2>
+<p>C’s “runtime” is so thin it’s almost only crt0’s bootstrap plus the
+library functions provided by libc; control is handed to your
+<code>main</code> very quickly, and after that there’s no “background
+magic” unless you call into a library. Go is different: before your
+<code>main.main</code> is called, the runtime has already initialized a
+whole set of subsystems, and it <strong>keeps working in the
+background</strong> for the duration of your program. Three main
+pieces:</p>
+<h3 id="the-goroutine-scheduler-gmp-model">1. The Goroutine Scheduler
+(GMP Model)</h3>
+<p>Go does not map goroutines directly onto OS threads (that’s C’s 1:1
+pthread model); instead it uses <strong>M:N scheduling</strong>:
+thousands upon thousands of goroutines are multiplexed onto a small
+number of OS threads. Three core abstractions:</p>
+<pre><code>G (goroutine)  ── one goroutine, with its own stack, PC, and state. Extremely lightweight.
+M (machine)    ── one OS thread, actually running code on the CPU.
+P (processor)  ── a logical processor/scheduling context, count defaults to GOMAXPROCS (usually = #CPU cores).
+                  P holds a local runnable-G queue; an M must bind to a P to execute a G.
+
+     M0 ── P0 ── [G,G,G] local queue
+     M1 ── P1 ── [G,G]
+                 [G,G,G,...] global queue (a P steals from here when its queue is empty)</code></pre>
+<p>When a goroutine blocks in a system call, the runtime detaches the M
+from the P, letting another M take over that P and keep running other
+Gs—so a few threads can sustain massive concurrency. For details see <a
+href="10-并发模型.html">Chapter 10, “The Concurrency Model”</a>. By
+contrast, spinning up a thread in C costs several MB of stack plus
+kernel scheduling overhead, so a few thousand is already a strain;
+running hundreds of thousands of goroutines in Go is entirely
+routine.</p>
+<h3 id="the-garbage-collector-gc">2. The Garbage Collector (GC)</h3>
+<p>In C you <code>malloc</code>/<code>free</code> yourself, and dangling
+pointers and memory leaks all rely on self-discipline. Go has a
+<strong>concurrent, tricolor mark-and-sweep</strong> GC running in the
+background, executing concurrently with your code, with STW
+(stop-the-world) pauses typically in the sub-millisecond range. This
+means you almost never manually free memory—but you do need to
+understand <strong>escape analysis</strong> (why a variable ends up on
+the heap), or you’ll write GC-unfriendly code. Escape analysis is
+covered in <a href="03-变量与内存模型.html">Chapter 3</a>; GC details
+are in <a href="09-错误处理与资源管理.html">Chapter 9</a>.</p>
+<h3 id="the-memory-allocator-tcmalloc-style">3. The Memory Allocator
+(tcmalloc-style)</h3>
+<p>Go’s allocator descends from Google’s tcmalloc, using a
+<strong>multi-level cache</strong> structure, with the core goal of
+allocating small objects as lock-free as possible:</p>
+<pre><code>mcache   ── one per P, thread-local, allocates small objects without locking (like tcmalloc&#39;s thread cache)
+   │ requests downward when short
+mcentral ── a central cache organized by size class, shared across Ps, requires locking
+   │ requests downward when short
+mheap    ── the global heap, managing large chunks of memory obtained from the OS (span/arena)</code></pre>
+<p>Objects are grouped by size into roughly 70 <strong>size
+classes</strong>; small objects are taken directly from the P-local
+<code>mcache</code> with no global lock contention—this is one reason
+Go’s allocation performance is good under high concurrency. Compared
+with C’s <code>malloc</code> (typically a global lock or arena lock),
+Go’s per-P cache is naturally multicore-friendly.</p>
+<h2 id="why-go-compiles-so-fast">4. Why Go Compiles So Fast</h2>
+<p>A large C++ project can compile slowly enough that you go get a
+coffee, and you know the reasons well: header files textually included
+over and over, templates instantiated in every compilation unit, huge
+amounts of preprocessor expansion, and heavy symbol resolution at link
+time. Go was designed to deliberately sidestep all of these:</p>
+<ol type="1">
+<li><strong>No header files, no preprocessor.</strong> Dependency
+information is encoded directly in the package; compiling a package only
+requires reading the <strong>exported information of the packages it
+directly imports</strong> (the compiled object carries compact export
+data), and does <strong>not</strong> require recursively expanding the
+source of the entire dependency tree. In C,
+<code>#include &lt;a.h&gt;</code> where a.h includes a bunch more, and
+every .c re-parses them all over again.</li>
+<li><strong>Imports are package-level and acyclic.</strong> Go mandates
+that the package dependency graph have no cycles, and imports the
+compiled artifact rather than source, so the compiler need only read one
+summary.</li>
+<li><strong>The grammar is designed for fast parsing.</strong> Go’s
+grammar can essentially be parsed in a single pass without consulting
+semantics (see automatic semicolon insertion in <a
+href="02-基础语法.html">Chapter 2</a>); there is no C++-style ambiguity
+where “you need the symbol table to decide whether <code>a * b</code> is
+a multiplication or a pointer declaration.”</li>
+<li><strong>Parallel compilation</strong>: different packages can be
+compiled in parallel.</li>
+</ol>
+<p>The cost: fast compilation is bought with “a thicker runtime + a
+larger binary + GC overhead,” plus trade-offs in language expressiveness
+(no generics early on, etc.).</p>
+<h2 id="common-commands-go-run-build-mod">5. Common Commands:
+<code>go run</code> / <code>build</code> / <code>mod</code></h2>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> run main.go        <span class="co"># compile to a temp directory and run immediately (leaves no binary), for quick experiments</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> build ./...        <span class="co"># compile all packages in the current module, produce an executable (when there&#39;s a main package)</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> install ./cmd/foo  <span class="co"># compile and install the binary into $GOBIN (default ~/go/bin)</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> test ./...         <span class="co"># compile and run tests</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> vet ./...          <span class="co"># static analysis for suspicious code</span></span></code></pre></div>
+<p>Note that <code>go run</code> is <strong>not interpreted
+execution</strong>—it really does compile to native code first and then
+run, it just puts the binary in a temp directory and deletes it when
+done. It gives you a “script-like experience,” not “a script’s execution
+model.”</p>
+<h3 id="go-modules-dependency-management">go modules: Dependency
+Management</h3>
+<p>Go uses <strong>modules</strong> to manage dependencies (replacing
+the old GOPATH mode):</p>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> mod init example.com/myapp   <span class="co"># generate go.mod, declaring the module path</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> get github.com/foo/bar@v1.2.3 <span class="co"># add/upgrade a dependency, writing go.mod and go.sum</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> mod tidy                      <span class="co"># add/remove dependencies to match the source imports</span></span></code></pre></div>
+<ul>
+<li><code>go.mod</code>: declares the module path, Go version,
+dependencies and their versions.</li>
+<li><code>go.sum</code>: records hash checksums of dependencies,
+guaranteeing reproducible builds (like a lock file).</li>
+</ul>
+<p>Dependencies are downloaded to a local cache
+(<code>$GOPATH/pkg/mod</code>) and statically compiled into your binary
+at build time. <strong>There’s no C-style “go find the .so at runtime”
+problem</strong>—dependencies are frozen in at compile time.</p>
+<h2 id="cross-compilation-just-change-two-environment-variables">6.
+Cross-Compilation: Just Change Two Environment Variables</h2>
+<p>Cross-compilation in C is notoriously painful: you need a
+cross-toolchain for the target platform (a cross gcc), the target
+platform’s libc, a sysroot, and so on. Because Go by default doesn’t
+depend on libc, and the toolchain ships with the runtime for every
+target platform, cross-compilation is just setting two environment
+variables:</p>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="co"># On macOS/arm64, build for Linux/amd64:</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="va">GOOS</span><span class="op">=</span>linux <span class="va">GOARCH</span><span class="op">=</span>amd64 <span class="ex">go</span> build <span class="at">-o</span> hello-linux-amd64</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Build for Windows:</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a><span class="va">GOOS</span><span class="op">=</span>windows <span class="va">GOARCH</span><span class="op">=</span>amd64 <span class="ex">go</span> build <span class="at">-o</span> hello.exe</span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Build for a Raspberry Pi (Linux/arm64):</span></span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a><span class="va">GOOS</span><span class="op">=</span>linux <span class="va">GOARCH</span><span class="op">=</span>arm64 <span class="ex">go</span> build <span class="at">-o</span> hello-pi</span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> tool dist list   <span class="co"># list all supported GOOS/GOARCH combinations</span></span></code></pre></div>
+<ul>
+<li><code>GOOS</code>: target operating system
+(<code>linux</code>/<code>darwin</code>/<code>windows</code>/<code>freebsd</code>…).</li>
+<li><code>GOARCH</code>: target CPU architecture
+(<code>amd64</code>/<code>arm64</code>/<code>386</code>/<code>riscv64</code>…).</li>
+</ul>
+<p><strong>The prerequisite is pure Go
+(<code>CGO_ENABLED=0</code>).</strong> Once you use cgo,
+cross-compilation degenerates back into the painful C-world mode of
+“needing a C cross-toolchain for the target platform.”</p>
+<h2 id="the-final-contrast-with-c-a-single-self-contained-binary">7. The
+Final Contrast with C: A Single Self-Contained Binary</h2>
+<p>To sum up this chapter in one sentence: <strong>Go aims for “compile
+once, get a self-contained native binary that can be copied across
+machines and run as-is.”</strong></p>
+<ul>
+<li>Versus C/C++: you’re spared shared-library version hell
+(<code>GLIBC_2.34 not found</code> and the like), and the hassle of
+assembling the right .so files at deployment; the cost is a larger
+binary, plus a runtime (GC/scheduler) you can’t fully turn off.</li>
+<li>Versus the JVM: you don’t need to install a JRE on the target
+machine, and startup has no JIT warm-up (fast cold start), but you give
+up the JVM’s deep runtime introspection and peak JIT performance.</li>
+</ul>
+<p>Once you understand “there’s a continuously running runtime hidden
+inside the binary,” much of the “magic” in later chapters has a
+foundation: why goroutines are cheap (scheduler + growable small
+stacks), why some variables end up on the heap (escape analysis + GC),
+why you don’t have to free slices/maps. In the next chapter we come back
+down to earth and go through Go’s basic syntax point by point against
+C.</p>
+<hr />
+<p><a href="index.html">← Index</a> · <a href="index.html">Index</a> ·
+<a href="02-基础语法.html">Next: Basic Syntax</a> →</p>
+</div>
+</body>
+</html>

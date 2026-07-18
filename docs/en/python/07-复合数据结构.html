@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.10" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Internal Implementation of Composite Data Structures</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../../assets/style.css" />
+</head>
+<body>
+<div class="topbar"><div class="wrap"><a class="home" href="../index.html">📚 Other Languages for C/C++ Programmers</a>
+<a href="../python/index.html" style="color:var(--accent-dark);font-weight:700">Python</a>
+<a href="../java/index.html">Java</a>
+<a href="../go/index.html">Go</a></div></div><a class="langtoggle" href="#" onclick="switchLang();return false;" title="切换语言 / Switch language"><b>中</b><span>中文</span></a><script>function switchLang(){var p=location.pathname,en=p.indexOf('/en/')>-1,n=en?p.replace('/en/','/zh/'):p.replace('/zh/','/en/');try{localStorage.setItem('lang',en?'zh':'en')}catch(e){}location.href=n;}</script>
+<div class="wrap">
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#internal-implementation-of-composite-data-structures"
+id="toc-internal-implementation-of-composite-data-structures">Internal
+Implementation of Composite Data Structures</a>
+<ul>
+<li><a href="#build-the-intuition-in-one-sentence"
+id="toc-build-the-intuition-in-one-sentence">0. Build the Intuition in
+One Sentence</a></li>
+<li><a href="#list-a-dynamic-array-of-pointers-to-pyobject"
+id="toc-list-a-dynamic-array-of-pointers-to-pyobject">1.
+<code>list</code>: A Dynamic Array of Pointers to PyObject</a></li>
+<li><a href="#tuple-an-immutable-fixed-length-array"
+id="toc-tuple-an-immutable-fixed-length-array">2. <code>tuple</code>: An
+Immutable Fixed-Length Array</a></li>
+<li><a href="#dict-cpythons-compact-dictionary"
+id="toc-dict-cpythons-compact-dictionary">3. <code>dict</code>:
+CPython’s Compact Dictionary</a></li>
+<li><a href="#set-and-frozenset" id="toc-set-and-frozenset">4.
+<code>set</code> and <code>frozenset</code></a></li>
+<li><a href="#collections.deque-a-doubly-linked-list-of-blocks"
+id="toc-collections.deque-a-doubly-linked-list-of-blocks">5.
+<code>collections.deque</code>: A Doubly-Linked List of Blocks</a></li>
+<li><a href="#panoramic-complexity-comparison-table"
+id="toc-panoramic-complexity-comparison-table">6. Panoramic Complexity
+Comparison Table</a></li>
+<li><a href="#summary-of-the-memory-model-comparison-with-c"
+id="toc-summary-of-the-memory-model-comparison-with-c">7. Summary of the
+Memory-Model Comparison with C</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1 id="internal-implementation-of-composite-data-structures">Internal
+Implementation of Composite Data Structures</h1>
+<blockquote>
+<p>This chapter is one of the highlights of the whole tutorial. We’ll
+take apart the internal data structures of <code>list</code>,
+<code>tuple</code>, <code>dict</code>, <code>set</code>, and
+<code>deque</code>, comparing each with C’s arrays, structs, and hash
+tables. Remember the thread running through the whole book: <a
+href="03-变量与内存模型.html">see “Variables and the Memory Model”</a>—a
+Python container never holds “values” but <strong>pointers to
+<code>PyObject</code></strong>. This single fact determines their memory
+layout, copy semantics, and complexity.</p>
+</blockquote>
+<h2 id="build-the-intuition-in-one-sentence">0. Build the Intuition in
+One Sentence</h2>
+<p>C’s array <code>int a[4] = {1,2,3,4}</code> looks like this in
+memory:</p>
+<pre><code>a:  [ 1 ][ 2 ][ 3 ][ 4 ]        // 16 bytes, values stored contiguously, cache-friendly
+     ^0   ^4   ^8   ^12</code></pre>
+<p>Python’s <code>a = [1, 2, 3, 4]</code> looks like this:</p>
+<pre><code>list object (heap)                each element is a separate heap object
++-----------------+
+| ob_refcnt       |
+| ob_type = list  |
+| ob_size = 4     |----&gt; ob_item (another heap block, an array of pointers)
+| allocated = 4   |       +------+------+------+------+
+| ob_item ------- |------&gt;| ptr0 | ptr1 | ptr2 | ptr3 |
++-----------------+       +--|---+--|---+--|---+--|---+
+                            v      v      v      v
+                          PyLong PyLong PyLong PyLong
+                           (1)    (2)    (3)    (4)   &lt;- each on the heap, possibly shared elsewhere</code></pre>
+<p>So a Python list is an <strong>“array of pointers,”</strong> not an
+“array of values.” This one diagram explains almost every phenomenon in
+this chapter.</p>
+<hr />
+<h2 id="list-a-dynamic-array-of-pointers-to-pyobject">1.
+<code>list</code>: A Dynamic Array of Pointers to PyObject</h2>
+<h3 id="memory-layout">1.1 Memory Layout</h3>
+<p>The struct for a list in CPython (simplified from
+<code>Include/cpython/listobject.h</code>):</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">typedef</span> <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    PyObject_VAR_HEAD          <span class="co">// includes ob_refcnt, ob_type, ob_size (=len)</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    PyObject <span class="op">**</span>ob_item<span class="op">;</span>        <span class="co">// points to a separately allocated array of pointers</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    Py_ssize_t allocated<span class="op">;</span>      <span class="co">// the allocated capacity (capacity &gt;= ob_size)</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> PyListObject<span class="op">;</span></span></code></pre></div>
+<p>Key points:</p>
+<ul>
+<li>The list object itself is a fixed-size header; the actual element
+pointers live in <strong>another heap block</strong> pointed to by
+<code>ob_item</code>. That’s two allocations (the list header + the
+pointer array), analogous to how a C++ <code>std::vector</code>’s
+<code>vector</code> object and the buffer it <code>new[]</code>s are
+separate.</li>
+<li><code>ob_size</code> is the current length <code>len(lst)</code>;
+<code>allocated</code> is how many pointers the buffer can hold. The
+relationship is always <code>allocated &gt;= ob_size</code>, and the
+empty slots in between exist so that append doesn’t have to reallocate
+every time.</li>
+<li>Each element occupies one pointer slot in <code>ob_item</code> (8
+bytes on a 64-bit platform), pointing at the real object. <strong>The
+element objects themselves are not in the array.</strong></li>
+</ul>
+<p>Compared to <code>std::vector&lt;T&gt;</code>: a vector stores the
+<code>T</code> values contiguously (with <code>T=int</code>, contiguous
+ints). A Python list always stores pointers, so even for
+all-small-integers it takes one pointer dereference to reach a value.
+That’s why numerical computing should use <code>numpy</code> (<a
+href="12-常用第三方库.html">see “Common Third-Party Libraries”</a>):
+numpy’s ndarray is a true contiguous-value C array.</p>
+<h3 id="over-allocation-growth-strategy">1.2 Over-Allocation Growth
+Strategy</h3>
+<p>On append, if <code>ob_size == allocated</code>, the list must grow.
+CPython doesn’t simply double; it uses a mild growth formula
+(<code>list_resize</code>, simplified):</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co">/* Current CPython list_resize: over-allocate about 1/8, then round up to a multiple of 4 */</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>new_allocated <span class="op">=</span> <span class="op">(</span>new_size <span class="op">+</span> <span class="op">(</span>new_size <span class="op">&gt;&gt;</span> <span class="dv">3</span><span class="op">)</span> <span class="op">+</span> <span class="dv">6</span><span class="op">)</span> <span class="op">&amp;</span> <span class="op">~</span><span class="dv">3</span><span class="op">;</span></span></code></pre></div>
+<p>That is, over-allocate roughly <strong>1/8</strong> plus a small
+constant, then align. Measured (CPython 3.14), the
+<code>allocated</code> growth sequence is:</p>
+<pre><code>0, 4, 8, 16, 24, 32, 40, 52, 64, 76, 92, 108, 128, ...</code></pre>
+<p>Compare that with the 1.5x or 2x growth common to C++’s
+<code>std::vector</code>. CPython uses 1/8 as a compromise between
+“wasted memory” and “number of reallocations,” because it assumes a
+list’s typical usage doesn’t append absurd amounts.</p>
+<p><strong>What happens on growth</strong>: it calls
+<code>realloc</code> to swap <code>ob_item</code> for a larger block,
+copying the old pointer array over bitwise (copying only pointers, not
+element objects, and not touching reference counts). The element objects
+stay put, and references to them elsewhere remain valid.</p>
+<pre><code>append triggers growth:
+old:  ob_item -&gt; [p0][p1][p2][p3]                (allocated=4, size=4)
+     realloc to a new buffer (allocated=8):
+new:  ob_item -&gt; [p0][p1][p2][p3][p4][ ][ ][ ]    (size=5)
+     the element objects (for p0..p4) never moved</code></pre>
+<h3 id="complexity-of-each-operation-and-why">1.3 Complexity of Each
+Operation and Why</h3>
+<table>
+<colgroup>
+<col style="width: 26%" />
+<col style="width: 34%" />
+<col style="width: 39%" />
+</colgroup>
+<thead>
+<tr>
+<th>Operation</th>
+<th>Complexity</th>
+<th>Underlying reason</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>lst[i]</code> index read/write</td>
+<td>O(1)</td>
+<td>Random access into the pointer array, <code>ob_item[i]</code></td>
+</tr>
+<tr>
+<td><code>lst.append(x)</code></td>
+<td>Amortized O(1)</td>
+<td>Write directly if there’s a free slot; realloc only when full,
+constant when amortized</td>
+</tr>
+<tr>
+<td><code>lst.pop()</code> (tail)</td>
+<td>O(1)</td>
+<td><code>ob_size--</code>, DECREF the last element</td>
+</tr>
+<tr>
+<td><code>lst.insert(0, x)</code></td>
+<td>O(n)</td>
+<td>All following pointers must <code>memmove</code> one slot right</td>
+</tr>
+<tr>
+<td><code>lst.pop(0)</code></td>
+<td>O(n)</td>
+<td>All following pointers shift left; use <code>deque</code> for
+frequent head operations</td>
+</tr>
+<tr>
+<td><code>del lst[i]</code> / middle deletion</td>
+<td>O(n)</td>
+<td>memmove to fill the hole</td>
+</tr>
+<tr>
+<td><code>x in lst</code></td>
+<td>O(n)</td>
+<td>Linear scan comparing each with <code>==</code></td>
+</tr>
+<tr>
+<td><code>len(lst)</code></td>
+<td>O(1)</td>
+<td>Directly reads <code>ob_size</code></td>
+</tr>
+<tr>
+<td>slice <code>lst[a:b]</code></td>
+<td>O(k)</td>
+<td>Build a new list, copy k pointers (shallow copy!) and INCREF
+each</td>
+</tr>
+</tbody>
+</table>
+<p>About amortized O(1): the total copy cost of n appends is the sum
+over all growth copies, and since growth is geometric, the sum is O(n),
+which amortized per operation is O(1). This is exactly the same analysis
+as <code>std::vector::push_back</code>.</p>
+<h3 id="shallow-copy-a-trap-you-must-remember">1.4 Shallow Copy: A Trap
+You Must Remember</h3>
+<p><code>lst2 = lst[:]</code>, <code>list(lst)</code>, and
+<code>copy.copy(lst)</code> are all <strong>shallow copies</strong>:
+they create a new list header and a new pointer array, but the pointers
+point at the <strong>same batch of element objects</strong>.</p>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> [[<span class="dv">1</span>, <span class="dv">2</span>], [<span class="dv">3</span>, <span class="dv">4</span>]]</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> a[:]              <span class="co"># shallow copy</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>b[<span class="dv">0</span>].append(<span class="dv">99</span>)       <span class="co"># modifying the shared inner list</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a)              <span class="co"># [[1, 2, 99], [3, 4]]  —— a changed too!</span></span></code></pre></div>
+<pre><code>a.ob_item -&gt; [p0][p1]
+                \    \
+                 v    v
+             [1,2,99] [3,4]      &lt;- there is only one copy of the inner objects
+                 ^    ^
+b.ob_item -&gt; [p0][p1]            &lt;- b is a new array, but its pointers point at the same inner objects</code></pre>
+<p>For true isolation, use <code>copy.deepcopy</code>, which recursively
+rebuilds every layer of objects. This is the same “shallow vs. deep
+copy” issue as in C++, except that Python’s pervasive references by
+default make it much easier to trip over.</p>
+<hr />
+<h2 id="tuple-an-immutable-fixed-length-array">2. <code>tuple</code>: An
+Immutable Fixed-Length Array</h2>
+<p>The tuple struct (<code>PyTupleObject</code>) is simpler than a
+list’s—it <strong>inlines</strong> the pointer array at the tail of the
+object rather than allocating it separately:</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">typedef</span> <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>    PyObject_VAR_HEAD</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>    PyObject <span class="op">*</span>ob_item<span class="op">[</span><span class="dv">1</span><span class="op">];</span>   <span class="co">// variable-length tail array, allocated once at creation, never changed</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> PyTupleObject<span class="op">;</span></span></code></pre></div>
+<p>Differences and consequences:</p>
+<ul>
+<li>No <code>allocated</code> field; the length is fixed after creation.
+<strong>One allocation</strong> (the object header and the element
+pointer array share a single block), so it’s one fewer allocation and
+one fewer level of indirection than a list, and more compact. Similar to
+a C flexible array member.</li>
+<li>“Immutable” means “the element pointer array is immutable”—you can’t
+make <code>t[0]</code> point at a different object. But if an element is
+itself a mutable object (such as a list), its contents can still
+change:</li>
+</ul>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>t <span class="op">=</span> (<span class="dv">1</span>, [<span class="dv">2</span>, <span class="dv">3</span>])</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>t[<span class="dv">1</span>].append(<span class="dv">4</span>)     <span class="co"># OK, modifies the inner list</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a><span class="co"># t[1] = [9]       # TypeError: can&#39;t change a tuple&#39;s slot</span></span></code></pre></div>
+<ul>
+<li>Because (when all its elements are hashable) a tuple is hashable, it
+can serve as a <code>dict</code> key or a <code>set</code> element; a
+list cannot. See the hashing section below.</li>
+<li>CPython keeps a <strong>free list</strong> cache for small tuples,
+so frequent creation and destruction of small tuples can reuse memory
+blocks, reducing malloc pressure.</li>
+</ul>
+<p>Rule of thumb: use a tuple for a heterogeneous, fixed “record” (like
+a C <code>struct</code>, but by position rather than by name); use a
+list for a homogeneous “collection” that needs insertion and deletion.
+For named fields, see <a
+href="11-标准库算法.html"><code>namedtuple</code></a>.</p>
+<hr />
+<h2 id="dict-cpythons-compact-dictionary">3. <code>dict</code>:
+CPython’s Compact Dictionary</h2>
+<p><code>dict</code> is Python’s most central data structure—it’s not
+only the user’s hash table but also the underlying carrier for object
+attributes (<code>__dict__</code>), namespaces, and keyword arguments.
+Its implementation has therefore been optimized again and again.</p>
+<h3 id="hash-table-basics-and-open-addressing">3.1 Hash-Table Basics and
+Open Addressing</h3>
+<p>Python’s dict uses <strong>open addressing</strong>, not chaining.
+That is, on a collision it doesn’t hang a linked list in the bucket but
+follows a probe sequence to find the next empty slot. All entries live
+in the same contiguous array, which is more cache-friendly.</p>
+<ul>
+<li>A key must be <strong>hashable</strong>: it implements
+<code>__hash__</code> and its hash value doesn’t change over its
+lifetime. Immutable built-in types (int/str/tuple/frozenset) are
+hashable; list/dict/set are not (because they’re mutable—a content
+change invalidates the hash and would corrupt the table).</li>
+<li>Average lookup/insert/delete is <strong>O(1)</strong>; worst case
+(many collisions) O(n), but that’s extremely rare in practice.</li>
+</ul>
+<h3 id="the-3.6-compact-dict-why-it-preserves-order">3.2 The 3.6+
+Compact Dict: Why It Preserves Order</h3>
+<p>Since Python 3.6, dict remembers insertion order (guaranteed by the
+language since 3.7). This isn’t a linked list bolted on; it’s a change
+to the data structure—splitting into two arrays:</p>
+<pre><code>indices (the hash table, storing indices into entries; may have empty slots -1):
++----+----+----+----+----+----+----+----+
+| -1 |  1 | -1 | -1 |  0 | -1 |  2 | -1 |
++----+----+----+----+----+----+----+----+
+
+entries (compact array, appended in insertion order, no holes):
++---------+--------+---------+
+|hash key val|hash key val|hash key val|
+|   &#39;a&#39;:1   |  &#39;b&#39;:2  |  &#39;c&#39;:3  |
++---------+--------+---------+
+   idx 0      idx 1     idx 2</code></pre>
+<ul>
+<li>The <strong>sparse <code>indices</code> array</strong> handles hash
+positioning; it stores “integer indices into entries,” with empty slots
+holding a special value. It can be quite sparse (low load factor), but
+each slot holds only a small integer (1/2/4/8 bytes depending on table
+size), so the wasted space is small.</li>
+<li>The <strong>compact <code>entries</code> array</strong> stores the
+actual <code>(hash, key, value)</code> triples contiguously in insertion
+order, with no holes. Iterating a dict is a sequential scan of this
+array—this is why order is preserved, and iteration is faster than the
+old version (which scanned the sparse large table).</li>
+<li>Compared to the pre-3.5 “every slot stores a full entry” sparse
+large table, the compact dict saves about <strong>20%–25%</strong>
+memory.</li>
+</ul>
+<p>The lookup process: hash the key → take the low bits as the
+<code>indices</code> subscript → get the entries index → compare hash
+and key in entries (compare the integer hash first; only if equal
+compare with <code>==</code>, since hashes can collide).</p>
+<h3 id="the-probe-sequence">3.3 The Probe Sequence</h3>
+<p>CPython uses a perturbation probing scheme that balances spread and
+locality (simplified logic):</p>
+<div class="sourceCode" id="cb12"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>perturb <span class="op">=</span> hash<span class="op">;</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>i <span class="op">=</span> hash <span class="op">&amp;</span> mask<span class="op">;</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="cf">while</span> <span class="op">(</span>slot_used_and_key_differs<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>    perturb <span class="op">&gt;&gt;=</span> <span class="dv">5</span><span class="op">;</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>    i <span class="op">=</span> <span class="op">(</span>i <span class="op">*</span> <span class="dv">5</span> <span class="op">+</span> perturb <span class="op">+</span> <span class="dv">1</span><span class="op">)</span> <span class="op">&amp;</span> mask<span class="op">;</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>It’s not simple linear probing but continually stirs the high bits of
+the hash in, making the probe sequence more scattered and reducing
+clustering.</p>
+<h3 id="growth">3.4 Growth</h3>
+<p>When the load factor exceeds <strong>2/3</strong>, the dict grows.
+The new table’s capacity is the smallest power of two that can hold “3
+times the currently used entries” (about 2x–4x growth). Growth
+<strong>rebuilds the indices table</strong> (re-scattering all keys),
+but entries are carried over in insertion order. Growth also cleans up
+the “tombstones” left by deletions along the way.</p>
+<h3 id="complexity-table">3.5 Complexity Table</h3>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr>
+<th>Operation</th>
+<th>Average</th>
+<th>Worst</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>d[k]</code> lookup</td>
+<td>O(1)</td>
+<td>O(n)</td>
+<td>Hash + probe</td>
+</tr>
+<tr>
+<td><code>d[k] = v</code> insert/update</td>
+<td>O(1) amortized</td>
+<td>O(n)</td>
+<td>May trigger a growth re-scatter</td>
+</tr>
+<tr>
+<td><code>del d[k]</code></td>
+<td>O(1)</td>
+<td>O(n)</td>
+<td>Marked deleted; the entries slot left empty (skipped on
+iteration)</td>
+</tr>
+<tr>
+<td><code>k in d</code></td>
+<td>O(1)</td>
+<td>O(n)</td>
+<td>Same as lookup</td>
+</tr>
+<tr>
+<td>iteration</td>
+<td>O(n)</td>
+<td>O(n)</td>
+<td>Sequential scan of entries</td>
+</tr>
+<tr>
+<td><code>len(d)</code></td>
+<td>O(1)</td>
+<td>O(1)</td>
+<td>Reads a counter</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>Compared to C++: <code>std::unordered_map</code> uses chaining (each
+bucket hangs a linked list/nodes, each node separately
+<code>new</code>’d, cache-unfriendly); <code>std::map</code> is a
+red-black tree, O(log n) and sorted by key. Python’s dict is more like a
+highly optimized open-addressing hash table that additionally guarantees
+insertion order.</p>
+</blockquote>
+<hr />
+<h2 id="set-and-frozenset">4. <code>set</code> and
+<code>frozenset</code></h2>
+<p><code>set</code>’s implementation is highly similar to
+dict’s—essentially a “hash table with keys but no values,” likewise
+open-addressed and likewise requiring hashable elements. The
+differences:</p>
+<ul>
+<li>A set <strong>does not guarantee order</strong> (it doesn’t
+introduce a compact entries array to record insertion order the way dict
+does; it uses a structure closer to the traditional sparse table). Don’t
+rely on a set’s iteration order.</li>
+<li>Used for membership testing (<code>x in s</code> averages O(1)),
+deduplication, and set operations (<code>&amp;</code> intersection,
+<code>|</code> union, <code>-</code> difference, <code>^</code>
+symmetric difference).</li>
+<li><code>frozenset</code> is the immutable version, so <strong>it is
+itself hashable</strong> and can serve as a dict key or go inside
+another set.</li>
+</ul>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>seen <span class="op">=</span> <span class="bu">set</span>()</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> x <span class="kw">in</span> data:</span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> x <span class="kw">not</span> <span class="kw">in</span> seen:      <span class="co"># average O(1), much faster than a list&#39;s O(n) in</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>        seen.add(x)</span></code></pre></div>
+<table>
+<colgroup>
+<col style="width: 35%" />
+<col style="width: 64%" />
+</colgroup>
+<thead>
+<tr>
+<th>Operation</th>
+<th>Average complexity</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>add</code> / <code>remove</code> / <code>in</code></td>
+<td>O(1)</td>
+</tr>
+<tr>
+<td>intersection <code>a &amp; b</code></td>
+<td>O(min(len a, len b))—iterate the smaller set and probe the
+other</td>
+</tr>
+<tr>
+<td>union <code>a</code> | <code>b</code></td>
+<td>O(len a + len b)</td>
+</tr>
+<tr>
+<td>difference <code>a - b</code></td>
+<td>O(len a)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="collections.deque-a-doubly-linked-list-of-blocks">5.
+<code>collections.deque</code>: A Doubly-Linked List of Blocks</h2>
+<p>A list’s head operations are O(n). When you need efficient
+insertion/removal at both ends (queues, sliding windows), use
+<code>collections.deque</code>.</p>
+<p>Its implementation is <strong>not</strong> an ordinary doubly-linked
+list (that would be one node per element, terrible for cache), but a
+<strong>doubly-linked list of fixed-size blocks</strong>:</p>
+<pre><code>block (64 pointers each)     block                block
++----------------+       +----------------+     +----------------+
+| prev | items...|  &lt;-&gt;  | prev | items...| &lt;-&gt; | prev | items...|
+| next |         |       | next |         |     | next |         |
++----------------+       +----------------+     +----------------+
+   ^ leftblock                                     ^ rightblock</code></pre>
+<ul>
+<li>Each block is a fixed-length (64) pointer array; blocks are chained
+into a doubly-linked list via prev/next pointers.</li>
+<li><code>append</code>/<code>appendleft</code>/<code>pop</code>/<code>popleft</code>
+at both ends are all <strong>O(1)</strong>: shift one position in the
+head/tail block, and chain a new block when full.</li>
+<li>The cost: random indexing <code>dq[i]</code> is
+<strong>O(n)</strong> (you must walk the block chain), so deque isn’t
+suited to random access.</li>
+<li>The <code>maxlen</code> parameter can make it a fixed-length ring
+buffer (overflow is automatically pushed out from the other end), well
+suited to “the most recent N” scenarios.</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Operation</th>
+<th>list</th>
+<th>deque</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>tail append/pop</td>
+<td>O(1) amortized</td>
+<td>O(1)</td>
+</tr>
+<tr>
+<td>head insert/pop</td>
+<td>O(n)</td>
+<td>O(1)</td>
+</tr>
+<tr>
+<td>random index <code>x[i]</code></td>
+<td>O(1)</td>
+<td>O(n)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="panoramic-complexity-comparison-table">6. Panoramic Complexity
+Comparison Table</h2>
+<table>
+<colgroup>
+<col style="width: 9%" />
+<col style="width: 9%" />
+<col style="width: 14%" />
+<col style="width: 14%" />
+<col style="width: 14%" />
+<col style="width: 14%" />
+<col style="width: 9%" />
+<col style="width: 14%" />
+</colgroup>
+<thead>
+<tr>
+<th>Structure</th>
+<th>Underlying</th>
+<th>Random access</th>
+<th>Head insert/delete</th>
+<th>Tail insert/delete</th>
+<th>Membership test</th>
+<th>Ordered</th>
+<th>Usable as key</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>list</code></td>
+<td>dynamic array of pointers</td>
+<td>O(1)</td>
+<td>O(n)</td>
+<td>O(1) amortized</td>
+<td>O(n)</td>
+<td>insertion order</td>
+<td>No</td>
+</tr>
+<tr>
+<td><code>tuple</code></td>
+<td>inline pointer array (immutable)</td>
+<td>O(1)</td>
+<td>—</td>
+<td>—</td>
+<td>O(n)</td>
+<td>ordered</td>
+<td>Yes (when elements are hashable)</td>
+</tr>
+<tr>
+<td><code>dict</code></td>
+<td>compact open-addressing hash table</td>
+<td>O(1) by key</td>
+<td>—</td>
+<td>—</td>
+<td>O(1)</td>
+<td>insertion order</td>
+<td>No</td>
+</tr>
+<tr>
+<td><code>set</code></td>
+<td>open-addressing hash table</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td>O(1)</td>
+<td>No</td>
+<td>No</td>
+</tr>
+<tr>
+<td><code>frozenset</code></td>
+<td>same, immutable</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td>O(1)</td>
+<td>No</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td><code>deque</code></td>
+<td>doubly-linked list of blocks</td>
+<td>O(n)</td>
+<td>O(1)</td>
+<td>O(1)</td>
+<td>O(n)</td>
+<td>ordered</td>
+<td>No</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="summary-of-the-memory-model-comparison-with-c">7. Summary of the
+Memory-Model Comparison with C</h2>
+<table>
+<colgroup>
+<col style="width: 29%" />
+<col style="width: 33%" />
+<col style="width: 37%" />
+</colgroup>
+<thead>
+<tr>
+<th>C/C++</th>
+<th>Python</th>
+<th>Key difference</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>int a[N]</code></td>
+<td><code>list</code></td>
+<td>C stores values contiguously; a list stores pointers, values
+scattered on the heap</td>
+</tr>
+<tr>
+<td><code>std::vector&lt;T&gt;</code></td>
+<td><code>list</code></td>
+<td>vector stores values and can hold small objects on the stack; a list
+always stores pointers</td>
+</tr>
+<tr>
+<td><code>struct {int; char*;}</code></td>
+<td><code>tuple</code> / <code>namedtuple</code> / class</td>
+<td>a struct lays out fields by offset; a tuple stores pointers by
+index</td>
+</tr>
+<tr>
+<td><code>std::unordered_map</code></td>
+<td><code>dict</code></td>
+<td>chaining vs. open addressing; dict additionally preserves order</td>
+</tr>
+<tr>
+<td><code>std::unordered_set</code></td>
+<td><code>set</code></td>
+<td>same as above</td>
+</tr>
+<tr>
+<td><code>std::deque</code></td>
+<td><code>deque</code></td>
+<td>conceptually close, both block-based</td>
+</tr>
+</tbody>
+</table>
+<p>The core takeaway: <strong>Python containers are containers of
+references.</strong> Copying a container copies only pointers by default
+(shallow copy), and multiple containers can alias the same batch of
+elements; for true independence you must <code>deepcopy</code>. If you
+want C-style contiguous value storage, cache-friendliness, and
+vectorization, use <a
+href="11-标准库算法.html"><code>array</code>/<code>memoryview</code></a>
+or <a href="12-常用第三方库.html"><code>numpy</code></a>.</p>
+<hr />
+<p><a href="06-函数与调用栈.html">← Prev: Functions and the Call
+Stack</a> · <a href="index.html">Index</a> · <a
+href="08-面向对象与类型系统.html">Next: Object Orientation and the Type
+System</a> →</p>
+</div>
+</body>
+</html>

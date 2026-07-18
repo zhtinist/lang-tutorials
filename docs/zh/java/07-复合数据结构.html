@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="zh-CN" xml:lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.10" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>集合框架的内部实现</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../../assets/style.css" />
+</head>
+<body>
+<div class="topbar"><div class="wrap"><a class="home" href="../index.html">📚 面向 C/C++ 程序员的其他语言教程</a>
+<a href="../python/index.html">Python</a>
+<a href="../java/index.html" style="color:var(--accent-dark);font-weight:700">Java</a>
+<a href="../go/index.html">Go</a></div></div><a class="langtoggle" href="#" onclick="switchLang();return false;" title="切换语言 / Switch language"><b>EN</b><span>English</span></a><script>function switchLang(){var p=location.pathname,en=p.indexOf('/en/')>-1,n=en?p.replace('/en/','/zh/'):p.replace('/zh/','/en/');try{localStorage.setItem('lang',en?'zh':'en')}catch(e){}location.href=n;}</script>
+<div class="wrap">
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#集合框架的内部实现"
+id="toc-集合框架的内部实现">集合框架的内部实现</a>
+<ul>
+<li><a href="#一数组一切的地基"
+id="toc-一数组一切的地基">一、数组:一切的地基</a></li>
+<li><a href="#二collection-体系全景"
+id="toc-二collection-体系全景">二、Collection 体系全景</a></li>
+<li><a href="#三arraylist-vs-linkedlist"
+id="toc-三arraylist-vs-linkedlist">三、ArrayList vs LinkedList</a></li>
+<li><a href="#四hashmap重头戏"
+id="toc-四hashmap重头戏">四、HashMap:重头戏</a></li>
+<li><a href="#五linkedhashmap-treemap"
+id="toc-五linkedhashmap-treemap">五、LinkedHashMap / TreeMap</a></li>
+<li><a href="#六hashset-arraydeque"
+id="toc-六hashset-arraydeque">六、HashSet / ArrayDeque</a></li>
+<li><a href="#七泛型集合与类型擦除的影响"
+id="toc-七泛型集合与类型擦除的影响">七、泛型集合与类型擦除的影响</a></li>
+<li><a href="#八迭代器与-fail-fast"
+id="toc-八迭代器与-fail-fast">八、迭代器与 fail-fast</a></li>
+<li><a href="#九与-c-stl-容器速查对照"
+id="toc-九与-c-stl-容器速查对照">九、与 C++ STL 容器速查对照</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1 id="集合框架的内部实现">集合框架的内部实现</h1>
+<p>C++ 里你用
+<code>std::vector</code>、<code>std::list</code>、<code>std::unordered_map</code>、<code>std::map</code>。Java
+的集合框架(Java Collections Framework,
+JCF)在概念上一一对应,但<strong>内部实现细节、内存布局、扩容策略与迭代器语义</strong>都值得逐一掰开看。本章的核心是:每种容器在堆上到底摆了什么,拷贝的是值还是引用,复杂度从哪来。</p>
+<p>关于”引用 vs 值”的基础,参见<a
+href="03-变量与内存模型.html">「变量与内存模型」</a>;对象头布局参见<a
+href="04-数据类型.html">「数据类型与内存布局」</a>。</p>
+<h2 id="一数组一切的地基">一、数组:一切的地基</h2>
+<p>Java 数组是<strong>真正的对象</strong>,在堆上分配,不像 C
+那样只是一段裸内存 + 指针算术。</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span><span class="op">[]</span> a <span class="op">=</span> <span class="kw">new</span> <span class="dt">int</span><span class="op">[</span><span class="dv">4</span><span class="op">];</span>        <span class="co">// 堆上分配:对象头 + length 字段 + 4 个连续 int</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span><span class="op">[]</span> s <span class="op">=</span> <span class="kw">new</span> <span class="bu">String</span><span class="op">[</span><span class="dv">3</span><span class="op">];</span>  <span class="co">// 堆上:3 个连续的“引用槽”,初值 null</span></span></code></pre></div>
+<h3 id="内存布局hotspot64-位压缩指针">内存布局(HotSpot,64
+位,压缩指针)</h3>
+<pre><code>int[4] 在堆上:
+┌──────────┬──────────┬────────┬────┬────┬────┬────┐
+│ mark word│ klass ptr│ length │ [0]│ [1]│ [2]│ [3]│
+│  8 bytes │  4 bytes │ 4 bytes│int │int │int │int │
+└──────────┴──────────┴────────┴────┴────┴────┴────┘
+             对象头共 16 字节        元素连续存放,cache 友好</code></pre>
+<p>与 C 的关键区别:</p>
+<table>
+<colgroup>
+<col style="width: 21%" />
+<col style="width: 39%" />
+<col style="width: 39%" />
+</colgroup>
+<thead>
+<tr>
+<th>特性</th>
+<th>C/C++ 数组</th>
+<th>Java 数组</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>本质</td>
+<td>裸内存,<code>a[i]</code> = <code>*(a+i)</code></td>
+<td>堆上对象,含 length 字段</td>
+</tr>
+<tr>
+<td>长度</td>
+<td>编译期常量或需另存</td>
+<td><code>a.length</code> 随身携带</td>
+</tr>
+<tr>
+<td>边界检查</td>
+<td>无,越界即 UB</td>
+<td>每次访问检查,越界抛 <code>ArrayIndexOutOfBoundsException</code></td>
+</tr>
+<tr>
+<td>存放对象</td>
+<td>可存对象值(连续)</td>
+<td>只能存引用(<code>Object[]</code> 是引用数组)</td>
+</tr>
+<tr>
+<td>协变</td>
+<td>无</td>
+<td><strong>协变</strong>:<code>Object[] o = new String[3];</code>
+合法</td>
+</tr>
+</tbody>
+</table>
+<h3 id="数组协变的坑">数组协变的坑</h3>
+<p>Java 数组协变意味着 <code>String[]</code> IS-A
+<code>Object[]</code>,这在编译期通过,但运行时每次写入都要做类型检查:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="bu">Object</span><span class="op">[]</span> arr <span class="op">=</span> <span class="kw">new</span> <span class="bu">String</span><span class="op">[</span><span class="dv">3</span><span class="op">];</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>arr<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="st">&quot;ok&quot;</span><span class="op">;</span>           <span class="co">// 正常</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>arr<span class="op">[</span><span class="dv">1</span><span class="op">]</span> <span class="op">=</span> <span class="bu">Integer</span><span class="op">.</span><span class="fu">valueOf</span><span class="op">(</span><span class="dv">1</span><span class="op">);</span> <span class="co">// 编译通过!运行时抛 ArrayStoreException</span></span></code></pre></div>
+<p>C++ 的模板是不变(invariant)的,<code>vector&lt;string&gt;</code> 与
+<code>vector&lt;Object&gt;</code> 毫无关系。Java
+数组这个设计是历史包袱(泛型出现前为了让
+<code>Arrays.sort(Object[])</code> 能用),代价是运行时 store
+check。泛型集合(下文)则是不变的。</p>
+<h3 id="边界检查开销与消除">边界检查开销与消除</h3>
+<p>每次 <code>a[i]</code> 都插入 <code>0 &lt;= i &lt; a.length</code>
+判断。JIT 有 <strong>范围检查消除</strong>(Range Check Elimination):在
+<code>for (int i=0;i&lt;a.length;i++)</code> 这类可证明安全的循环里,C2
+会把检查提到循环外或删除,使性能逼近
+C。所以规范层面有开销,实现层面常常被优化掉。</p>
+<h2 id="二collection-体系全景">二、Collection 体系全景</h2>
+<pre><code>                 Iterable
+                     │
+                Collection ───────────────┐
+                 │      │                  │
+               List    Set               Queue
+              /  │  \    │  \              │   \
+     ArrayList  │  Vector│   \          ArrayDeque Deque
+     LinkedList │       HashSet         PriorityQueue
+     (LinkedList 同时是 Queue/Deque)  LinkedHashSet
+                          TreeSet(SortedSet)
+
+  Map(不属于 Collection,单独一支)
+   │    │        │
+ HashMap TreeMap LinkedHashMap
+ (SortedMap = TreeMap)</code></pre>
+<p>要点:<code>Map</code> <strong>不</strong>继承
+<code>Collection</code>,是平行的一支。<code>List</code>/<code>Set</code>/<code>Queue</code>
+都是 <code>Collection</code>。</p>
+<h2 id="三arraylist-vs-linkedlist">三、ArrayList vs LinkedList</h2>
+<h3 id="arraylist动态数组">ArrayList:动态数组</h3>
+<p>内部就是一个 <code>Object[] elementData</code> +
+<code>int size</code>:</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co">// 简化的 JDK 源码结构</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="kw">transient</span> <span class="bu">Object</span><span class="op">[]</span> elementData<span class="op">;</span> <span class="co">// 真正存元素的数组</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="kw">private</span> <span class="dt">int</span> size<span class="op">;</span>               <span class="co">// 逻辑大小(&lt;= elementData.length 容量)</span></span></code></pre></div>
+<p>内存图:</p>
+<pre><code>ArrayList 对象(堆)          elementData 数组(堆)
+┌───────────────┐          ┌────┬────┬────┬────┬────┬────┐
+│ elementData ──┼────────▶ │ e0 │ e1 │ e2 │null│null│null│
+│ size = 3      │          └────┴────┴────┴────┴────┴────┘
+└───────────────┘           capacity = 6, size = 3</code></pre>
+<p>注意存的是<strong>引用</strong>(<code>Object[]</code>),对象本体散落在堆各处;不像
+C++ <code>vector&lt;Point&gt;</code> 把 Point 值连续内联。所以 Java 的
+<code>ArrayList&lt;Point&gt;</code> 遍历时是”数组连续 →
+逐个跳到堆各处”,cache 局部性不如 C++ 的值语义
+vector。要连续存基本类型,得用原生 <code>int[]</code>
+或第三方原生集合。</p>
+<p><strong>扩容</strong>:默认容量 10,满了按 <strong>1.5 倍</strong>
+增长(<code>newCap = oldCap + (oldCap &gt;&gt; 1)</code>),<code>Arrays.copyOf</code>
+分配新数组并拷贝引用(浅拷贝,只拷指针值,不复制对象本体)。</p>
+<pre><code>size=10 已满,add 第 11 个:
+新容量 = 10 + 5 = 15,分配 Object[15],拷贝 10 个引用过去,旧数组待 GC</code></pre>
+<p>对比 C++ <code>std::vector</code> 常见 2 倍扩容(libstdc++ 用 2x,MSVC
+用 1.5x)。均摊 O(1) 追加。</p>
+<h3 id="linkedlist双向链表">LinkedList:双向链表</h3>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="kw">private</span> <span class="dt">static</span> <span class="kw">class</span> <span class="bu">Node</span><span class="op">&lt;</span>E<span class="op">&gt;</span> <span class="op">{</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>    E item<span class="op">;</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    <span class="bu">Node</span><span class="op">&lt;</span>E<span class="op">&gt;</span> next<span class="op">;</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>    <span class="bu">Node</span><span class="op">&lt;</span>E<span class="op">&gt;</span> prev<span class="op">;</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>每个节点是独立堆对象:对象头 16 字节 + 3
+个引用(item/next/prev,压缩指针各 4 字节)≈ 32
+字节/节点,存一个元素开销巨大。内存图:</p>
+<pre><code>first ─▶┌────┬────┬────┐   ┌────┬────┬────┐   ┌────┬────┬────┐◀─ last
+        │prev│item│next┼──▶│prev│item│next┼──▶│prev│item│next│
+        │null│ e0 │  ●─┘   │ ●  │ e1 │ ●─┘   │ ●  │ e2 │null│
+        └────┴────┴────┘◀──┴────┴────┴────┘◀──┴────┴────┴────┘</code></pre>
+<p>对应 C++ <code>std::list</code>。节点散布堆中,遍历
+cache-unfriendly。<code>get(i)</code> 是
+O(n)(从最近的一端走)。<strong>实践中 <code>ArrayList</code>
+几乎总是更好</strong>,即便频繁头部插入,<code>ArrayDeque</code> 也比
+<code>LinkedList</code> 快。<code>LinkedList</code>
+唯一优势是持有节点引用时的 O(1) 删除,但集合 API 里你通常拿不到节点。</p>
+<h3 id="复杂度对照">复杂度对照</h3>
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th>ArrayList</th>
+<th>LinkedList</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>get(i)</code></td>
+<td>O(1)</td>
+<td>O(n)</td>
+</tr>
+<tr>
+<td><code>add</code>(尾)</td>
+<td>均摊 O(1)</td>
+<td>O(1)</td>
+</tr>
+<tr>
+<td><code>add(i, e)</code>(中间)</td>
+<td>O(n)(搬移)</td>
+<td>O(n)(定位)+O(1)</td>
+</tr>
+<tr>
+<td>头部插入</td>
+<td>O(n)</td>
+<td>O(1)</td>
+</tr>
+<tr>
+<td><code>contains</code></td>
+<td>O(n)</td>
+<td>O(n)</td>
+</tr>
+<tr>
+<td>内存/元素</td>
+<td>1 个引用 + 容量冗余</td>
+<td>~32 字节节点</td>
+</tr>
+</tbody>
+</table>
+<h2 id="四hashmap重头戏">四、HashMap:重头戏</h2>
+<p>对应 C++ <code>std::unordered_map</code>,但实现细节差别很大。</p>
+<h3 id="结构桶数组-链表红黑树">结构:桶数组 + 链表/红黑树</h3>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="kw">transient</span> <span class="bu">Node</span><span class="op">&lt;</span>K<span class="op">,</span>V<span class="op">&gt;[]</span> table<span class="op">;</span>  <span class="co">// 桶数组,长度总是 2 的幂</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="dt">static</span> <span class="kw">class</span> <span class="bu">Node</span><span class="op">&lt;</span>K<span class="op">,</span>V<span class="op">&gt;</span> <span class="op">{</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">final</span> <span class="dt">int</span> hash<span class="op">;</span>   <span class="co">// 缓存的扰动后哈希</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">final</span> K key<span class="op">;</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>    V value<span class="op">;</span></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>    <span class="bu">Node</span><span class="op">&lt;</span>K<span class="op">,</span>V<span class="op">&gt;</span> next<span class="op">;</span>   <span class="co">// 链表指针(拉链法解决冲突)</span></span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>内存图(冲突时拉链):</p>
+<pre><code>table (Node[16])
+┌────┐
+│ 0  │──▶ null
+│ 1  │──▶ [h,k1,v1] ──▶ [h,k9,v9] ──▶ null   (bucket 1 有两个键冲突)
+│ 2  │──▶ null
+│... │
+│ 5  │──▶ [h,k5,v5] ──▶ null
+└────┘</code></pre>
+<h3 id="哈希扰动函数">哈希扰动函数</h3>
+<p>桶下标 = <code>hash &amp; (n-1)</code>(n 是 2
+的幂,等价取模但更快)。若直接用
+<code>key.hashCode()</code>,高位不参与运算(因为 <code>&amp; (n-1)</code>
+只保留低位),高位不同、低位相同的键会撞。扰动把高 16 位异或到低位:</p>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="dt">static</span> <span class="dt">final</span> <span class="dt">int</span> <span class="fu">hash</span><span class="op">(</span><span class="bu">Object</span> key<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> h<span class="op">;</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="op">(</span>key <span class="op">==</span> <span class="kw">null</span><span class="op">)</span> <span class="op">?</span> <span class="dv">0</span> <span class="op">:</span> <span class="op">(</span>h <span class="op">=</span> key<span class="op">.</span><span class="fu">hashCode</span><span class="op">())</span> <span class="op">^</span> <span class="op">(</span>h <span class="op">&gt;&gt;&gt;</span> <span class="dv">16</span><span class="op">);</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="冲突加剧时-treeify">冲突加剧时 treeify</h3>
+<p>同一个桶的链表长度 <strong>≥ 8</strong> 且 <strong>table 长度 ≥
+64</strong> 时,链表转为<strong>红黑树</strong>,把该桶最坏查找从 O(n)
+降到 O(log n),防哈希碰撞攻击(DoS)。树节点数退到 <strong>≤ 6</strong>
+时退化回链表(留 6/8 的滞后区间避免频繁转换)。</p>
+<pre><code>链长 &gt;= 8 且 table.length &gt;= 64:
+bucket ──▶ 链表 ─treeify─▶ 红黑树(TreeNode)
+若 table 还没到 64,优先扩容而非树化</code></pre>
+<h3 id="负载因子与扩容-rehash">负载因子与扩容 rehash</h3>
+<ul>
+<li><strong>负载因子
+0.75</strong>:<code>size &gt; capacity * 0.75</code>
+时扩容为<strong>两倍</strong>。0.75
+是空间/时间折中(经泊松分布分析,冲突概率与内存浪费平衡)。</li>
+<li><strong>扩容 rehash</strong>:分配 2
+倍新桶数组,重散列每个元素。因容量是 2
+的幂且翻倍,元素新位置只有两种:<code>原位置</code> 或
+<code>原位置 + 旧容量</code>。JDK 8 用这个性质避免重算 hash,只看
+<code>hash &amp; oldCap</code> 那一位是 0 还是 1,把旧链拆成 lo/hi
+两条链,分别放到新表两个位置。O(n) 但常数小。</li>
+</ul>
+<pre><code>旧 table.length=16,扩到 32:
+某桶的链表按 (hash &amp; 16) 拆成两条 →  桶 j 和桶 j+16</code></pre>
+<h3 id="关键契约equalshashcode">关键契约:equals/hashCode</h3>
+<p><code>HashMap</code> 定位分两步:先按 hash 找桶,再在桶内用
+<code>equals</code> 逐个比。所以自定义 key
+<strong>必须</strong>同时正确重写 <code>equals</code> 和
+<code>hashCode</code>,否则相等的对象散到不同桶就找不回来。详见<a
+href="08-面向对象与类型系统.html">「面向对象与类型系统」中的
+equals/hashCode 契约</a>。C++ 里同理:<code>unordered_map</code> 需要
+<code>std::hash</code> 特化 + <code>operator==</code>。</p>
+<h3 id="复杂度">复杂度</h3>
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th>平均</th>
+<th>最坏(树化后)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>get</code>/<code>put</code>/<code>remove</code></td>
+<td>O(1)</td>
+<td>O(log n)</td>
+</tr>
+<tr>
+<td>遍历</td>
+<td>O(capacity + size)</td>
+<td>同</td>
+</tr>
+</tbody>
+</table>
+<p>注意:<code>HashMap</code> <strong>非线程安全</strong>;并发下扩容 JDK7
+会成环死循环(JDK8 修复但仍可能丢数据)。并发用
+<code>ConcurrentHashMap</code>,见<a
+href="10-并发模型.html">「并发模型」</a>。</p>
+<h2 id="五linkedhashmap-treemap">五、LinkedHashMap / TreeMap</h2>
+<h3 id="linkedhashmap">LinkedHashMap</h3>
+<p>在 <code>HashMap</code> 的 Node 上再加
+<code>before</code>/<code>after</code>
+双向链,维护<strong>插入顺序</strong>(或访问顺序
+<code>accessOrder=true</code>,可实现 LRU 缓存)。哈希查找仍
+O(1),额外维护一条贯穿所有节点的链表。</p>
+<pre><code>HashMap 的桶结构 + 一条横穿所有节点的双向链(记录顺序)
+head ──▶ node ──▶ node ──▶ node ──▶ tail</code></pre>
+<h3 id="treemap">TreeMap</h3>
+<p>基于<strong>红黑树</strong>(自平衡 BST),对应 C++
+<code>std::map</code>。按 key 排序(自然序或
+<code>Comparator</code>)。所有操作 O(log n),提供
+<code>firstKey</code>/<code>lastKey</code>/<code>floorKey</code>/<code>ceilingKey</code>/<code>subMap</code>
+等有序视图。key 需可比较(<code>Comparable</code> 或传
+<code>Comparator</code>),见<a
+href="11-标准库算法.html">「标准库算法」</a>。</p>
+<h2 id="六hashset-arraydeque">六、HashSet / ArrayDeque</h2>
+<ul>
+<li><strong>HashSet</strong>:内部就是一个 <code>HashMap</code>,元素当
+key,value 是一个共享的 dummy <code>Object</code>。所以
+<code>HashSet</code> 的一切特性等于 <code>HashMap</code> 的 keySet。对应
+C++ <code>unordered_set</code>。</li>
+<li><strong>LinkedHashSet</strong>:内部
+<code>LinkedHashMap</code>,保插入序。</li>
+<li><strong>TreeSet</strong>:内部 <code>TreeMap</code>,有序,对应
+<code>std::set</code>。</li>
+<li><strong>ArrayDeque</strong>:<strong>循环数组</strong>实现的双端队列,<code>head</code>/<code>tail</code>
+两个索引在环形缓冲上移动,扩容翻倍。作栈或队列都比
+<code>Stack</code>(过时,继承自 <code>Vector</code>,带同步)和
+<code>LinkedList</code> 快。<strong>首选的栈/队列实现</strong>。不允许
+null(用 null 表示空槽)。</li>
+</ul>
+<pre><code>ArrayDeque 循环数组:
+┌───┬───┬───┬───┬───┬───┐
+│ e │ e │   │   │ e │ e │   head=4, tail=2 (环绕)
+└───┴───┴───┴───┴───┴───┘</code></pre>
+<h2 id="七泛型集合与类型擦除的影响">七、泛型集合与类型擦除的影响</h2>
+<p><code>ArrayList&lt;String&gt;</code> 在运行时就是
+<code>ArrayList</code>,内部
+<code>Object[]</code>;泛型只在编译期检查并自动插入强制转换。这就是为什么不能
+<code>new T[]</code>、集合里存的永远是引用(基本类型被自动装箱)。擦除机制详见<a
+href="08-面向对象与类型系统.html">「泛型与类型擦除」</a>。</p>
+<p>后果:<code>ArrayList&lt;Integer&gt;</code> 每个元素是堆上的
+<code>Integer</code> 对象 + 数组里的引用,内存与拆装箱开销远大于 C++
+<code>vector&lt;int&gt;</code>。性能敏感场景用原生数组或第三方原生集合(Eclipse
+Collections、fastutil)。</p>
+<h2 id="八迭代器与-fail-fast">八、迭代器与 fail-fast</h2>
+<p>集合内部维护 <code>modCount</code>(结构性修改计数)。迭代器创建时记下
+<code>expectedModCount</code>,每次 <code>next()</code>
+校验;若期间集合被非迭代器途径修改,抛
+<code>ConcurrentModificationException</code>。</p>
+<div class="sourceCode" id="cb17"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="bu">List</span><span class="op">&lt;</span><span class="bu">Integer</span><span class="op">&gt;</span> list <span class="op">=</span> <span class="kw">new</span> <span class="bu">ArrayList</span><span class="op">&lt;&gt;(</span><span class="bu">List</span><span class="op">.</span><span class="fu">of</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">));</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="bu">Integer</span> x <span class="op">:</span> list<span class="op">)</span> <span class="op">{</span>      <span class="co">// 增强 for 底层用 Iterator</span></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>x <span class="op">==</span> <span class="dv">2</span><span class="op">)</span> list<span class="op">.</span><span class="fu">remove</span><span class="op">(</span>x<span class="op">);</span> <span class="co">// 结构修改 → modCount 变 → 下次 next() 抛异常</span></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a><span class="co">// 正确做法:用 iterator.remove() 或 list.removeIf(x -&gt; x == 2)</span></span></code></pre></div>
+<p>fail-fast
+是<strong>尽力而为</strong>的错误检测(不保证一定触发),不是并发保护;真正并发用
+<code>CopyOnWriteArrayList</code>/<code>ConcurrentHashMap</code>(弱一致迭代器,不抛此异常)。C++
+STL 里对应的是”迭代器失效”——但 STL 是 UB,Java 主动抛异常帮你抓早。</p>
+<h2 id="九与-c-stl-容器速查对照">九、与 C++ STL 容器速查对照</h2>
+<table>
+<thead>
+<tr>
+<th>Java</th>
+<th>C++ STL</th>
+<th>底层</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ArrayList</code></td>
+<td><code>vector</code></td>
+<td>动态数组(Java 存引用,C++ 存值)</td>
+</tr>
+<tr>
+<td><code>LinkedList</code></td>
+<td><code>list</code></td>
+<td>双向链表</td>
+</tr>
+<tr>
+<td><code>ArrayDeque</code></td>
+<td><code>deque</code></td>
+<td>循环数组(C++ deque 是分段数组)</td>
+</tr>
+<tr>
+<td><code>HashMap</code></td>
+<td><code>unordered_map</code></td>
+<td>拉链哈希(Java 会树化)</td>
+</tr>
+<tr>
+<td><code>TreeMap</code></td>
+<td><code>map</code></td>
+<td>红黑树</td>
+</tr>
+<tr>
+<td><code>HashSet</code></td>
+<td><code>unordered_set</code></td>
+<td>哈希</td>
+</tr>
+<tr>
+<td><code>TreeSet</code></td>
+<td><code>set</code></td>
+<td>红黑树</td>
+</tr>
+<tr>
+<td><code>PriorityQueue</code></td>
+<td><code>priority_queue</code></td>
+<td>二叉堆</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<p><a href="06-函数与调用栈.html">← 上一章:方法与调用栈</a> · <a
+href="index.html">返回目录</a> · <a
+href="08-面向对象与类型系统.html">下一章:面向对象与类型系统</a> →</p>
+</div>
+</body>
+</html>

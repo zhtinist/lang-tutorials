@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.10" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Error Handling and Resource Management: Exceptions and Garbage
+Collection</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../../assets/style.css" />
+</head>
+<body>
+<div class="topbar"><div class="wrap"><a class="home" href="../index.html">📚 Other Languages for C/C++ Programmers</a>
+<a href="../python/index.html">Python</a>
+<a href="../java/index.html" style="color:var(--accent-dark);font-weight:700">Java</a>
+<a href="../go/index.html">Go</a></div></div><a class="langtoggle" href="#" onclick="switchLang();return false;" title="切换语言 / Switch language"><b>中</b><span>中文</span></a><script>function switchLang(){var p=location.pathname,en=p.indexOf('/en/')>-1,n=en?p.replace('/en/','/zh/'):p.replace('/zh/','/en/');try{localStorage.setItem('lang',en?'zh':'en')}catch(e){}location.href=n;}</script>
+<div class="wrap">
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a
+href="#error-handling-and-resource-management-exceptions-and-garbage-collection"
+id="toc-error-handling-and-resource-management-exceptions-and-garbage-collection">Error
+Handling and Resource Management: Exceptions and Garbage Collection</a>
+<ul>
+<li><a href="#the-exception-hierarchy"
+id="toc-the-exception-hierarchy">The Exception Hierarchy</a></li>
+<li><a href="#trycatchfinally-and-stack-unwinding"
+id="toc-trycatchfinally-and-stack-unwinding">try/catch/finally and Stack
+Unwinding</a></li>
+<li><a href="#try-with-resources-javas-raii"
+id="toc-try-with-resources-javas-raii">try-with-resources: Java’s
+RAII</a></li>
+<li><a href="#multi-catch-and-exception-chaining"
+id="toc-multi-catch-and-exception-chaining">Multi-Catch and Exception
+Chaining</a></li>
+<li><a href="#garbage-collection-gc"
+id="toc-garbage-collection-gc">Garbage Collection (GC)</a></li>
+<li><a href="#the-generational-hypothesis-and-heap-layout"
+id="toc-the-generational-hypothesis-and-heap-layout">The Generational
+Hypothesis and Heap Layout</a></li>
+<li><a href="#reachability-analysis-and-gc-roots"
+id="toc-reachability-analysis-and-gc-roots">Reachability Analysis and GC
+Roots</a></li>
+<li><a href="#collector-evolution-and-the-stw-trade-off"
+id="toc-collector-evolution-and-the-stw-trade-off">Collector Evolution
+and the STW Trade-off</a></li>
+<li><a href="#the-deprecation-of-finalize-and-the-cleaner"
+id="toc-the-deprecation-of-finalize-and-the-cleaner">The Deprecation of
+finalize and the Cleaner</a></li>
+<li><a href="#reference-strength-strong-soft-weak-phantom"
+id="toc-reference-strength-strong-soft-weak-phantom">Reference Strength:
+Strong / Soft / Weak / Phantom</a></li>
+<li><a href="#what-a-memory-leak-looks-like-in-java"
+id="toc-what-a-memory-leak-looks-like-in-java">What a Memory Leak Looks
+Like in Java</a></li>
+<li><a href="#common-ooms-and-tuning-parameters"
+id="toc-common-ooms-and-tuning-parameters">Common OOMs and Tuning
+Parameters</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1
+id="error-handling-and-resource-management-exceptions-and-garbage-collection">Error
+Handling and Resource Management: Exceptions and Garbage Collection</h1>
+<p>C++ uses exceptions for error propagation, RAII (destructors) for
+resource release, and manual <code>delete</code>/smart pointers for
+memory management. Java splits these three concerns into: the exception
+hierarchy, try-with-resources (an approximation of RAII), and
+<strong>automatic garbage collection (GC)</strong>. This chapter
+explains how exceptions unwind the stack, how resources are released
+deterministically, and when, by whom, and by what mechanism heap objects
+are reclaimed.</p>
+<h2 id="the-exception-hierarchy">The Exception Hierarchy</h2>
+<p>Everything throwable inherits from <code>Throwable</code>. It has two
+main branches:</p>
+<pre><code>                Throwable
+               /         \
+           Error        Exception
+        (severe JVM-level faults) /       \
+     OutOfMemoryError  RuntimeException  others (checked exceptions)
+     StackOverflowError  (unchecked)          IOException
+                          NullPointerException  SQLException
+                          IllegalArgumentException ...</code></pre>
+<table>
+<colgroup>
+<col style="width: 18%" />
+<col style="width: 31%" />
+<col style="width: 18%" />
+<col style="width: 31%" />
+</colgroup>
+<thead>
+<tr>
+<th>Category</th>
+<th>Checked?</th>
+<th>Semantics</th>
+<th>C++ analogy</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Error</code></td>
+<td>No</td>
+<td>Unrecoverable at the JVM level (stack overflow, heap exhaustion);
+<strong>should not be caught</strong></td>
+<td>Roughly system-level like <code>std::bad_alloc</code></td>
+</tr>
+<tr>
+<td><code>RuntimeException</code></td>
+<td>No</td>
+<td>Programming errors (null pointer, out of bounds, illegal argument);
+should be prevented by code</td>
+<td>Logic errors, like something an <code>assert</code> should have
+caught</td>
+</tr>
+<tr>
+<td>Checked <code>Exception</code></td>
+<td>Yes</td>
+<td>Anticipated external failures (IO, network); <strong>the compiler
+forces you to handle them</strong></td>
+<td>No C++ equivalent; the deprecated <code>throw()</code> specification
+is a counterexample</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Checked vs. unchecked</strong> is a compile-time constraint
+unique to Java: a checked exception must either be declared in the
+method signature’s <code>throws</code> clause or be handled locally with
+<code>try/catch</code>, or the code won’t compile. C++’s early dynamic
+exception specifications (<code>throw(...)</code>) were deprecated
+because they were hard to use; Java kept the feature, though it too has
+been much debated.</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">io</span><span class="op">.*;</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Checked <span class="op">{</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Checked: must declare throws, otherwise a compile error</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="bu">String</span> <span class="fu">readFirst</span><span class="op">(</span><span class="bu">String</span> path<span class="op">)</span> <span class="kw">throws</span> <span class="bu">IOException</span> <span class="op">{</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">(</span><span class="bu">BufferedReader</span> r <span class="op">=</span> <span class="kw">new</span> <span class="bu">BufferedReader</span><span class="op">(</span><span class="kw">new</span> <span class="bu">FileReader</span><span class="op">(</span>path<span class="op">)))</span> <span class="op">{</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> r<span class="op">.</span><span class="fu">readLine</span><span class="op">();</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Unchecked: no declaration needed, the compiler does not stop you</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">int</span> <span class="fu">div</span><span class="op">(</span><span class="dt">int</span> a<span class="op">,</span> <span class="dt">int</span> b<span class="op">)</span> <span class="op">{</span> <span class="cf">return</span> a <span class="op">/</span> b<span class="op">;</span> <span class="op">}</span> <span class="co">// b=0 throws ArithmeticException</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="trycatchfinally-and-stack-unwinding">try/catch/finally and Stack
+Unwinding</h2>
+<p>When an exception is thrown, the JVM starts from the current method
+and consults its <strong>exception table</strong>—<code>javac</code>
+generates one [start PC, end PC, handler PC, caught type] record per
+<code>try</code> block. If the current frame has no matching handler,
+that frame is popped (stack unwinding) and the search walks back up the
+call chain until a matching <code>catch</code> is found or the bottom of
+the thread stack is reached (at which point the thread terminates and
+prints a stack trace).</p>
+<p><code>finally</code> executes whether the outcome is normal or
+exceptional. At the bytecode level, the compiler <strong>copies</strong>
+the <code>finally</code> code onto every normal/exceptional exit path
+(or falls back to the exception table plus <code>athrow</code>); this is
+how its “always executes” guarantee is implemented.</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Finally <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">int</span> <span class="fu">tricky</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">{</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="dv">1</span><span class="op">;</span>          <span class="co">// return value 1 is computed and pushed first</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="cf">finally</span> <span class="op">{</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="dv">2</span><span class="op">;</span>          <span class="co">// the finally&#39;s return overrides it -&gt; actually returns 2 (anti-pattern!)</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="fu">tricky</span><span class="op">());</span> <span class="co">// 2</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<blockquote>
+<p>Pitfall: a <code>return</code> or a thrown exception inside
+<code>finally</code> swallows the return value/exception from
+<code>try</code>. Never <code>return</code> inside
+<code>finally</code>.</p>
+</blockquote>
+<h2 id="try-with-resources-javas-raii">try-with-resources: Java’s
+RAII</h2>
+<p>C++ releases resources deterministically via the
+<strong>destructor</strong> when an object leaves scope (RAII). The
+reclamation timing of a Java object is nondeterministic (GC decides), so
+you cannot rely on <code>finalize</code> to close a file. JDK 7
+introduced <strong>try-with-resources</strong>: any object implementing
+<code>AutoCloseable</code> (with <code>close()</code>) is
+<strong>guaranteed</strong> to have <code>close()</code> called—in
+reverse of declaration order—when the try block ends. This is the
+closest thing Java has to deterministic RAII-style resource
+management.</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">io</span><span class="op">.*;</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> TWR <span class="kw">implements</span> AutoCloseable <span class="op">{</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">private</span> <span class="dt">final</span> <span class="bu">String</span> name<span class="op">;</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">TWR</span><span class="op">(</span><span class="bu">String</span> name<span class="op">)</span> <span class="op">{</span> <span class="kw">this</span><span class="op">.</span><span class="fu">name</span> <span class="op">=</span> name<span class="op">;</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;open &quot;</span> <span class="op">+</span> name<span class="op">);</span> <span class="op">}</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">@Override</span> <span class="kw">public</span> <span class="dt">void</span> <span class="fu">close</span><span class="op">()</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;close &quot;</span> <span class="op">+</span> name<span class="op">);</span> <span class="op">}</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Reverse-order close: close b first, then a (like C++ local objects destructed in reverse)</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">(</span>TWR a <span class="op">=</span> <span class="kw">new</span> <span class="fu">TWR</span><span class="op">(</span><span class="st">&quot;A&quot;</span><span class="op">);</span> TWR b <span class="op">=</span> <span class="kw">new</span> <span class="fu">TWR</span><span class="op">(</span><span class="st">&quot;B&quot;</span><span class="op">))</span> <span class="op">{</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;body&quot;</span><span class="op">);</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>            <span class="cf">throw</span> <span class="kw">new</span> <span class="bu">RuntimeException</span><span class="op">(</span><span class="st">&quot;boom&quot;</span><span class="op">);</span></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="cf">catch</span> <span class="op">(</span><span class="bu">RuntimeException</span> e<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;caught: &quot;</span> <span class="op">+</span> e<span class="op">.</span><span class="fu">getMessage</span><span class="op">());</span></span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>            <span class="co">// An exception thrown by close() is attached to the primary exception as a &quot;suppressed exception&quot;:</span></span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> <span class="op">(</span><span class="bu">Throwable</span> s <span class="op">:</span> e<span class="op">.</span><span class="fu">getSuppressed</span><span class="op">())</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;suppressed: &quot;</span> <span class="op">+</span> s<span class="op">);</span></span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Output: open A / open B / body / close B / close A / caught: boom</span></span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Difference from C++: the <code>close()</code> call site is
+instrumented by the compiler at the try exit, whereas <strong>the
+object’s memory itself</strong> is still reclaimed later by the GC. In
+other words, “deterministic release of resources (fd/handle)” and
+“nondeterministic reclamation of memory” are two separate things.</p>
+<h2 id="multi-catch-and-exception-chaining">Multi-Catch and Exception
+Chaining</h2>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> MultiCatch <span class="op">{</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">handle</span><span class="op">(</span><span class="bu">String</span> s<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">{</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>            <span class="bu">Integer</span><span class="op">.</span><span class="fu">parseInt</span><span class="op">(</span>s<span class="op">);</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="cf">catch</span> <span class="op">(</span><span class="bu">NumberFormatException</span> <span class="op">|</span> <span class="bu">NullPointerException</span> e<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>            <span class="co">// Multi-catch: one catch handles multiple types; e is implicitly final, its type is the common supertype</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>            <span class="co">// Exception chaining: preserve the &quot;cause&quot; to make it easier to locate the original fault</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>            <span class="cf">throw</span> <span class="kw">new</span> <span class="bu">IllegalStateException</span><span class="op">(</span><span class="st">&quot;handling failed: &quot;</span> <span class="op">+</span> s<span class="op">,</span> e<span class="op">);</span></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">{</span> <span class="fu">handle</span><span class="op">(</span><span class="kw">null</span><span class="op">);</span> <span class="op">}</span></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>        <span class="cf">catch</span> <span class="op">(</span><span class="bu">IllegalStateException</span> e<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>e<span class="op">.</span><span class="fu">getMessage</span><span class="op">());</span></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;cause: &quot;</span> <span class="op">+</span> e<span class="op">.</span><span class="fu">getCause</span><span class="op">());</span> <span class="co">// NullPointerException</span></span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Exception chaining (<code>initCause</code> / a constructor taking a
+cause) lets you translate an exception without losing the original stack
+trace; when printed, a <code>Caused by:</code> section appears.</p>
+<hr />
+<h2 id="garbage-collection-gc">Garbage Collection (GC)</h2>
+<p>In C++ you <code>new</code>/<code>delete</code> yourself, with full
+control over lifetimes. Java’s heap objects are reclaimed automatically
+by the GC; the price you pay is <strong>uncontrollable reclamation
+timing</strong> and <strong>occasional pauses (STW)</strong>.
+Understanding GC is what lets you diagnose memory problems and tune for
+latency.</p>
+<h2 id="the-generational-hypothesis-and-heap-layout">The Generational
+Hypothesis and Heap Layout</h2>
+<p>GC is built on the <strong>weak generational hypothesis</strong>: the
+vast majority of objects die young; objects that live long rarely point
+to young objects. So the heap is managed generationally:</p>
+<pre><code>                Java heap
+ +---------------------------------------------------+
+ | Young Gen                                         |
+ |  +----------+  +----------+  +----------+         |
+ |  |  Eden    |  | Survivor |  | Survivor |         |
+ |  | (new obj)|  |   S0     |  |   S1     |         |
+ |  +----------+  +----------+  +----------+         |
+ +---------------------------------------------------+
+ | Old Gen (Tenured)  long-lived objects             |
+ +---------------------------------------------------+
+   (Metaspace lives in native memory, holds class metadata, not in the heap)</code></pre>
+<ul>
+<li>New objects are allocated in <strong>Eden</strong> (pointer bumping,
+extremely fast, like advancing a stack top).</li>
+<li>When Eden fills, a <strong>Minor GC</strong> is triggered: live
+objects are copied to one of the Survivor spaces and their age is
+incremented; each survived Minor GC raises the age, and once it exceeds
+the threshold (default 15, <code>-XX:MaxTenuringThreshold</code>) the
+object is promoted to the old generation. The two Survivor spaces take
+turns being the “copy target,” so one is always empty (a copying
+algorithm that avoids fragmentation).</li>
+<li>When the old generation fills, a <strong>Major GC</strong>
+(old-generation collection) is triggered; a <strong>Full GC</strong>
+usually means whole-heap plus Metaspace collection—the slowest, and to
+be avoided. (Note: “Major GC” is <strong>classic terminology for
+generational collectors</strong>; modern collectors like G1/ZGC use
+different terms—G1 distinguishes young / mixed / full, where
+<code>Full GC</code> is its degraded fallback whole-heap
+collection.)</li>
+</ul>
+<table>
+<colgroup>
+<col style="width: 29%" />
+<col style="width: 32%" />
+<col style="width: 19%" />
+<col style="width: 19%" />
+</colgroup>
+<thead>
+<tr>
+<th>GC type</th>
+<th>Scope</th>
+<th>Trigger</th>
+<th>Pause</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Minor GC</td>
+<td>Young gen</td>
+<td>Eden full</td>
+<td>Short</td>
+</tr>
+<tr>
+<td>Major GC</td>
+<td>Old gen</td>
+<td>Old gen full</td>
+<td>Long</td>
+</tr>
+<tr>
+<td>Full GC</td>
+<td>Whole heap + Metaspace</td>
+<td>Old gen/Metaspace insufficient, <code>System.gc()</code></td>
+<td>Longest</td>
+</tr>
+</tbody>
+</table>
+<h2 id="reachability-analysis-and-gc-roots">Reachability Analysis and GC
+Roots</h2>
+<p>Java <strong>does not use reference counting</strong> (which cannot
+handle circular references); instead it uses <strong>reachability
+analysis</strong>: starting from a set of <strong>GC Roots</strong>, it
+traverses the reference graph, and any object that is unreachable is
+eligible for reclamation.</p>
+<p>GC Roots include:</p>
+<ul>
+<li>References in each thread’s <strong>stack-frame local variable
+table</strong> (objects referenced by currently executing methods);</li>
+<li>Objects referenced by <strong>static fields</strong>;</li>
+<li>Constant-pool references and JNI global references;</li>
+<li>Objects held by synchronization locks, etc.</li>
+</ul>
+<pre><code>GC Roots
+  | thread-stack locals  ---&gt; A ---&gt; B      (A, B reachable, alive)
+  | static fields        ---&gt; C
+                          C &lt;---&gt; D    (C, D reference each other)
+                                E ---&gt; F  (E, F reference each other but no Root reaches them =&gt; both reclaimed)</code></pre>
+<p>Note the last group: <code>E</code> and <code>F</code> form a
+reference cycle. Reference counting would wrongly consider them alive,
+whereas reachability analysis correctly judges them to be garbage. This
+is exactly why Java does not use reference counting.</p>
+<h2 id="collector-evolution-and-the-stw-trade-off">Collector Evolution
+and the STW Trade-off</h2>
+<p><strong>STW (Stop-The-World)</strong>: some GC phases must pause all
+application threads (which must reach a “safepoint”) to obtain a
+consistent snapshot of the heap. The evolution of collectors is
+essentially the history of <strong>continually shrinking
+STW</strong>.</p>
+<table>
+<colgroup>
+<col style="width: 32%" />
+<col style="width: 24%" />
+<col style="width: 20%" />
+<col style="width: 24%" />
+</colgroup>
+<thead>
+<tr>
+<th>Collector</th>
+<th>Traits</th>
+<th>STW</th>
+<th>Suited for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Serial</td>
+<td>Single-threaded, simple</td>
+<td>STW throughout, relatively long</td>
+<td>Small heaps, client-side</td>
+</tr>
+<tr>
+<td>Parallel (throughput-first)</td>
+<td>Multithreaded parallel collection</td>
+<td>STW but parallel</td>
+<td>Batch processing, throughput-heavy</td>
+</tr>
+<tr>
+<td>CMS (deprecated in JDK 9, <strong>removed in JDK 14</strong>)</td>
+<td>Concurrent mark-sweep, low-pause pioneer</td>
+<td>Partly concurrent</td>
+<td>Low-latency old gen (has fragmentation problems)</td>
+</tr>
+<tr>
+<td><strong>G1</strong> (default since JDK 9)</td>
+<td>Region-partitioned, predictable pause target</td>
+<td>Short STW, mostly concurrent</td>
+<td>General-purpose large heaps</td>
+</tr>
+<tr>
+<td>ZGC</td>
+<td>Colored pointers + read barriers</td>
+<td>Pauses &lt;1ms, independent of heap size</td>
+<td>Very large heaps, low latency</td>
+</tr>
+<tr>
+<td>Shenandoah</td>
+<td>Concurrent compaction</td>
+<td>Extremely short pauses</td>
+<td>Low latency</td>
+</tr>
+</tbody>
+</table>
+<p>The core of the trade-off is <strong>throughput vs. latency</strong>:
+Parallel maximizes work done per unit time (good for background batch
+jobs); ZGC/Shenandoah sacrifice a bit of throughput for nearly
+imperceptible pauses (good for interactive/online services). There is no
+“best,” only “best fit for the scenario.”</p>
+<p>Selection: <code>-XX:+UseG1GC</code>, <code>-XX:+UseZGC</code>,
+<code>-XX:+UseParallelGC</code>.</p>
+<h2 id="the-deprecation-of-finalize-and-the-cleaner">The Deprecation of
+finalize and the Cleaner</h2>
+<p>C++’s destructor runs deterministically. Java’s
+<code>Object.finalize()</code> once aimed to play this role, but it
+<strong>runs at an unpredictable time, may never run, slows down GC, and
+can even resurrect objects</strong>. It was marked
+<code>@Deprecated</code> in JDK 9 and further deprecated starting in JDK
+18.</p>
+<p>The replacement: <strong><code>java.lang.ref.Cleaner</code></strong>,
+which registers a cleanup action to be run by a background thread once
+the object becomes phantom-reachable. But it is still
+nondeterministic—<strong>always release critical resources explicitly
+with try-with-resources</strong>, and use Cleaner only as a last-resort
+fallback.</p>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">lang</span><span class="op">.</span><span class="im">ref</span><span class="op">.</span><span class="im">Cleaner</span><span class="op">;</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> CleanerDemo <span class="kw">implements</span> AutoCloseable <span class="op">{</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">private</span> <span class="dt">static</span> <span class="dt">final</span> Cleaner CLEANER <span class="op">=</span> Cleaner<span class="op">.</span><span class="fu">create</span><span class="op">();</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">// The cleanup action must be a static/standalone class and must never hold a reference to the enclosing object, or the object can never be reclaimed</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">class</span> <span class="bu">State</span> <span class="kw">implements</span> <span class="bu">Runnable</span> <span class="op">{</span></span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>        <span class="kw">public</span> <span class="dt">void</span> <span class="fu">run</span><span class="op">()</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;releasing native resource (fallback)&quot;</span><span class="op">);</span> <span class="op">}</span></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>    <span class="kw">private</span> <span class="dt">final</span> Cleaner<span class="op">.</span><span class="fu">Cleanable</span> cleanable<span class="op">;</span></span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a>    <span class="fu">CleanerDemo</span><span class="op">()</span> <span class="op">{</span> cleanable <span class="op">=</span> CLEANER<span class="op">.</span><span class="fu">register</span><span class="op">(</span><span class="kw">this</span><span class="op">,</span> <span class="kw">new</span> <span class="bu">State</span><span class="op">());</span> <span class="op">}</span></span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>    <span class="at">@Override</span> <span class="kw">public</span> <span class="dt">void</span> <span class="fu">close</span><span class="op">()</span> <span class="op">{</span> cleanable<span class="op">.</span><span class="fu">clean</span><span class="op">();</span> <span class="op">}</span> <span class="co">// explicit path: deterministic release</span></span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="reference-strength-strong-soft-weak-phantom">Reference Strength:
+Strong / Soft / Weak / Phantom</h2>
+<p><code>java.lang.ref</code> provides four levels of reference
+strength, which determine an object’s “right to survive” in the eyes of
+the GC:</p>
+<table>
+<colgroup>
+<col style="width: 20%" />
+<col style="width: 16%" />
+<col style="width: 30%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>Strength</th>
+<th>Class</th>
+<th>GC behavior</th>
+<th>Typical use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Strong reference</td>
+<td>plain <code>Object o = ...</code></td>
+<td>Never reclaimed while reachable</td>
+<td>Default</td>
+</tr>
+<tr>
+<td>Soft reference</td>
+<td><code>SoftReference</code></td>
+<td>Reclaimed only <strong>when memory is low</strong></td>
+<td>Memory-sensitive caches</td>
+</tr>
+<tr>
+<td>Weak reference</td>
+<td><code>WeakReference</code></td>
+<td>Reclaimed at the next GC</td>
+<td><code>WeakHashMap</code>, canonicalizing maps</td>
+</tr>
+<tr>
+<td>Phantom reference</td>
+<td><code>PhantomReference</code></td>
+<td>Can never retrieve the object; only serves as a reclamation
+notification</td>
+<td>Replacing finalize for cleanup</td>
+</tr>
+</tbody>
+</table>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">lang</span><span class="op">.</span><span class="im">ref</span><span class="op">.*;</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Refs <span class="op">{</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>        <span class="bu">ReferenceQueue</span><span class="op">&lt;</span><span class="dt">byte</span><span class="op">[]&gt;</span> queue <span class="op">=</span> <span class="kw">new</span> <span class="bu">ReferenceQueue</span><span class="op">&lt;&gt;();</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>        <span class="dt">byte</span><span class="op">[]</span> data <span class="op">=</span> <span class="kw">new</span> <span class="dt">byte</span><span class="op">[</span><span class="dv">1024</span><span class="op">];</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Weak reference + reference queue: after the object is reclaimed, the ref is enqueued, letting you detect reclamation</span></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>        <span class="bu">WeakReference</span><span class="op">&lt;</span><span class="dt">byte</span><span class="op">[]&gt;</span> weak <span class="op">=</span> <span class="kw">new</span> <span class="bu">WeakReference</span><span class="op">&lt;&gt;(</span>data<span class="op">,</span> queue<span class="op">);</span></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>        data <span class="op">=</span> <span class="kw">null</span><span class="op">;</span>          <span class="co">// drop the only strong reference</span></span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">gc</span><span class="op">();</span>          <span class="co">// suggest a GC (not guaranteed to run immediately)</span></span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;get() after reclamation: &quot;</span> <span class="op">+</span> weak<span class="op">.</span><span class="fu">get</span><span class="op">());</span> <span class="co">// very likely null</span></span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Reference</span><span class="op">&lt;?&gt;</span> polled <span class="op">=</span> queue<span class="op">.</span><span class="fu">poll</span><span class="op">();</span>                 <span class="co">// the reclaimed reference has been enqueued</span></span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;enqueued: &quot;</span> <span class="op">+</span> <span class="op">(</span>polled <span class="op">==</span> weak<span class="op">));</span></span>
+<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb9-14"><a href="#cb9-14" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p><strong>ReferenceQueue</strong> is the accompanying mechanism: when a
+referenced object is reclaimed, the JVM places the corresponding
+<code>Reference</code> object into the queue, and your cleanup thread
+<code>poll</code>s it to run the follow-up work (this is exactly how
+Cleaner is implemented internally).</p>
+<h2 id="what-a-memory-leak-looks-like-in-java">What a Memory Leak Looks
+Like in Java</h2>
+<p>Having GC does not mean there are no memory leaks. A leak =
+<strong>an object that is no longer logically useful but is still
+reachable from GC Roots</strong>, so GC does not reclaim it. Common
+forms:</p>
+<ul>
+<li><strong>Long-lived collections that only add, never remove</strong>:
+a <code>static Map</code>/cache is continually <code>put</code> into,
+and the keys and values stay reachable forever. Use
+<code>WeakHashMap</code> or cap the capacity (e.g., Guava/Caffeine
+caches).</li>
+<li><strong>Listeners/callbacks not deregistered</strong>: an observer
+registers but forgets to <code>removeListener</code>, and stays
+referenced by the subject.</li>
+<li><strong><code>ThreadLocal</code> not <code>remove</code>d</strong>:
+thread-pool threads live a long time, so the <code>ThreadLocal</code>’s
+value stays reachable for the life of the thread. Always
+<code>remove()</code> when done.</li>
+<li><strong>Inner classes implicitly holding the outer
+instance</strong>: a non-static inner class/anonymous class holds
+<code>Outer.this</code>, and if its lifetime is longer than the outer
+object’s, the outer object cannot be reclaimed (the same caution as in
+the Cleaner section).</li>
+</ul>
+<h2 id="common-ooms-and-tuning-parameters">Common OOMs and Tuning
+Parameters</h2>
+<p><code>OutOfMemoryError</code> is an <code>Error</code>, subdivided
+into different messages:</p>
+<table>
+<colgroup>
+<col style="width: 45%" />
+<col style="width: 27%" />
+<col style="width: 27%" />
+</colgroup>
+<thead>
+<tr>
+<th>Error message</th>
+<th>Meaning</th>
+<th>Direction</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Java heap space</code></td>
+<td>The heap can’t hold it</td>
+<td>Increase <code>-Xmx</code> or hunt for a leak (heap-dump
+analysis)</td>
+</tr>
+<tr>
+<td><code>GC overhead limit exceeded</code></td>
+<td>Spending 98%+ of time in GC but reclaiming very little</td>
+<td>Usually a leak or too small a heap</td>
+</tr>
+<tr>
+<td><code>Metaspace</code></td>
+<td>Class metadata over the limit (lots of dynamically generated
+classes)</td>
+<td><code>-XX:MaxMetaspaceSize</code>, check for classloader leaks</td>
+</tr>
+<tr>
+<td><code>unable to create new native thread</code></td>
+<td>Thread count over the system/memory limit</td>
+<td>Reduce threads, tune <code>-Xss</code></td>
+</tr>
+<tr>
+<td><code>Direct buffer memory</code></td>
+<td>Off-heap direct memory exhausted</td>
+<td><code>-XX:MaxDirectMemorySize</code></td>
+</tr>
+</tbody>
+</table>
+<p>Common parameters:</p>
+<pre><code>-Xms512m -Xmx4g                  # initial/max heap (in production, set them equal to avoid resize jitter)
+-Xss1m                           # per-thread stack size
+-XX:MaxMetaspaceSize=256m        # Metaspace upper bound
+-XX:+UseG1GC -XX:MaxGCPauseMillis=200  # use G1 and set a pause target
+-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/tmp/dump.hprof  # dump the heap on OOM
+-Xlog:gc*                        # print GC logs (unified logging in JDK 9+), for analysis</code></pre>
+<p>Diagnostic workflow: use <code>-Xlog:gc*</code> to observe GC
+frequency and pauses → grab the <code>.hprof</code> on OOM → use
+MAT/VisualVM to analyze the dominator tree and find who is holding a
+large object.</p>
+<hr />
+<p>Summary: exceptions unwind up the call stack, and checked exceptions
+are a compile-time contract; try-with-resources provides near-RAII
+deterministic resource release, while memory reclamation is left to the
+GC; the GC judges liveness via reachability analysis (not reference
+counting) starting from GC Roots, managing memory generationally with
+copying/marking algorithms; the history of collectors is the history of
+shrinking STW; <code>finalize</code> is deprecated in favor of Cleaner +
+reference queues; a memory leak in Java shows up as “reachable but
+useless.” Master these, and you can command the JVM’s heap with the same
+confidence you manage C++ memory.</p>
+<p><a href="08-面向对象与类型系统.html">← Prev: Object Orientation and
+the Type System</a> · <a href="index.html">Index</a> · <a
+href="10-并发模型.html">Next: Concurrency Model</a> →</p>
+</div>
+</body>
+</html>

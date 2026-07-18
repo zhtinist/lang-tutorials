@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="zh-CN" xml:lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.10" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>函数与调用栈( 参数传递的真相)</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../../assets/style.css" />
+</head>
+<body>
+<div class="topbar"><div class="wrap"><a class="home" href="../index.html">📚 面向 C/C++ 程序员的其他语言教程</a>
+<a href="../python/index.html">Python</a>
+<a href="../java/index.html">Java</a>
+<a href="../go/index.html" style="color:var(--accent-dark);font-weight:700">Go</a></div></div><a class="langtoggle" href="#" onclick="switchLang();return false;" title="切换语言 / Switch language"><b>EN</b><span>English</span></a><script>function switchLang(){var p=location.pathname,en=p.indexOf('/en/')>-1,n=en?p.replace('/en/','/zh/'):p.replace('/zh/','/en/');try{localStorage.setItem('lang',en?'zh':'en')}catch(e){}location.href=n;}</script>
+<div class="wrap">
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#函数与调用栈-参数传递的真相"
+id="toc-函数与调用栈-参数传递的真相">函数与调用栈(⭐ 参数传递的真相)</a>
+<ul>
+<li><a href="#函数是一等公民"
+id="toc-函数是一等公民">函数是一等公民</a></li>
+<li><a href="#多返回值惯用-result-error"
+id="toc-多返回值惯用-result-error">多返回值:惯用 (result,
+error)</a></li>
+<li><a href="#全部按值传递" id="toc-全部按值传递">⭐
+全部按值传递</a></li>
+<li><a href="#方法值接收者-vs-指针接收者"
+id="toc-方法值接收者-vs-指针接收者">方法:值接收者 vs 指针接收者</a></li>
+<li><a href="#闭包捕获的是变量不是值"
+id="toc-闭包捕获的是变量不是值">闭包捕获的是变量,不是值</a></li>
+<li><a href="#变参-t" id="toc-变参-t">变参 …T</a></li>
+<li><a href="#命名返回值-defer-修改返回值"
+id="toc-命名返回值-defer-修改返回值">命名返回值 + defer
+修改返回值</a></li>
+<li><a href="#goroutine-栈可增长的连续栈"
+id="toc-goroutine-栈可增长的连续栈">goroutine 栈:可增长的连续栈</a></li>
+<li><a href="#小结" id="toc-小结">小结</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1 id="函数与调用栈-参数传递的真相">函数与调用栈(⭐
+参数传递的真相)</h1>
+<p>这是全套教程最重要的一章。Go 的函数在语法上像
+C,但在内存语义上有几个必须彻底钉死的事实:<strong>一切都是按值传递</strong>、<strong>方法接收者也是值或指针的拷贝</strong>、<strong>闭包捕获的是变量而非值</strong>、<strong>goroutine
+栈是可增长的</strong>。C/C++ 老手若把这些当成”和 C
+一样”就会持续踩坑。</p>
+<h2 id="函数是一等公民">函数是一等公民</h2>
+<p>函数在 Go 里是值:可以赋给变量、作为参数、作为返回值、放进
+slice/map。底层上,一个函数值是一个指向 <strong>funcval
+结构</strong>的指针(内含代码地址,闭包时还含捕获的变量),因此函数变量本身只是一个指针大小的字长。</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> add<span class="op">(</span>a<span class="op">,</span> b <span class="dt">int</span><span class="op">)</span> <span class="dt">int</span> <span class="op">{</span> <span class="cf">return</span> a <span class="op">+</span> b <span class="op">}</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> op <span class="kw">func</span><span class="op">(</span><span class="dt">int</span><span class="op">,</span> <span class="dt">int</span><span class="op">)</span> <span class="dt">int</span> <span class="op">=</span> add <span class="co">// 函数赋给变量</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>op<span class="op">(</span><span class="dv">3</span><span class="op">,</span> <span class="dv">4</span><span class="op">))</span>            <span class="co">// 7</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    apply <span class="op">:=</span> <span class="kw">func</span><span class="op">(</span>f <span class="kw">func</span><span class="op">(</span><span class="dt">int</span><span class="op">,</span> <span class="dt">int</span><span class="op">)</span> <span class="dt">int</span><span class="op">,</span> x<span class="op">,</span> y <span class="dt">int</span><span class="op">)</span> <span class="dt">int</span> <span class="op">{</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> f<span class="op">(</span>x<span class="op">,</span> y<span class="op">)</span> <span class="co">// 函数作为参数</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>apply<span class="op">(</span>add<span class="op">,</span> <span class="dv">10</span><span class="op">,</span> <span class="dv">20</span><span class="op">))</span> <span class="co">// 30</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>这类似 C 的函数指针,但 Go 的函数值可以携带状态(闭包),更接近 C++ 的
+<code>std::function</code> /
+lambda——只是没有那层类型擦除的堆分配开销(除非闭包变量逃逸)。</p>
+<h2 id="多返回值惯用-result-error">多返回值:惯用 (result, error)</h2>
+<p>Go 原生支持多返回值。底层实现:自 <strong>Go 1.17 的寄存器
+ABI</strong>,返回值优先通过<strong>寄存器</strong>传递(超过可用寄存器数量的部分才落到栈上),被调函数直接写入,无需像
+C 那样用输出参数(指针)或打包结构体。</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> divmod<span class="op">(</span>a<span class="op">,</span> b <span class="dt">int</span><span class="op">)</span> <span class="op">(</span><span class="dt">int</span><span class="op">,</span> <span class="dt">int</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> a <span class="op">/</span> b<span class="op">,</span> a <span class="op">%</span> b</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    q<span class="op">,</span> r <span class="op">:=</span> divmod<span class="op">(</span><span class="dv">17</span><span class="op">,</span> <span class="dv">5</span><span class="op">)</span> <span class="co">// q=3, r=2</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>q<span class="op">,</span> r<span class="op">)</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    q<span class="op">,</span> _ <span class="op">=</span> divmod<span class="op">(</span><span class="dv">10</span><span class="op">,</span> <span class="dv">3</span><span class="op">)</span>  <span class="co">// 用 _ 丢弃不需要的返回值</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    _ <span class="op">=</span> q</span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Go 最重要的惯用法是 <code>(result, error)</code>——最后一个返回值是
+<code>error</code>,调用方立刻检查:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> parse<span class="op">(</span>s <span class="dt">string</span><span class="op">)</span> <span class="op">(</span><span class="dt">int</span><span class="op">,</span> <span class="dt">error</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">// ...</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="dv">0</span><span class="op">,</span> fmt<span class="op">.</span>Errorf<span class="op">(</span><span class="st">&quot;解析失败: %q&quot;</span><span class="op">,</span> s<span class="op">)</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    n<span class="op">,</span> err <span class="op">:=</span> parse<span class="op">(</span><span class="st">&quot;abc&quot;</span><span class="op">)</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> err <span class="op">!=</span> <span class="ot">nil</span> <span class="op">{</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>        fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;出错:&quot;</span><span class="op">,</span> err<span class="op">)</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>n<span class="op">)</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>这取代了 C 的 errno / 返回码约定,也取代了 C++
+的异常作为常规错误路径。详见 <a
+href="09-错误处理与资源管理.html">09-错误处理与资源管理</a>。</p>
+<h2 id="全部按值传递">⭐ 全部按值传递</h2>
+<p><strong>Go 里没有引用传递。</strong>
+每次函数调用,所有实参都被<strong>拷贝</strong>一份到被调函数的栈帧。要在函数里改动调用方的变量,必须显式传<strong>指针</strong>(拷贝的是指针值,但它指向同一对象)。</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> incValue<span class="op">(</span>x <span class="dt">int</span><span class="op">)</span>  <span class="op">{</span> x<span class="op">++</span> <span class="op">}</span>      <span class="co">// 改的是拷贝,调用方看不到</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> incPtr<span class="op">(</span>x <span class="op">*</span><span class="dt">int</span><span class="op">)</span>   <span class="op">{</span> <span class="op">*</span>x<span class="op">++</span> <span class="op">}</span>     <span class="co">// 通过指针改到原变量</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    a <span class="op">:=</span> <span class="dv">10</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    incValue<span class="op">(</span>a<span class="op">)</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>a<span class="op">)</span> <span class="co">// 仍是 10</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>    incPtr<span class="op">(&amp;</span>a<span class="op">)</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>a<span class="op">)</span> <span class="co">// 11</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>内存图:</p>
+<pre><code>main 的栈帧:            incValue 的栈帧:
+  a = 10  ──拷贝──────▶   x = 10   (x++ 只改这里,返回后销毁)
+
+  a = 11  ◀──*x++──┐     incPtr 的栈帧:
+        │          └──   x = &amp;a   (x 是指向 a 的指针,拷贝的是地址)
+        └── a 被改到</code></pre>
+<p><strong>这条规则对所有类型统一成立</strong>,包括
+struct、数组。传一个大 struct 会<strong>整块拷贝</strong>:</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Big <span class="kw">struct</span><span class="op">{</span> data <span class="op">[</span><span class="dv">1024</span><span class="op">]</span><span class="dt">int</span> <span class="op">}</span> <span class="co">// 8KB</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> mutate<span class="op">(</span>b Big<span class="op">)</span>  <span class="op">{</span> b<span class="op">.</span>data<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="dv">1</span> <span class="op">}</span> <span class="co">// 拷贝 8KB,改动无效</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> mutateP<span class="op">(</span>b <span class="op">*</span>Big<span class="op">)</span> <span class="op">{</span> b<span class="op">.</span>data<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="dv">1</span> <span class="op">}</span> <span class="co">// 拷贝 8 字节指针,改动有效</span></span></code></pre></div>
+<h3 id="slice-map-channel-是含指针的表头">slice / map / channel
+是”含指针的表头”</h3>
+<p>初学者常误以为 slice/map
+“按引用传递”。真相是:它们<strong>也是按值拷贝</strong>,只不过它们的值是一个<strong>含指针的小表头</strong>。拷贝表头
+=
+复制指针,于是两份表头指向<strong>同一底层数据</strong>,产生别名(aliasing)效果:</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> fill<span class="op">(</span>s <span class="op">[]</span><span class="dt">int</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    s<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="dv">99</span> <span class="co">// 通过表头里的指针改到共享的底层数组 —— 调用方可见</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    s <span class="op">=</span> <span class="bu">append</span><span class="op">(</span>s<span class="op">,</span> <span class="dv">7</span><span class="op">)</span> <span class="co">// append 可能换底层数组;即便不换,这是给【局部表头】重新赋值,调用方的表头长度不变</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>    s <span class="op">:=</span> <span class="op">[]</span><span class="dt">int</span><span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">}</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>    fill<span class="op">(</span>s<span class="op">)</span></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>s<span class="op">)</span> <span class="co">// [99 2 3] —— s[0] 改了,但长度仍是 3</span></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>内存图(slice 表头拷贝):</p>
+<pre><code>main 的 s (表头):          fill 的 s (拷贝的表头):
+  ptr ──┐                    ptr ──┐   ← 两个 ptr 相等,指向同一数组
+  len=3 │                    len=3 │
+  cap=3 │                    cap=3 │
+        └──────┬─────────────┘
+               ▼
+    底层数组(堆): [99, 2, 3]   ← s[0]=99 两边都看得到</code></pre>
+<table>
+<thead>
+<tr>
+<th>类型</th>
+<th>传递时拷贝的是什么</th>
+<th>修改元素调用方可见?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>int/struct/array</td>
+<td>整个值(可能很大)</td>
+<td>否</td>
+</tr>
+<tr>
+<td>pointer</td>
+<td>指针(1 字长)</td>
+<td>是(通过解引用)</td>
+</tr>
+<tr>
+<td>slice</td>
+<td>表头(ptr+len+cap,3 字长)</td>
+<td><strong>改元素:是</strong>;append/重切:否</td>
+</tr>
+<tr>
+<td>map</td>
+<td>表头指针(1 字长)</td>
+<td><strong>是</strong></td>
+</tr>
+<tr>
+<td>channel</td>
+<td>表头指针(1 字长)</td>
+<td>是(收发)</td>
+</tr>
+<tr>
+<td>string</td>
+<td>表头(ptr+len,只读)</td>
+<td>string 不可变</td>
+</tr>
+</tbody>
+</table>
+<p>理解 map/slice/channel 的详细内存布局见 <a
+href="07-复合数据结构.html">07-复合数据结构</a>。</p>
+<h2 id="方法值接收者-vs-指针接收者">方法:值接收者 vs 指针接收者</h2>
+<p>方法只是第一个参数(接收者)有特殊语法的函数。接收者同样遵循<strong>按值传递</strong>规则。</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Counter <span class="kw">struct</span><span class="op">{</span> n <span class="dt">int</span> <span class="op">}</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="co">// 值接收者:c 是整个 Counter 的【拷贝】,改动不影响原对象</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>c Counter<span class="op">)</span> IncValue<span class="op">()</span> <span class="op">{</span> c<span class="op">.</span>n<span class="op">++</span> <span class="op">}</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a><span class="co">// 指针接收者:c 是指针的拷贝,通过它能改到原对象</span></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>c <span class="op">*</span>Counter<span class="op">)</span> IncPtr<span class="op">()</span> <span class="op">{</span> c<span class="op">.</span>n<span class="op">++</span> <span class="op">}</span></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> c Counter</span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a>    c<span class="op">.</span>IncValue<span class="op">()</span></span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>c<span class="op">.</span>n<span class="op">)</span> <span class="co">// 0 —— 改的是拷贝</span></span>
+<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-14"><a href="#cb9-14" aria-hidden="true" tabindex="-1"></a>    c<span class="op">.</span>IncPtr<span class="op">()</span></span>
+<span id="cb9-15"><a href="#cb9-15" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>c<span class="op">.</span>n<span class="op">)</span> <span class="co">// 1 —— 改到原对象</span></span>
+<span id="cb9-16"><a href="#cb9-16" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>选择接收者类型的两条底层理由:</p>
+<ol type="1">
+<li><strong>要修改接收者</strong> →
+必须用指针接收者(否则改的是拷贝)。</li>
+<li><strong>接收者是大 struct</strong> →
+用指针避免每次调用整块拷贝(值接收者会把整个 struct 压栈)。</li>
+</ol>
+<p>小的、不可变语义的类型(如表示坐标的
+<code>Point{x,y int}</code>)用值接收者更简单、更缓存友好。惯例:同一类型的方法<strong>要么全用值、要么全用指针</strong>,不要混。</p>
+<h3 id="可寻址性与自动取地址">可寻址性与自动取地址</h3>
+<p><code>c.IncPtr()</code> 里 <code>c</code> 是值,但编译器自动改写成
+<code>(&amp;c).IncPtr()</code>——前提是 <code>c</code>
+<strong>可寻址(addressable)</strong>。局部变量、slice
+元素、可解引用的指针目标都可寻址;而 <strong>map
+元素、临时值(函数返回值)不可寻址</strong>,不能对它们调用指针接收者方法:</p>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Counter <span class="kw">struct</span><span class="op">{</span> n <span class="dt">int</span> <span class="op">}</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>c <span class="op">*</span>Counter<span class="op">)</span> IncPtr<span class="op">()</span> <span class="op">{</span> c<span class="op">.</span>n<span class="op">++</span> <span class="op">}</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>m <span class="op">:=</span> <span class="kw">map</span><span class="op">[</span><span class="dt">string</span><span class="op">]</span>Counter<span class="op">{</span><span class="st">&quot;a&quot;</span><span class="op">:</span> <span class="op">{}}</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a><span class="co">// m[&quot;a&quot;].IncPtr() // 编译错误:m[&quot;a&quot;] 不可寻址,无法取地址</span></span></code></pre></div>
+<h3 id="方法集">方法集</h3>
+<p>一个类型的<strong>方法集</strong>决定它能满足哪些接口:</p>
+<ul>
+<li>类型 <code>T</code>
+的方法集:所有<strong>值接收者</strong>方法。</li>
+<li>类型 <code>*T</code> 的方法集:值接收者 <strong>+</strong>
+指针接收者方法(全部)。</li>
+</ul>
+<p>也就是说,指针接收者方法<strong>不</strong>属于 <code>T</code>
+的方法集。因此一个值类型 <code>T</code>
+若想满足某接口,而该接口方法用了指针接收者,则只有 <code>*T</code>
+满足接口,<code>T</code>
+不满足。这条规则与可寻址性配合,是接口赋值报错的常见根源,详见 <a
+href="08-面向对象与类型系统.html">08-面向对象与类型系统</a>。</p>
+<h2 id="闭包捕获的是变量不是值">闭包捕获的是变量,不是值</h2>
+<p>闭包(匿名函数)捕获外层变量时,捕获的是<strong>变量本身(其存储位置)</strong>,不是当时的值。若被捕获的变量在函数返回后仍被闭包引用,逃逸分析会把它<strong>从栈搬到堆</strong>,让闭包和外层共享同一份存储。</p>
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> counter<span class="op">()</span> <span class="kw">func</span><span class="op">()</span> <span class="dt">int</span> <span class="op">{</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>    n <span class="op">:=</span> <span class="dv">0</span> <span class="co">// 逃逸到堆,因为返回的闭包持有它</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="kw">func</span><span class="op">()</span> <span class="dt">int</span> <span class="op">{</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>        n<span class="op">++</span> <span class="co">// 每次调用共享并修改同一个 n</span></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> n</span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a>    c <span class="op">:=</span> counter<span class="op">()</span></span>
+<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>c<span class="op">(),</span> c<span class="op">(),</span> c<span class="op">())</span> <span class="co">// 1 2 3</span></span>
+<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>这与 C++ lambda 的 <code>[&amp;n]</code>(按引用捕获)语义相同,而非
+<code>[n]</code>(按值)。C 没有闭包,只能靠传结构体指针模拟。</p>
+<h3 id="经典循环变量坑与-go-1.22-语义变化">经典循环变量坑与 Go 1.22
+语义变化</h3>
+<p>因为捕获的是变量,在 Go 1.21
+及以前,循环变量整个循环只有一个实例,所有闭包捕获到<strong>同一个</strong>变量:</p>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Go 1.21-:输出 3 3 3(共享同一个 i,循环结束时 i=3)</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="co">// Go 1.22+:输出 0 1 2(每轮 i 是新实例,各闭包捕获不同变量)</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>    funcs <span class="op">:=</span> <span class="bu">make</span><span class="op">([]</span><span class="kw">func</span><span class="op">(),</span> <span class="dv">0</span><span class="op">,</span> <span class="dv">3</span><span class="op">)</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> i <span class="op">:=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">3</span><span class="op">;</span> i<span class="op">++</span> <span class="op">{</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>        funcs <span class="op">=</span> <span class="bu">append</span><span class="op">(</span>funcs<span class="op">,</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span> fmt<span class="op">.</span>Print<span class="op">(</span>i<span class="op">,</span> <span class="st">&quot; &quot;</span><span class="op">)</span> <span class="op">})</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _<span class="op">,</span> f <span class="op">:=</span> <span class="kw">range</span> funcs <span class="op">{</span></span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>        f<span class="op">()</span></span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p><strong>Go 1.22 起,<code>for</code>
+的循环变量每轮迭代都是新实例</strong>(见 <a
+href="05-控制流.html#go-122循环变量每轮新实例">05-控制流</a>),这个几乎人人踩过的坑被语言层面修掉。在
+1.21 及以前,老写法要靠每轮 <code>i := i</code> 显式创建副本来规避。用
+goroutine 时同理(<code>go func(){ ... i ... }()</code>),1.22
+前后行为不同。</p>
+<h2 id="变参-t">变参 …T</h2>
+<p><code>...T</code> 声明变参,函数内部把它当作
+<code>[]T</code>(slice)使用。底层:调用方把这些实参<strong>打包成一个新
+slice</strong>(通常在栈上分配底层数组,不逃逸时)传入。</p>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> sum<span class="op">(</span>nums <span class="op">...</span><span class="dt">int</span><span class="op">)</span> <span class="dt">int</span> <span class="op">{</span> <span class="co">// nums 的类型是 []int</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>    total <span class="op">:=</span> <span class="dv">0</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _<span class="op">,</span> n <span class="op">:=</span> <span class="kw">range</span> nums <span class="op">{</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>        total <span class="op">+=</span> n</span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> total</span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>sum<span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">))</span> <span class="co">// 传 3 个 → 打包成 []int{1,2,3}</span></span>
+<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>sum<span class="op">())</span>        <span class="co">// 传 0 个 → nums 是 nil slice,len=0</span></span>
+<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a>    xs <span class="op">:=</span> <span class="op">[]</span><span class="dt">int</span><span class="op">{</span><span class="dv">4</span><span class="op">,</span> <span class="dv">5</span><span class="op">,</span> <span class="dv">6</span><span class="op">}</span></span>
+<span id="cb13-14"><a href="#cb13-14" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>sum<span class="op">(</span>xs<span class="op">...))</span> <span class="co">// 用 ... 把已有 slice 展开;此时【不拷贝】,直接复用 xs 的底层数组</span></span>
+<span id="cb13-15"><a href="#cb13-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>注意 <code>sum(xs...)</code> 复用 <code>xs</code>
+的底层数组,若函数内修改 <code>nums[i]</code> 会改到
+<code>xs</code>。这与 C 的
+<code>va_list</code>(无类型、无长度、需哨兵)相比,类型安全且自带长度。</p>
+<h2 id="命名返回值-defer-修改返回值">命名返回值 + defer 修改返回值</h2>
+<p>结合 <a href="05-控制流.html#defer">05-控制流</a> 的
+defer,命名返回值是一个强大组合。<code>return</code>
+先把值写入命名的返回槽,再跑 defer,defer 可改这个槽:</p>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> readConfig<span class="op">()</span> <span class="op">(</span>cfg <span class="dt">string</span><span class="op">,</span> err <span class="dt">error</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">defer</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> r <span class="op">:=</span> <span class="bu">recover</span><span class="op">();</span> r <span class="op">!=</span> <span class="ot">nil</span> <span class="op">{</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>            <span class="co">// 把 panic 转成 error 返回给调用者</span></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>            err <span class="op">=</span> fmt<span class="op">.</span>Errorf<span class="op">(</span><span class="st">&quot;恢复自 panic: %v&quot;</span><span class="op">,</span> r<span class="op">)</span></span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">}()</span></span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a>    <span class="bu">panic</span><span class="op">(</span><span class="st">&quot;配置文件损坏&quot;</span><span class="op">)</span></span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 到达不了,但 defer 会把 err 设好后正常返回</span></span>
+<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>底层上命名返回值就是被调函数栈帧里的具名变量,<code>return x</code> =
+“把 x 拷进返回槽 + 执行 defer + 真正返回”。这是把 panic 转换为 error
+的标准手法,详见 <a
+href="09-错误处理与资源管理.html">09-错误处理与资源管理</a>。</p>
+<h2 id="goroutine-栈可增长的连续栈">goroutine 栈:可增长的连续栈</h2>
+<p>这是 Go 运行时最漂亮的设计之一,和 C/C++ 线程栈截然不同。</p>
+<p>C/C++ 的线程栈在创建时<strong>固定大小</strong>(典型 1–8MB),由 OS
+预留虚拟地址空间。开太多线程会吃光地址空间;递归太深会栈溢出(segfault)。</p>
+<p>Go 的每个 goroutine 有<strong>自己的栈,初始只有约 2KB</strong>,由 Go
+运行时管理(不是 OS)。因此可以轻松创建几十万个 goroutine——2KB × 100 万 ≈
+2GB,而线程做不到。</p>
+<h3 id="栈如何增长morestack-与栈拷贝">栈如何增长:morestack 与栈拷贝</h3>
+<p>编译器在每个函数入口插入一小段<strong>栈检查(stack
+guard)</strong>代码:检查当前栈指针是否快触底。若空间不足,调用运行时的
+<code>morestack</code>:</p>
+<ol type="1">
+<li>分配一块<strong>更大的新栈</strong>(通常翻倍)。</li>
+<li><strong>把旧栈的全部内容拷贝</strong>到新栈(连续栈,contiguous
+stack)。</li>
+<li><strong>调整所有指向旧栈的指针</strong>(运行时能精确扫描栈上的指针,这依赖
+Go 的精确 GC 类型信息)——这一步 C 做不到,因为 C
+无法知道栈上哪些是指针。</li>
+<li>释放旧栈,函数继续执行。</li>
+</ol>
+<p>栈也会在 GC 时按需<strong>收缩</strong>。</p>
+<pre><code>增长前(2KB 栈快满):        增长后(拷贝到 4KB 新栈):
+ ┌──────────┐ 高地址        ┌──────────┐
+ │ 帧 A     │               │ 帧 A     │  ← 内容逐字节拷贝
+ │ 帧 B     │   morestack   │ 帧 B     │
+ │ 帧 C ←SP │  ══════════▶  │ 帧 C     │
+ └──────────┘ 触底           │ 帧 D ←SP │  ← 现在有空间继续
+                            │  ...     │
+                            └──────────┘ 低地址</code></pre>
+<h3 id="对代码的影响">对代码的影响</h3>
+<ul>
+<li><strong>不要假设栈变量地址稳定</strong>:栈增长后地址会变(但指向它的指针会被运行时修正,所以对你透明)。这也是为什么
+Go
+里取局部变量地址完全安全——即使逃逸,运行时/编译器会正确处理(逃逸的搬到堆,不逃逸的随栈移动)。</li>
+<li>深递归在 Go 里不易 segfault,但会持续增长栈直至触及上限(64 位默认
+<code>maxstacksize</code> ≈ 1GB,可调);超限时 runtime 直接
+<code>fatal error: stack overflow</code>
+<strong>终止进程</strong>——这是<strong>不可
+<code>recover</code></strong> 的 fatal error,和普通 panic
+有本质区别。</li>
+<li>goroutine 的调度与栈,配合 channel,构成 Go 并发模型的基础,见 <a
+href="10-并发模型.html">10-并发模型</a>。</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>C/C++ 线程栈</th>
+<th>Go goroutine 栈</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>初始大小</td>
+<td>固定,1–8MB</td>
+<td>约 2KB</td>
+</tr>
+<tr>
+<td>增长</td>
+<td>不能(溢出即崩)</td>
+<td>自动,morestack + 拷贝</td>
+</tr>
+<tr>
+<td>收缩</td>
+<td>不能</td>
+<td>GC 时按需收缩</td>
+</tr>
+<tr>
+<td>管理者</td>
+<td>OS</td>
+<td>Go 运行时</td>
+</tr>
+<tr>
+<td>可创建数量</td>
+<td>几千</td>
+<td>几十万~百万</td>
+</tr>
+<tr>
+<td>栈上指针修正</td>
+<td>不支持</td>
+<td>支持(精确 GC)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="小结">小结</h2>
+<ul>
+<li>函数是一等值,底层是 funcval 指针,闭包时携带捕获变量。</li>
+<li>多返回值原生支持,惯用 <code>(result, error)</code>。</li>
+<li><strong>一切按值传递</strong>;要改就传指针。slice/map/chan
+拷贝的是含指针的表头,故有别名效果。</li>
+<li>方法接收者同样按值:值接收者拷贝整个接收者,指针接收者可改且避免大拷贝;注意方法集与可寻址性。</li>
+<li>闭包捕获<strong>变量</strong>而非值;Go 1.22
+修复了循环变量捕获坑。</li>
+<li>变参 <code>...T</code> 内部是 slice;<code>xs...</code>
+展开复用底层数组。</li>
+<li>goroutine 栈从 2KB 起,连续栈可增长/收缩,与 C
+固定线程栈是两个世界。</li>
+</ul>
+<hr />
+<p><a href="05-控制流.html">← 上一章:控制流</a> · <a
+href="index.html">返回目录</a> · <a
+href="07-复合数据结构.html">下一章:复合数据结构</a> →</p>
+</div>
+</body>
+</html>

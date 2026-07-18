@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.10" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Functions and the Call Stack ( the truth about parameter
+passing)</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../../assets/style.css" />
+</head>
+<body>
+<div class="topbar"><div class="wrap"><a class="home" href="../index.html">📚 Other Languages for C/C++ Programmers</a>
+<a href="../python/index.html">Python</a>
+<a href="../java/index.html">Java</a>
+<a href="../go/index.html" style="color:var(--accent-dark);font-weight:700">Go</a></div></div><a class="langtoggle" href="#" onclick="switchLang();return false;" title="切换语言 / Switch language"><b>中</b><span>中文</span></a><script>function switchLang(){var p=location.pathname,en=p.indexOf('/en/')>-1,n=en?p.replace('/en/','/zh/'):p.replace('/zh/','/en/');try{localStorage.setItem('lang',en?'zh':'en')}catch(e){}location.href=n;}</script>
+<div class="wrap">
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a
+href="#functions-and-the-call-stack-the-truth-about-parameter-passing"
+id="toc-functions-and-the-call-stack-the-truth-about-parameter-passing">Functions
+and the Call Stack (⭐ the truth about parameter passing)</a>
+<ul>
+<li><a href="#functions-are-first-class-citizens"
+id="toc-functions-are-first-class-citizens">Functions are first-class
+citizens</a></li>
+<li><a href="#multiple-return-values-the-idiomatic-result-error"
+id="toc-multiple-return-values-the-idiomatic-result-error">Multiple
+return values: the idiomatic (result, error)</a></li>
+<li><a href="#everything-is-passed-by-value"
+id="toc-everything-is-passed-by-value">⭐ Everything is passed by
+value</a></li>
+<li><a href="#methods-value-receiver-vs-pointer-receiver"
+id="toc-methods-value-receiver-vs-pointer-receiver">Methods: value
+receiver vs pointer receiver</a></li>
+<li><a href="#a-closure-captures-the-variable-not-the-value"
+id="toc-a-closure-captures-the-variable-not-the-value">A closure
+captures the variable, not the value</a></li>
+<li><a href="#variadic-t" id="toc-variadic-t">Variadic …T</a></li>
+<li><a href="#named-return-values-defer-modifying-the-return-value"
+id="toc-named-return-values-defer-modifying-the-return-value">Named
+return values + defer modifying the return value</a></li>
+<li><a href="#the-goroutine-stack-a-growable-contiguous-stack"
+id="toc-the-goroutine-stack-a-growable-contiguous-stack">The goroutine
+stack: a growable contiguous stack</a></li>
+<li><a href="#summary" id="toc-summary">Summary</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1
+id="functions-and-the-call-stack-the-truth-about-parameter-passing">Functions
+and the Call Stack (⭐ the truth about parameter passing)</h1>
+<p>This is the single most important chapter of the whole tutorial. Go’s
+functions look like C syntactically, but their memory semantics rest on
+several facts you must absolutely nail down: <strong>everything is
+passed by value</strong>, <strong>a method receiver is also a copy of a
+value or a pointer</strong>, <strong>a closure captures the variable
+rather than the value</strong>, and <strong>a goroutine’s stack is
+growable</strong>. C/C++ veterans who treat these as “the same as C”
+will keep falling into traps.</p>
+<h2 id="functions-are-first-class-citizens">Functions are first-class
+citizens</h2>
+<p>Functions are values in Go: you can assign them to variables, pass
+them as arguments, return them, and put them in a slice/map. At the low
+level a function value is a pointer to a <strong>funcval struct</strong>
+(containing the code address, plus captured variables when it’s a
+closure), so a function variable itself is just one machine word
+(pointer-sized).</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> add<span class="op">(</span>a<span class="op">,</span> b <span class="dt">int</span><span class="op">)</span> <span class="dt">int</span> <span class="op">{</span> <span class="cf">return</span> a <span class="op">+</span> b <span class="op">}</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> op <span class="kw">func</span><span class="op">(</span><span class="dt">int</span><span class="op">,</span> <span class="dt">int</span><span class="op">)</span> <span class="dt">int</span> <span class="op">=</span> add <span class="co">// assign a function to a variable</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>op<span class="op">(</span><span class="dv">3</span><span class="op">,</span> <span class="dv">4</span><span class="op">))</span>            <span class="co">// 7</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    apply <span class="op">:=</span> <span class="kw">func</span><span class="op">(</span>f <span class="kw">func</span><span class="op">(</span><span class="dt">int</span><span class="op">,</span> <span class="dt">int</span><span class="op">)</span> <span class="dt">int</span><span class="op">,</span> x<span class="op">,</span> y <span class="dt">int</span><span class="op">)</span> <span class="dt">int</span> <span class="op">{</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> f<span class="op">(</span>x<span class="op">,</span> y<span class="op">)</span> <span class="co">// function as an argument</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>apply<span class="op">(</span>add<span class="op">,</span> <span class="dv">10</span><span class="op">,</span> <span class="dv">20</span><span class="op">))</span> <span class="co">// 30</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>This resembles a C function pointer, but a Go function value can
+carry state (a closure), making it closer to C++’s
+<code>std::function</code> / lambda—only without that layer of
+type-erasure heap allocation (unless the closure variables escape).</p>
+<h2 id="multiple-return-values-the-idiomatic-result-error">Multiple
+return values: the idiomatic (result, error)</h2>
+<p>Go natively supports multiple return values. Implementation detail:
+since the <strong>register-based ABI in Go 1.17</strong>, return values
+are passed preferentially through <strong>registers</strong> (only the
+portion exceeding the available registers spills to the stack), and the
+callee writes them directly, with no need for C-style output parameters
+(pointers) or packing into a struct.</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> divmod<span class="op">(</span>a<span class="op">,</span> b <span class="dt">int</span><span class="op">)</span> <span class="op">(</span><span class="dt">int</span><span class="op">,</span> <span class="dt">int</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> a <span class="op">/</span> b<span class="op">,</span> a <span class="op">%</span> b</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    q<span class="op">,</span> r <span class="op">:=</span> divmod<span class="op">(</span><span class="dv">17</span><span class="op">,</span> <span class="dv">5</span><span class="op">)</span> <span class="co">// q=3, r=2</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>q<span class="op">,</span> r<span class="op">)</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    q<span class="op">,</span> _ <span class="op">=</span> divmod<span class="op">(</span><span class="dv">10</span><span class="op">,</span> <span class="dv">3</span><span class="op">)</span>  <span class="co">// use _ to discard a return value you don&#39;t need</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    _ <span class="op">=</span> q</span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Go’s most important idiom is <code>(result, error)</code>—the last
+return value is an <code>error</code>, and the caller checks it
+immediately:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> parse<span class="op">(</span>s <span class="dt">string</span><span class="op">)</span> <span class="op">(</span><span class="dt">int</span><span class="op">,</span> <span class="dt">error</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">// ...</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="dv">0</span><span class="op">,</span> fmt<span class="op">.</span>Errorf<span class="op">(</span><span class="st">&quot;parse failed: %q&quot;</span><span class="op">,</span> s<span class="op">)</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    n<span class="op">,</span> err <span class="op">:=</span> parse<span class="op">(</span><span class="st">&quot;abc&quot;</span><span class="op">)</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> err <span class="op">!=</span> <span class="ot">nil</span> <span class="op">{</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>        fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;error:&quot;</span><span class="op">,</span> err<span class="op">)</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>n<span class="op">)</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>This replaces C’s errno / return-code conventions, and also replaces
+C++’s use of exceptions as the ordinary error path. See <a
+href="09-错误处理与资源管理.html">09-Error Handling and Resource
+Management</a> for details.</p>
+<h2 id="everything-is-passed-by-value">⭐ Everything is passed by
+value</h2>
+<p><strong>Go has no pass-by-reference.</strong> On every function call,
+all actual arguments are <strong>copied</strong> into the callee’s stack
+frame. To modify a caller’s variable inside a function, you must
+explicitly pass a <strong>pointer</strong> (the pointer value is copied,
+but it points to the same object).</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> incValue<span class="op">(</span>x <span class="dt">int</span><span class="op">)</span>  <span class="op">{</span> x<span class="op">++</span> <span class="op">}</span>      <span class="co">// modifies the copy, invisible to the caller</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> incPtr<span class="op">(</span>x <span class="op">*</span><span class="dt">int</span><span class="op">)</span>   <span class="op">{</span> <span class="op">*</span>x<span class="op">++</span> <span class="op">}</span>     <span class="co">// modifies the original variable through the pointer</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    a <span class="op">:=</span> <span class="dv">10</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    incValue<span class="op">(</span>a<span class="op">)</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>a<span class="op">)</span> <span class="co">// still 10</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>    incPtr<span class="op">(&amp;</span>a<span class="op">)</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>a<span class="op">)</span> <span class="co">// 11</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Memory diagram:</p>
+<pre><code>main&#39;s stack frame:      incValue&#39;s stack frame:
+  a = 10  ──copy──────▶   x = 10   (x++ only changes this, destroyed after return)
+
+  a = 11  ◀──*x++──┐     incPtr&#39;s stack frame:
+        │          └──   x = &amp;a   (x is a pointer to a, the address is copied)
+        └── a is modified</code></pre>
+<p><strong>This rule holds uniformly for all types</strong>, including
+structs and arrays. Passing a large struct <strong>copies it
+wholesale</strong>:</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Big <span class="kw">struct</span><span class="op">{</span> data <span class="op">[</span><span class="dv">1024</span><span class="op">]</span><span class="dt">int</span> <span class="op">}</span> <span class="co">// 8KB</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> mutate<span class="op">(</span>b Big<span class="op">)</span>  <span class="op">{</span> b<span class="op">.</span>data<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="dv">1</span> <span class="op">}</span> <span class="co">// copies 8KB, the change has no effect</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> mutateP<span class="op">(</span>b <span class="op">*</span>Big<span class="op">)</span> <span class="op">{</span> b<span class="op">.</span>data<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="dv">1</span> <span class="op">}</span> <span class="co">// copies an 8-byte pointer, the change takes effect</span></span></code></pre></div>
+<h3 id="slice-map-channel-are-headers-containing-pointers">slice / map /
+channel are “headers containing pointers”</h3>
+<p>Beginners often mistakenly believe slice/map are “passed by
+reference.” The truth: they are <strong>also copied by value</strong>,
+it’s just that their value is a <strong>small header containing a
+pointer</strong>. Copying the header = copying the pointer, so the two
+headers point to the <strong>same underlying data</strong>, producing an
+aliasing effect:</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> fill<span class="op">(</span>s <span class="op">[]</span><span class="dt">int</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    s<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="dv">99</span> <span class="co">// modifies the shared underlying array through the pointer in the header — visible to the caller</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    s <span class="op">=</span> <span class="bu">append</span><span class="op">(</span>s<span class="op">,</span> <span class="dv">7</span><span class="op">)</span> <span class="co">// append may swap the underlying array; even if it doesn&#39;t, this reassigns the [local header], so the caller&#39;s header length is unchanged</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>    s <span class="op">:=</span> <span class="op">[]</span><span class="dt">int</span><span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">}</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>    fill<span class="op">(</span>s<span class="op">)</span></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>s<span class="op">)</span> <span class="co">// [99 2 3] — s[0] changed, but the length is still 3</span></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Memory diagram (copying a slice header):</p>
+<pre><code>main&#39;s s (header):         fill&#39;s s (copied header):
+  ptr ──┐                    ptr ──┐   ← the two ptrs are equal, pointing at the same array
+  len=3 │                    len=3 │
+  cap=3 │                    cap=3 │
+        └──────┬─────────────┘
+               ▼
+    underlying array (heap): [99, 2, 3]   ← s[0]=99 is visible on both sides</code></pre>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>Type</th>
+<th>What is copied when passed</th>
+<th>Are element modifications visible to the caller?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>int/struct/array</td>
+<td>The entire value (possibly large)</td>
+<td>No</td>
+</tr>
+<tr>
+<td>pointer</td>
+<td>The pointer (1 word)</td>
+<td>Yes (through dereference)</td>
+</tr>
+<tr>
+<td>slice</td>
+<td>The header (ptr+len+cap, 3 words)</td>
+<td><strong>Modifying an element: yes</strong>; append/reslice: no</td>
+</tr>
+<tr>
+<td>map</td>
+<td>The header pointer (1 word)</td>
+<td><strong>Yes</strong></td>
+</tr>
+<tr>
+<td>channel</td>
+<td>The header pointer (1 word)</td>
+<td>Yes (send/receive)</td>
+</tr>
+<tr>
+<td>string</td>
+<td>The header (ptr+len, read-only)</td>
+<td>Strings are immutable</td>
+</tr>
+</tbody>
+</table>
+<p>For the detailed memory layouts of map/slice/channel, see <a
+href="07-复合数据结构.html">07-Composite Data Structures</a>.</p>
+<h2 id="methods-value-receiver-vs-pointer-receiver">Methods: value
+receiver vs pointer receiver</h2>
+<p>A method is just a function whose first parameter (the receiver) has
+special syntax. The receiver likewise follows the
+<strong>pass-by-value</strong> rule.</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Counter <span class="kw">struct</span><span class="op">{</span> n <span class="dt">int</span> <span class="op">}</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="co">// value receiver: c is a [copy] of the whole Counter, changes don&#39;t affect the original</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>c Counter<span class="op">)</span> IncValue<span class="op">()</span> <span class="op">{</span> c<span class="op">.</span>n<span class="op">++</span> <span class="op">}</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a><span class="co">// pointer receiver: c is a copy of the pointer, through which the original can be changed</span></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>c <span class="op">*</span>Counter<span class="op">)</span> IncPtr<span class="op">()</span> <span class="op">{</span> c<span class="op">.</span>n<span class="op">++</span> <span class="op">}</span></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> c Counter</span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a>    c<span class="op">.</span>IncValue<span class="op">()</span></span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>c<span class="op">.</span>n<span class="op">)</span> <span class="co">// 0 — modified the copy</span></span>
+<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-14"><a href="#cb9-14" aria-hidden="true" tabindex="-1"></a>    c<span class="op">.</span>IncPtr<span class="op">()</span></span>
+<span id="cb9-15"><a href="#cb9-15" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>c<span class="op">.</span>n<span class="op">)</span> <span class="co">// 1 — modified the original</span></span>
+<span id="cb9-16"><a href="#cb9-16" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Two low-level reasons for choosing the receiver type:</p>
+<ol type="1">
+<li><strong>Need to modify the receiver</strong> → you must use a
+pointer receiver (otherwise you modify a copy).</li>
+<li><strong>The receiver is a large struct</strong> → use a pointer to
+avoid copying the whole struct on every call (a value receiver pushes
+the entire struct onto the stack).</li>
+</ol>
+<p>Small, value-semantic types (such as a <code>Point{x,y int}</code>
+representing coordinates) are simpler and more cache-friendly with a
+value receiver. Convention: a given type’s methods should <strong>all
+use value receivers or all use pointer receivers</strong>—don’t mix
+them.</p>
+<h3 id="addressability-and-automatic-address-taking">Addressability and
+automatic address-taking</h3>
+<p>In <code>c.IncPtr()</code>, <code>c</code> is a value, but the
+compiler automatically rewrites it as
+<code>(&amp;c).IncPtr()</code>—provided that <code>c</code> is
+<strong>addressable</strong>. Local variables, slice elements, and
+dereferenceable pointer targets are all addressable; whereas <strong>map
+elements and temporary values (function return values) are not
+addressable</strong>, so you cannot call a pointer-receiver method on
+them:</p>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Counter <span class="kw">struct</span><span class="op">{</span> n <span class="dt">int</span> <span class="op">}</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>c <span class="op">*</span>Counter<span class="op">)</span> IncPtr<span class="op">()</span> <span class="op">{</span> c<span class="op">.</span>n<span class="op">++</span> <span class="op">}</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>m <span class="op">:=</span> <span class="kw">map</span><span class="op">[</span><span class="dt">string</span><span class="op">]</span>Counter<span class="op">{</span><span class="st">&quot;a&quot;</span><span class="op">:</span> <span class="op">{}}</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a><span class="co">// m[&quot;a&quot;].IncPtr() // compile error: m[&quot;a&quot;] is not addressable, cannot take its address</span></span></code></pre></div>
+<h3 id="method-sets">Method sets</h3>
+<p>A type’s <strong>method set</strong> determines which interfaces it
+can satisfy:</p>
+<ul>
+<li>The method set of type <code>T</code>: all
+<strong>value-receiver</strong> methods.</li>
+<li>The method set of type <code>*T</code>: value-receiver
+<strong>+</strong> pointer-receiver methods (all of them).</li>
+</ul>
+<p>In other words, pointer-receiver methods do <strong>not</strong>
+belong to <code>T</code>’s method set. Therefore, if a value type
+<code>T</code> wants to satisfy some interface whose methods use pointer
+receivers, then only <code>*T</code> satisfies the interface and
+<code>T</code> does not. This rule, combined with addressability, is a
+common source of interface-assignment errors. See <a
+href="08-面向对象与类型系统.html">08-The Type System and OOP</a> for
+details.</p>
+<h2 id="a-closure-captures-the-variable-not-the-value">A closure
+captures the variable, not the value</h2>
+<p>When a closure (anonymous function) captures an outer variable, it
+captures the <strong>variable itself (its storage location)</strong>,
+not its value at that moment. If a captured variable is still referenced
+by the closure after the enclosing function returns, escape analysis
+<strong>moves it from the stack to the heap</strong>, so the closure and
+the outer scope share the same storage.</p>
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> counter<span class="op">()</span> <span class="kw">func</span><span class="op">()</span> <span class="dt">int</span> <span class="op">{</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>    n <span class="op">:=</span> <span class="dv">0</span> <span class="co">// escapes to the heap because the returned closure holds it</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="kw">func</span><span class="op">()</span> <span class="dt">int</span> <span class="op">{</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>        n<span class="op">++</span> <span class="co">// each call shares and modifies the same n</span></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> n</span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a>    c <span class="op">:=</span> counter<span class="op">()</span></span>
+<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>c<span class="op">(),</span> c<span class="op">(),</span> c<span class="op">())</span> <span class="co">// 1 2 3</span></span>
+<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>This has the same semantics as a C++ lambda’s <code>[&amp;n]</code>
+(capture by reference), not <code>[n]</code> (by value). C has no
+closures and can only simulate this by passing a struct pointer.</p>
+<h3
+id="the-classic-loop-variable-trap-and-the-go-1.22-semantic-change">The
+classic loop-variable trap and the Go 1.22 semantic change</h3>
+<p>Because it captures the variable, in Go 1.21 and earlier the loop
+variable had a single instance for the whole loop, and all closures
+captured the <strong>same</strong> variable:</p>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Go 1.21-: prints 3 3 3 (sharing the same i, which is 3 when the loop ends)</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="co">// Go 1.22+: prints 0 1 2 (each i is a fresh instance, each closure captures a different variable)</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>    funcs <span class="op">:=</span> <span class="bu">make</span><span class="op">([]</span><span class="kw">func</span><span class="op">(),</span> <span class="dv">0</span><span class="op">,</span> <span class="dv">3</span><span class="op">)</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> i <span class="op">:=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">3</span><span class="op">;</span> i<span class="op">++</span> <span class="op">{</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>        funcs <span class="op">=</span> <span class="bu">append</span><span class="op">(</span>funcs<span class="op">,</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span> fmt<span class="op">.</span>Print<span class="op">(</span>i<span class="op">,</span> <span class="st">&quot; &quot;</span><span class="op">)</span> <span class="op">})</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _<span class="op">,</span> f <span class="op">:=</span> <span class="kw">range</span> funcs <span class="op">{</span></span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>        f<span class="op">()</span></span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p><strong>Since Go 1.22, a <code>for</code> loop variable is a fresh
+instance each iteration</strong> (see <a
+href="05-控制流.html#go-122循环变量每轮新实例">05-Control Flow</a>), and
+this near-universal trap is fixed at the language level. In 1.21 and
+earlier, the old style relied on an explicit per-iteration copy
+<code>i := i</code> to work around it. The same applies when using
+goroutines (<code>go func(){ ... i ... }()</code>); the behavior differs
+before and after 1.22.</p>
+<h2 id="variadic-t">Variadic …T</h2>
+<p><code>...T</code> declares a variadic parameter, which the function
+treats internally as a <code>[]T</code> (slice). At the low level: the
+caller <strong>packs these arguments into a new slice</strong> (usually
+allocating the underlying array on the stack when it doesn’t escape) and
+passes it in.</p>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> sum<span class="op">(</span>nums <span class="op">...</span><span class="dt">int</span><span class="op">)</span> <span class="dt">int</span> <span class="op">{</span> <span class="co">// nums has type []int</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>    total <span class="op">:=</span> <span class="dv">0</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _<span class="op">,</span> n <span class="op">:=</span> <span class="kw">range</span> nums <span class="op">{</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>        total <span class="op">+=</span> n</span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> total</span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>sum<span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">))</span> <span class="co">// pass 3 → packed into []int{1,2,3}</span></span>
+<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>sum<span class="op">())</span>        <span class="co">// pass 0 → nums is a nil slice, len=0</span></span>
+<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a>    xs <span class="op">:=</span> <span class="op">[]</span><span class="dt">int</span><span class="op">{</span><span class="dv">4</span><span class="op">,</span> <span class="dv">5</span><span class="op">,</span> <span class="dv">6</span><span class="op">}</span></span>
+<span id="cb13-14"><a href="#cb13-14" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>sum<span class="op">(</span>xs<span class="op">...))</span> <span class="co">// use ... to spread an existing slice; here [no copy] happens, xs&#39;s underlying array is reused directly</span></span>
+<span id="cb13-15"><a href="#cb13-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Note that <code>sum(xs...)</code> reuses <code>xs</code>’s underlying
+array, so modifying <code>nums[i]</code> inside the function would
+change <code>xs</code>. Compared to C’s <code>va_list</code> (untyped,
+no length, requires a sentinel), this is type-safe and carries its own
+length.</p>
+<h2 id="named-return-values-defer-modifying-the-return-value">Named
+return values + defer modifying the return value</h2>
+<p>Combined with the defer from <a
+href="05-控制流.html#defer">05-Control Flow</a>, named return values are
+a powerful combination. <code>return</code> first writes the value into
+the named return slot, then runs the defers, and a defer can modify this
+slot:</p>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> readConfig<span class="op">()</span> <span class="op">(</span>cfg <span class="dt">string</span><span class="op">,</span> err <span class="dt">error</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">defer</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> r <span class="op">:=</span> <span class="bu">recover</span><span class="op">();</span> r <span class="op">!=</span> <span class="ot">nil</span> <span class="op">{</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>            <span class="co">// convert the panic into an error returned to the caller</span></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>            err <span class="op">=</span> fmt<span class="op">.</span>Errorf<span class="op">(</span><span class="st">&quot;recovered from panic: %v&quot;</span><span class="op">,</span> r<span class="op">)</span></span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">}()</span></span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a>    <span class="bu">panic</span><span class="op">(</span><span class="st">&quot;config file corrupted&quot;</span><span class="op">)</span></span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a>    <span class="co">// unreachable, but the defer will set err and return normally</span></span>
+<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>At the low level, named return values are simply named variables in
+the callee’s stack frame, and <code>return x</code> = “copy x into the
+return slot + run the defers + actually return.” This is the standard
+technique for converting a panic into an error. See <a
+href="09-错误处理与资源管理.html">09-Error Handling and Resource
+Management</a> for details.</p>
+<h2 id="the-goroutine-stack-a-growable-contiguous-stack">The goroutine
+stack: a growable contiguous stack</h2>
+<p>This is one of the most elegant designs in the Go runtime, and
+completely different from C/C++ thread stacks.</p>
+<p>A C/C++ thread stack has a <strong>fixed size</strong> at creation
+time (typically 1–8MB), with virtual address space reserved by the OS.
+Spawning too many threads exhausts the address space; recursing too
+deeply overflows the stack (segfault).</p>
+<p>Every Go goroutine has <strong>its own stack, initially only about
+2KB</strong>, managed by the Go runtime (not the OS). This makes it easy
+to create hundreds of thousands of goroutines—2KB × 1 million ≈ 2GB,
+which threads cannot match.</p>
+<h3 id="how-the-stack-grows-morestack-and-stack-copying">How the stack
+grows: morestack and stack copying</h3>
+<p>The compiler inserts a small piece of <strong>stack-check (stack
+guard)</strong> code at each function’s entry: it checks whether the
+current stack pointer is about to hit the bottom. If space is
+insufficient, it calls the runtime’s <code>morestack</code>:</p>
+<ol type="1">
+<li>Allocate a <strong>larger new stack</strong> (usually double).</li>
+<li><strong>Copy the entire contents of the old stack</strong> to the
+new stack (a contiguous stack).</li>
+<li><strong>Adjust all pointers that pointed into the old stack</strong>
+(the runtime can precisely scan stack pointers, which relies on Go’s
+precise-GC type information)—this step is impossible in C, because C
+cannot know which words on the stack are pointers.</li>
+<li>Free the old stack, and the function continues executing.</li>
+</ol>
+<p>The stack can also <strong>shrink</strong> on demand during GC.</p>
+<pre><code>before growth (2KB stack nearly full):   after growth (copied to a 4KB new stack):
+ ┌──────────┐ high address                ┌──────────┐
+ │ frame A  │               │ frame A  │  ← contents copied byte by byte
+ │ frame B  │   morestack   │ frame B  │
+ │ frame C ←SP │  ══════════▶  │ frame C  │
+ └──────────┘ hit bottom          │ frame D ←SP │  ← now there&#39;s room to continue
+                            │  ...     │
+                            └──────────┘ low address</code></pre>
+<h3 id="impact-on-code">Impact on code</h3>
+<ul>
+<li><strong>Do not assume the address of a stack variable is
+stable</strong>: after stack growth the address changes (but pointers to
+it are corrected by the runtime, so it’s transparent to you). This is
+also why taking the address of a local variable is perfectly safe in
+Go—even if it escapes, the runtime/compiler handles it correctly (the
+escaped one moves to the heap, the non-escaped one moves with the
+stack).</li>
+<li>Deep recursion does not easily segfault in Go, but the stack keeps
+growing until it reaches the limit (64-bit default
+<code>maxstacksize</code> ≈ 1GB, adjustable); on exceeding it the
+runtime directly <code>fatal error: stack overflow</code> and
+<strong>terminates the process</strong>—this is a fatal error that
+<strong>cannot be <code>recover</code>ed</strong>, fundamentally
+different from an ordinary panic.</li>
+<li>Goroutine scheduling and stacks, together with channels, form the
+foundation of Go’s concurrency model. See <a
+href="10-并发模型.html">10-The Concurrency Model</a>.</li>
+</ul>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>Dimension</th>
+<th>C/C++ thread stack</th>
+<th>Go goroutine stack</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Initial size</td>
+<td>Fixed, 1–8MB</td>
+<td>About 2KB</td>
+</tr>
+<tr>
+<td>Growth</td>
+<td>Cannot (overflow crashes)</td>
+<td>Automatic, morestack + copy</td>
+</tr>
+<tr>
+<td>Shrinking</td>
+<td>Cannot</td>
+<td>On demand during GC</td>
+</tr>
+<tr>
+<td>Manager</td>
+<td>OS</td>
+<td>Go runtime</td>
+</tr>
+<tr>
+<td>Number creatable</td>
+<td>A few thousand</td>
+<td>Hundreds of thousands to millions</td>
+</tr>
+<tr>
+<td>Stack pointer fixup</td>
+<td>Not supported</td>
+<td>Supported (precise GC)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="summary">Summary</h2>
+<ul>
+<li>Functions are first-class values, backed by a funcval pointer,
+carrying captured variables when they are closures.</li>
+<li>Multiple return values are natively supported, idiomatically
+<code>(result, error)</code>.</li>
+<li><strong>Everything is passed by value</strong>; to modify, pass a
+pointer. slice/map/chan copy a pointer-containing header, hence the
+aliasing effect.</li>
+<li>Method receivers are likewise by value: a value receiver copies the
+whole receiver, a pointer receiver can modify it and avoids a large
+copy; mind method sets and addressability.</li>
+<li>A closure captures the <strong>variable</strong>, not the value; Go
+1.22 fixed the loop-variable capture trap.</li>
+<li>A variadic <code>...T</code> is a slice internally;
+<code>xs...</code> spreads and reuses the underlying array.</li>
+<li>A goroutine stack starts at 2KB and, as a contiguous stack, can
+grow/shrink—a world apart from C’s fixed thread stack.</li>
+</ul>
+<hr />
+<p><a href="05-控制流.html">← Previous: Control Flow</a> · <a
+href="index.html">Index</a> · <a href="07-复合数据结构.html">Next:
+Composite Data Structures</a> →</p>
+</div>
+</body>
+</html>

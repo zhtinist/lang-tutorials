@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.10" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Concurrency Models: GIL, Threads, Processes, and
+Coroutines</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../../assets/style.css" />
+</head>
+<body>
+<div class="topbar"><div class="wrap"><a class="home" href="../index.html">📚 Other Languages for C/C++ Programmers</a>
+<a href="../python/index.html" style="color:var(--accent-dark);font-weight:700">Python</a>
+<a href="../java/index.html">Java</a>
+<a href="../go/index.html">Go</a></div></div><a class="langtoggle" href="#" onclick="switchLang();return false;" title="切换语言 / Switch language"><b>中</b><span>中文</span></a><script>function switchLang(){var p=location.pathname,en=p.indexOf('/en/')>-1,n=en?p.replace('/en/','/zh/'):p.replace('/zh/','/en/');try{localStorage.setItem('lang',en?'zh':'en')}catch(e){}location.href=n;}</script>
+<div class="wrap">
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#concurrency-models-gil-threads-processes-and-coroutines"
+id="toc-concurrency-models-gil-threads-processes-and-coroutines">Concurrency
+Models: GIL, Threads, Processes, and Coroutines</a>
+<ul>
+<li><a href="#what-the-gil-is" id="toc-what-the-gil-is">1. What the GIL
+Is</a></li>
+<li><a href="#why-it-exists-protecting-reference-counting"
+id="toc-why-it-exists-protecting-reference-counting">2. Why It Exists:
+Protecting Reference Counting</a></li>
+<li><a href="#the-consequence-cpu-bound-multithreading-doesnt-speed-up"
+id="toc-the-consequence-cpu-bound-multithreading-doesnt-speed-up">3. The
+Consequence: CPU-Bound Multithreading Doesn’t Speed Up</a></li>
+<li><a href="#threading-io-bound-is-its-home-turf"
+id="toc-threading-io-bound-is-its-home-turf">4. threading: IO-Bound Is
+Its Home Turf</a></li>
+<li><a href="#multiprocessing-bypassing-the-gil-for-true-parallelism"
+id="toc-multiprocessing-bypassing-the-gil-for-true-parallelism">5.
+multiprocessing: Bypassing the GIL for True Parallelism</a></li>
+<li><a href="#asyncio-a-single-threaded-event-loop"
+id="toc-asyncio-a-single-threaded-event-loop">6. asyncio: A
+Single-Threaded Event Loop</a></li>
+<li><a href="#concurrent.futures-a-unified-high-level-interface"
+id="toc-concurrent.futures-a-unified-high-level-interface">7.
+concurrent.futures: A Unified High-Level Interface</a></li>
+<li><a href="#free-threaded-no-gil-the-gils-twilight"
+id="toc-free-threaded-no-gil-the-gils-twilight">8. free-threaded
+(no-GIL): The GIL’s Twilight?</a></li>
+<li><a href="#summary" id="toc-summary">Summary</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1
+id="concurrency-models-gil-threads-processes-and-coroutines">Concurrency
+Models: GIL, Threads, Processes, and Coroutines</h1>
+<p>As a C/C++ engineer, you’re familiar with <code>pthread</code>,
+<code>std::thread</code>, atomic operations, memory ordering, and
+mutexes. Python’s concurrency world has one unavoidable character—the
+<strong>GIL (Global Interpreter Lock)</strong>. Understand it, and you
+understand why Python’s multithreading “looks parallel but actually
+isn’t,” and when to use threads, processes, or coroutines.</p>
+<h2 id="what-the-gil-is">1. What the GIL Is</h2>
+<p>CPython traditionally has a single <strong>global mutex</strong>: at
+any moment, <strong>only one thread can hold the GIL and execute Python
+bytecode</strong>. It’s not part of the language spec but a product of
+the CPython implementation (Jython and IronPython have no GIL).
+(Strictly speaking, since 3.12 the GIL is
+<strong>per-interpreter</strong>—multiple sub-interpreters in the same
+process can each have their own GIL; see PEP 684. The discussion below
+assumes the most common single-interpreter case.)</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sys</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="co"># how often (in &quot;check intervals&quot;) the GIL considers a switch (Python 3.2+ switched to a time basis)</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.getswitchinterval())  <span class="co"># default 0.005 seconds, i.e. 5ms</span></span></code></pre></div>
+<p>In C mental-model terms, the GIL is like wrapping a big lock around
+the interpreter’s main loop:</p>
+<pre><code>Thread T1                  GIL                     Thread T2
+  |                     [ idle ]                     |
+  |-- acquire GIL ------&gt;[ T1 ]                      |
+  |  run bytecode...      [ T1 ]     &lt;-- blocked ----|
+  |  (every 5ms or when blocking)                    |
+  |-- release GIL ------&gt;[ idle ]                     |
+  |                      [ T2 ]&lt;---- acquire GIL -----|
+  |  &lt;-- blocked --------[ T2 ]     run bytecode...   |</code></pre>
+<h2 id="why-it-exists-protecting-reference-counting">2. Why It Exists:
+Protecting Reference Counting</h2>
+<p>Recall <a href="03-变量与内存模型.html">Chapter 03</a>—CPython
+manages memory with <strong>reference counting</strong>. Every object
+header has an <code>ob_refcnt</code>. When you do <code>a = b</code> or
+pass an argument, the reference count goes <code>+1</code>; when a
+variable is destroyed, <code>-1</code>; reaching zero frees it.</p>
+<p>Here’s the problem: <code>ob_refcnt++</code> and
+<code>ob_refcnt--</code> <strong>are not atomic operations</strong>. At
+the C level they’re a three-step “read-modify-write.” If two threads
+increment/decrement the same object’s reference count concurrently
+without a lock:</p>
+<pre><code>initial refcnt = 1
+T1: read refcnt(1)        T2: read refcnt(1)
+T1: +1 gives 2            T2: -1 gives 0
+T1: write back 2          T2: write back 0   &lt;-- race! the object is wrongly freed, or never freed</code></pre>
+<p>This is exactly the data race you know. There are two solutions:</p>
+<ol type="1">
+<li><strong>Add fine-grained locks / use atomic operations on every
+object’s reference count</strong>—but objects number in the millions,
+and atomic operations trigger cache-coherency overhead on every
+<code>INCREF</code>/<code>DECREF</code>, crashing single-threaded
+performance.</li>
+<li><strong>Protect the entire interpreter state with a single big
+lock</strong>—this is the GIL.</li>
+</ol>
+<p>CPython chose option 2, because it makes <strong>single-threaded
+performance optimal</strong> and makes writing C extensions extremely
+simple (extension authors assume by default that they own the
+interpreter exclusively, with no need to think about concurrency). The
+GIL protects not just reference counts but various global interpreter
+states (the memory allocator, internal caches, etc.).</p>
+<h2 id="the-consequence-cpu-bound-multithreading-doesnt-speed-up">3. The
+Consequence: CPU-Bound Multithreading Doesn’t Speed Up</h2>
+<p>Since only one thread runs bytecode at a time, <strong>pure
+computation (CPU-bound) tasks don’t get faster with more threads—in fact
+they get slightly slower due to lock contention and context
+switching</strong>.</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> time</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> threading <span class="im">import</span> Thread</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> cpu_bound(n: <span class="bu">int</span>) <span class="op">-&gt;</span> <span class="bu">int</span>:</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    <span class="co"># pure computation: hogs the CPU, never releases the GIL</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    total <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(n):</span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>        total <span class="op">+=</span> i <span class="op">*</span> i</span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> total</span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>N <span class="op">=</span> <span class="dv">20_000_000</span></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a><span class="co"># serial</span></span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>t0 <span class="op">=</span> time.perf_counter()</span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>cpu_bound(N)<span class="op">;</span> cpu_bound(N)</span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f&quot;serial: </span><span class="sc">{</span>time<span class="sc">.</span>perf_counter() <span class="op">-</span> t0<span class="sc">:.2f}</span><span class="ss">s&quot;</span>)</span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a><span class="co"># two threads</span></span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a>t0 <span class="op">=</span> time.perf_counter()</span>
+<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a>threads <span class="op">=</span> [Thread(target<span class="op">=</span>cpu_bound, args<span class="op">=</span>(N,)) <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">2</span>)]</span>
+<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> t <span class="kw">in</span> threads: t.start()</span>
+<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> t <span class="kw">in</span> threads: t.join()</span>
+<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f&quot;two threads: </span><span class="sc">{</span>time<span class="sc">.</span>perf_counter() <span class="op">-</span> t0<span class="sc">:.2f}</span><span class="ss">s&quot;</span>)  <span class="co"># won&#39;t be twice as fast, may even be slower</span></span></code></pre></div>
+<p>Compare with C++: two <code>std::thread</code>s running pure
+computation can saturate two cores, achieving near-linear speedup. In
+Python, two threads fight over the same GIL, so only one core is ever
+really working:</p>
+<pre><code>CPU-bound Python multithreading on a dual-core CPU:
+
+Core 0: [T1][   ][T1][   ][T2][   ]...   &lt;- the two threads take turns on the same core
+Core 1: [idle...........................]  &lt;- the second core is wasted
+
+C++ std::thread on the same task:
+Core 0: [T1][T1][T1][T1][T1][T1]...      &lt;- fully loaded
+Core 1: [T2][T2][T2][T2][T2][T2]...      &lt;- fully loaded, truly parallel</code></pre>
+<h2 id="threading-io-bound-is-its-home-turf">4. threading: IO-Bound Is
+Its Home Turf</h2>
+<p>Key point: <strong>when performing blocking IO (reading/writing
+files, network requests, <code>time.sleep</code>), a thread proactively
+releases the GIL</strong>. Since no bytecode needs to run while waiting
+on IO, it makes sense to let another thread run. In addition, the
+interpreter also forces a switch periodically (5ms by default).</p>
+<p>So <code>threading</code> is well-suited to <strong>IO-bound</strong>
+scenarios: multiple threads spend most of their time waiting on the
+network/disk, the GIL is released during the wait, and effective
+concurrency is achieved.</p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> time, urllib.request</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> threading <span class="im">import</span> Thread</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> fetch(url: <span class="bu">str</span>) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>    <span class="co"># the GIL is released while blocked on the network request, so other threads can run</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">with</span> urllib.request.urlopen(url) <span class="im">as</span> r:</span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>        r.read()</span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>urls <span class="op">=</span> [<span class="st">&quot;https://example.com&quot;</span>] <span class="op">*</span> <span class="dv">8</span></span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>t0 <span class="op">=</span> time.perf_counter()</span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> u <span class="kw">in</span> urls: fetch(u)</span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f&quot;serial: </span><span class="sc">{</span>time<span class="sc">.</span>perf_counter() <span class="op">-</span> t0<span class="sc">:.2f}</span><span class="ss">s&quot;</span>)</span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>t0 <span class="op">=</span> time.perf_counter()</span>
+<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a>threads <span class="op">=</span> [Thread(target<span class="op">=</span>fetch, args<span class="op">=</span>(u,)) <span class="cf">for</span> u <span class="kw">in</span> urls]</span>
+<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> t <span class="kw">in</span> threads: t.start()</span>
+<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> t <span class="kw">in</span> threads: t.join()</span>
+<span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f&quot;multithreaded: </span><span class="sc">{</span>time<span class="sc">.</span>perf_counter() <span class="op">-</span> t0<span class="sc">:.2f}</span><span class="ss">s&quot;</span>)  <span class="co"># significant speedup, IO waits are overlapped</span></span></code></pre></div>
+<h3 id="thread-synchronization-primitives">Thread Synchronization
+Primitives</h3>
+<p>As in C++, shared mutable state needs protection. Note: even with the
+GIL, <strong>compound operations (like <code>x += 1</code>) are not
+atomic</strong>—they consist of multiple bytecodes, and a switch may
+happen in between.</p>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> threading <span class="im">import</span> Lock, Thread</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>counter <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>lock <span class="op">=</span> Lock()</span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> worker():</span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">global</span> counter</span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">100_000</span>):</span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>        <span class="cf">with</span> lock:          <span class="co"># equivalent to std::lock_guard, auto-released on leaving scope</span></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>            counter <span class="op">+=</span> <span class="dv">1</span>     <span class="co"># read-modify-write, must be locked</span></span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>threads <span class="op">=</span> [Thread(target<span class="op">=</span>worker) <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">4</span>)]</span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> t <span class="kw">in</span> threads: t.start()</span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> t <span class="kw">in</span> threads: t.join()</span>
+<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(counter)  <span class="co"># with lock: 400000; without lock: less than that (lost updates)</span></span></code></pre></div>
+<p><code>threading</code> also provides <code>RLock</code> (reentrant),
+<code>Semaphore</code>, <code>Event</code>, <code>Condition</code>, and
+<code>Barrier</code>, with semantics largely matching their C++
+standard-library counterparts.</p>
+<h2 id="multiprocessing-bypassing-the-gil-for-true-parallelism">5.
+multiprocessing: Bypassing the GIL for True Parallelism</h2>
+<p>To saturate multiple cores on CPU-bound tasks, you must <strong>spawn
+multiple processes</strong>. Each process has its <strong>own Python
+interpreter and its own GIL</strong>, independent of the others,
+scheduled by the OS onto different cores.</p>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> time</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> multiprocessing <span class="im">import</span> Process</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> cpu_bound(n: <span class="bu">int</span>) <span class="op">-&gt;</span> <span class="bu">int</span>:</span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="bu">sum</span>(i <span class="op">*</span> i <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(n))</span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="va">__name__</span> <span class="op">==</span> <span class="st">&quot;__main__&quot;</span>:   <span class="co"># Windows/spawn mode requires this guard</span></span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>    N <span class="op">=</span> <span class="dv">20_000_000</span></span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a>    t0 <span class="op">=</span> time.perf_counter()</span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>    ps <span class="op">=</span> [Process(target<span class="op">=</span>cpu_bound, args<span class="op">=</span>(N,)) <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">2</span>)]</span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> p <span class="kw">in</span> ps: p.start()</span>
+<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> p <span class="kw">in</span> ps: p.join()</span>
+<span id="cb8-13"><a href="#cb8-13" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f&quot;two processes: </span><span class="sc">{</span>time<span class="sc">.</span>perf_counter() <span class="op">-</span> t0<span class="sc">:.2f}</span><span class="ss">s&quot;</span>)  <span class="co"># close to half the serial time</span></span></code></pre></div>
+<p>The cost is that <strong>processes don’t share memory</strong> (just
+like after a <code>fork</code>, each writes its own copy). There are two
+paths for passing data:</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>Method</th>
+<th>Mechanism</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Arguments/return values/queues</td>
+<td><strong>pickle serialization</strong></td>
+<td>objects are serialized into a byte stream, sent to the child process
+via a pipe, then deserialized. There’s copy overhead, and the object
+must be picklable</td>
+</tr>
+<tr>
+<td><code>Value</code>/<code>Array</code>/<code>shared_memory</code></td>
+<td><strong>shared memory</strong></td>
+<td>maps the same physical memory directly, zero-copy, but you must lock
+and synchronize yourself</td>
+</tr>
+</tbody>
+</table>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> multiprocessing <span class="im">import</span> shared_memory</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="co"># create a shared memory block; multiple processes can map the same physical pages, no copying needed</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>shm <span class="op">=</span> shared_memory.SharedMemory(create<span class="op">=</span><span class="va">True</span>, size<span class="op">=</span><span class="dv">1024</span>)</span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>buf <span class="op">=</span> np.ndarray((<span class="dv">256</span>,), dtype<span class="op">=</span>np.int32, <span class="bu">buffer</span><span class="op">=</span>shm.buf)</span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>buf[<span class="dv">0</span>] <span class="op">=</span> <span class="dv">42</span></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a><span class="co"># another process attaches to the same memory using shm.name</span></span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>shm.close()<span class="op">;</span> shm.unlink()</span></code></pre></div>
+<p>Start methods (<code>start method</code>): <code>fork</code> (copies
+the parent’s memory, fast, but unsafe when combined with
+multithreading), <code>spawn</code> (a fresh interpreter, clean but
+slow), and <code>forkserver</code>. <strong>The default varies by
+platform/version</strong>: macOS and Windows default to
+<code>spawn</code>; Linux historically defaulted to <code>fork</code>,
+but <strong>since 3.14 defaults to <code>forkserver</code></strong>
+(because <code>fork</code> is prone to problems in multithreaded
+programs). Don’t keep memorizing “Unix defaults to fork.”</p>
+<h2 id="asyncio-a-single-threaded-event-loop">6. asyncio: A
+Single-Threaded Event Loop</h2>
+<p><code>asyncio</code> is <strong>a different route</strong>: instead
+of multiple threads/processes, it achieves high-concurrency IO within
+<strong>a single thread</strong> using an <strong>event loop +
+coroutines</strong>. It’s essentially <strong>cooperative
+multitasking</strong>, in contrast to threads’
+<strong>preemptive</strong> scheduling.</p>
+<ul>
+<li><strong>Coroutine</strong>: defined with <code>async def</code>.
+Calling it doesn’t execute immediately but returns a coroutine object
+(like a lazy task description).</li>
+<li><strong><code>await</code></strong>: <strong>proactively yields
+control</strong> to the event loop here. Only when it hits an
+<code>await</code> on an operation that isn’t ready does the current
+coroutine pause, and the event loop goes to run another coroutine.</li>
+<li><strong>Event loop</strong>: a <code>while</code> loop that
+maintains a queue of ready tasks, working with the OS’s
+<code>epoll</code>/<code>kqueue</code>/<code>IOCP</code> to monitor IO
+events, and resuming the corresponding coroutine whenever its IO becomes
+ready.</li>
+</ul>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> asyncio, time</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a><span class="cf">async</span> <span class="kw">def</span> fetch(name: <span class="bu">str</span>, delay: <span class="bu">float</span>) <span class="op">-&gt;</span> <span class="bu">str</span>:</span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f&quot;</span><span class="sc">{</span>name<span class="sc">}</span><span class="ss"> started&quot;</span>)</span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">await</span> asyncio.sleep(delay)   <span class="co"># yields control! the event loop runs another coroutine</span></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f&quot;</span><span class="sc">{</span>name<span class="sc">}</span><span class="ss"> done&quot;</span>)</span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> name</span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a><span class="cf">async</span> <span class="kw">def</span> main():</span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a>    t0 <span class="op">=</span> time.perf_counter()</span>
+<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a>    <span class="co"># gather schedules multiple coroutines concurrently; total time ≈ the longest one, not the sum</span></span>
+<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a>    results <span class="op">=</span> <span class="cf">await</span> asyncio.gather(</span>
+<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a>        fetch(<span class="st">&quot;A&quot;</span>, <span class="dv">2</span>), fetch(<span class="st">&quot;B&quot;</span>, <span class="dv">1</span>), fetch(<span class="st">&quot;C&quot;</span>, <span class="dv">3</span>),</span>
+<span id="cb10-14"><a href="#cb10-14" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb10-15"><a href="#cb10-15" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(results, <span class="ss">f&quot;took </span><span class="sc">{</span>time<span class="sc">.</span>perf_counter() <span class="op">-</span> t0<span class="sc">:.2f}</span><span class="ss">s&quot;</span>)  <span class="co"># about 3s, not 6s</span></span>
+<span id="cb10-16"><a href="#cb10-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-17"><a href="#cb10-17" aria-hidden="true" tabindex="-1"></a>asyncio.run(main())   <span class="co"># create the event loop, run main to completion, then close the loop</span></span></code></pre></div>
+<p>Mental model of the event loop:</p>
+<pre><code>Event loop (single thread):
+  ┌─&gt; take a coroutine from the ready queue, run it to the next await
+  │      coroutine A hits await sleep(2) --&gt; register a timer, suspend A
+  │      coroutine B hits await sleep(1) --&gt; register a timer, suspend B
+  │      queue empty, epoll waits for IO/timers to become ready
+  │      1s later B&#39;s timer fires --&gt; put B back on the ready queue
+  └──── resume B and continue after its await ...</code></pre>
+<h3 id="contrast-with-threads">Contrast with Threads</h3>
+<table>
+<colgroup>
+<col style="width: 23%" />
+<col style="width: 42%" />
+<col style="width: 34%" />
+</colgroup>
+<thead>
+<tr>
+<th>Dimension</th>
+<th>threading</th>
+<th>asyncio</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Scheduling</td>
+<td>preemptive, OS decides when to switch</td>
+<td>cooperative, switches only at <code>await</code></td>
+</tr>
+<tr>
+<td>Switch points</td>
+<td>any bytecode boundary (uncontrollable)</td>
+<td>explicit <code>await</code> (controllable, reasoned about)</td>
+</tr>
+<tr>
+<td>Parallelism</td>
+<td>limited by the GIL, no true parallelism</td>
+<td>single-threaded, no true parallelism</td>
+</tr>
+<tr>
+<td>Races</td>
+<td>needs locks, hard to debug</td>
+<td>switch points are known, most operations within the thread need no
+locks</td>
+</tr>
+<tr>
+<td>Overhead</td>
+<td>MB-scale stack per thread + OS scheduling</td>
+<td>a few KB per coroutine, tens of thousands possible</td>
+</tr>
+<tr>
+<td>Fits</td>
+<td>IO-bound + blocking libraries</td>
+<td>IO-bound + a fully async ecosystem</td>
+</tr>
+</tbody>
+</table>
+<p>Key pitfall: <strong>calling a blocking function inside a coroutine
+(e.g. synchronous <code>requests.get</code>, <code>time.sleep</code>)
+freezes the entire event loop</strong>—because there’s no
+<code>await</code>, control is never yielded. You must use async
+libraries (<code>aiohttp</code>, <code>httpx</code>) or offload the
+blocking call to a thread pool:
+<code>await loop.run_in_executor(None, blocking_fn)</code>.</p>
+<h2 id="concurrent.futures-a-unified-high-level-interface">7.
+concurrent.futures: A Unified High-Level Interface</h2>
+<p><code>concurrent.futures</code> provides a unified API for thread
+pools and process pools; it’s the most commonly used entry point day to
+day. The <code>Future</code> object is like C++’s
+<code>std::future</code>.</p>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> concurrent.futures <span class="im">import</span> ThreadPoolExecutor, ProcessPoolExecutor</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> task(x: <span class="bu">int</span>) <span class="op">-&gt;</span> <span class="bu">int</span>:</span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> x <span class="op">*</span> x</span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a><span class="co"># IO-bound: use a thread pool</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> ThreadPoolExecutor(max_workers<span class="op">=</span><span class="dv">4</span>) <span class="im">as</span> ex:</span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>    results <span class="op">=</span> <span class="bu">list</span>(ex.<span class="bu">map</span>(task, <span class="bu">range</span>(<span class="dv">10</span>)))</span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a><span class="co"># CPU-bound: use a process pool (bypass the GIL)</span></span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="va">__name__</span> <span class="op">==</span> <span class="st">&quot;__main__&quot;</span>:</span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">with</span> ProcessPoolExecutor(max_workers<span class="op">=</span><span class="dv">4</span>) <span class="im">as</span> ex:</span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a>        futures <span class="op">=</span> [ex.submit(task, i) <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">10</span>)]</span>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> f <span class="kw">in</span> futures:</span>
+<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a>            <span class="bu">print</span>(f.result())   <span class="co"># blocks until that task completes</span></span></code></pre></div>
+<p>Rule of thumb: <strong>CPU-bound → ProcessPool; IO-bound → ThreadPool
+or asyncio.</strong></p>
+<h2 id="free-threaded-no-gil-the-gils-twilight">8. free-threaded
+(no-GIL): The GIL’s Twilight?</h2>
+<p>CPython <strong>introduced a free-threaded build as an experimental
+feature in 3.13 (released 2024)</strong> (PEP 703), i.e. “no-GIL”;
+<strong>in 3.14 it became officially supported, but still not the
+default</strong>. Using techniques like <strong>biased locks + lock-free
+(biased) reference counting + per-object locks</strong>, it makes
+reference counting safe under multithreading, thereby <strong>removing
+the GIL</strong> and achieving genuinely parallel multi-core
+threads.</p>
+<p>Key points:</p>
+<ul>
+<li>It requires a dedicated build (e.g. <code>python3.13t</code> /
+<code>python3.14t</code>); regular distributions still default to the
+GIL build.</li>
+<li>Single-threaded performance regresses somewhat (a few percent early
+on, continually being optimized).</li>
+<li>C extensions need adapting (declaring free-threading support);
+ecosystem migration takes time.</li>
+<li>3.13 experimental → 3.14 officially supported (but not default); the
+GIL and free-threaded builds will coexist for a long time.</li>
+</ul>
+<p>If this route succeeds, future Python’s <code>threading</code> will
+be able to saturate multiple cores like C++’s <code>std::thread</code>,
+and many of <code>multiprocessing</code>’s pickle/shared-memory pain
+points will ease. But for the foreseeable future, the selection
+principles above still hold.</p>
+<hr />
+<h2 id="summary">Summary</h2>
+<ul>
+<li><strong>The GIL</strong> is CPython’s interpreter-level big lock
+(per-interpreter since 3.12); only one thread executes bytecode at a
+time, and its fundamental reason for existing is to protect non-atomic
+reference counting and other internal interpreter state.</li>
+<li>CPU-bound multithreading <strong>doesn’t speed up</strong>; IO-bound
+multithreading <strong>is effective</strong>, because blocking IO
+releases the GIL.</li>
+<li><strong>multiprocessing</strong> achieves true parallelism with
+separate processes + separate GILs, at the cost of passing data via
+pickle or shared memory.</li>
+<li><strong>asyncio</strong> uses a single-threaded event loop +
+cooperative coroutines, yielding explicitly at <code>await</code>,
+well-suited to high-concurrency IO; never call a blocking function
+inside it.</li>
+<li><strong>concurrent.futures</strong> provides a unified pooling
+interface.</li>
+<li><strong>The free-threaded build</strong> (experimental in 3.13,
+official but not default in 3.14) is removing the GIL and is the
+long-term direction of evolution.</li>
+</ul>
+<p><a href="09-错误处理与资源管理.html">← Prev: Error Handling and
+Resource Management</a> · <a href="index.html">Index</a> · <a
+href="11-标准库算法.html">Next: Standard Library Algorithms</a> →</p>
+</div>
+</body>
+</html>

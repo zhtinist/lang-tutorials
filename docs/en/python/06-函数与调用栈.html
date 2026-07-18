@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.10" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Functions and the Call Stack</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../../assets/style.css" />
+</head>
+<body>
+<div class="topbar"><div class="wrap"><a class="home" href="../index.html">📚 Other Languages for C/C++ Programmers</a>
+<a href="../python/index.html" style="color:var(--accent-dark);font-weight:700">Python</a>
+<a href="../java/index.html">Java</a>
+<a href="../go/index.html">Go</a></div></div><a class="langtoggle" href="#" onclick="switchLang();return false;" title="切换语言 / Switch language"><b>中</b><span>中文</span></a><script>function switchLang(){var p=location.pathname,en=p.indexOf('/en/')>-1,n=en?p.replace('/en/','/zh/'):p.replace('/zh/','/en/');try{localStorage.setItem('lang',en?'zh':'en')}catch(e){}location.href=n;}</script>
+<div class="wrap">
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#functions-and-the-call-stack"
+id="toc-functions-and-the-call-stack">Functions and the Call Stack</a>
+<ul>
+<li><a href="#def-creates-an-object" id="toc-def-creates-an-object">def
+Creates an Object</a></li>
+<li><a
+href="#the-truth-about-argument-passing-call-by-object-reference-call-by-sharing"
+id="toc-the-truth-about-argument-passing-call-by-object-reference-call-by-sharing">The
+Truth About Argument Passing: Call by Object Reference (Call by
+Sharing)</a></li>
+<li><a
+href="#kinds-of-parameters-positional-keyword-default-args-kwargs"
+id="toc-kinds-of-parameters-positional-keyword-default-args-kwargs">Kinds
+of Parameters: Positional, Keyword, Default, *args, **kwargs</a></li>
+<li><a
+href="#default-arguments-evaluated-once-when-def-runs-a-classic-trap"
+id="toc-default-arguments-evaluated-once-when-def-runs-a-classic-trap">Default
+Arguments: Evaluated Once When def Runs (a Classic Trap)</a></li>
+<li><a href="#returning-multiple-values-its-actually-a-tuple"
+id="toc-returning-multiple-values-its-actually-a-tuple">Returning
+Multiple Values: It’s Actually a Tuple</a></li>
+<li><a href="#closures-and-cell-variables"
+id="toc-closures-and-cell-variables">Closures and Cell
+Variables</a></li>
+<li><a href="#the-call-stack-frame-objects"
+id="toc-the-call-stack-frame-objects">The Call Stack: frame
+Objects</a></li>
+<li><a href="#first-class-functions-and-how-decorators-work"
+id="toc-first-class-functions-and-how-decorators-work">First-Class
+Functions and How Decorators Work</a></li>
+<li><a href="#summary" id="toc-summary">Summary</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1 id="functions-and-the-call-stack">Functions and the Call Stack</h1>
+<p>This is the chapter that most requires “rewiring your brain.” In
+C/C++, argument passing has only two physical mechanisms: by value (copy
+into the callee’s stack frame) and by pointer (copy an address). C++
+adds references (<code>&amp;</code>, aliasing the same block of memory).
+The “value vs. pointer vs. reference” model in your head is crystal
+clear—but it <strong>cannot be applied directly to Python</strong>.
+Python has only one way to pass arguments, and we must say precisely
+what it is.</p>
+<h2 id="def-creates-an-object">def Creates an Object</h2>
+<p>First, correct an intuition: in C a function is the address of a
+chunk of code (a function pointer pointing into the text segment), fixed
+at compile time. In Python, <code>def</code> is a <strong>statement
+executed at runtime</strong>; when it runs it creates a
+<code>function</code> object on the heap, then binds that object to a
+name:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> add(a, b):</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> a <span class="op">+</span> b</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">type</span>(add))          <span class="co"># &lt;class &#39;function&#39;&gt;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(add.__code__)       <span class="co"># the compiled code object (where the bytecode lives)</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(add.<span class="va">__name__</span>)       <span class="co"># &#39;add&#39;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>add_alias <span class="op">=</span> add           <span class="co"># just one more name pointing at the same function object</span></span></code></pre></div>
+<p>A <code>function</code> object holds: <code>__code__</code> (the
+immutable bytecode and metadata), <code>__defaults__</code> (default
+argument values), <code>__globals__</code> (the global namespace it can
+see), and <code>__closure__</code> (variables captured by a closure).
+Functions are “first-class citizens”—they can be assigned, passed as
+arguments, returned, and stuffed into containers, because they are just
+ordinary objects.</p>
+<h2
+id="the-truth-about-argument-passing-call-by-object-reference-call-by-sharing">The
+Truth About Argument Passing: Call by Object Reference (Call by
+Sharing)</h2>
+<p>Python’s argument-passing mechanism is called <strong>call by object
+reference</strong>, also known as <strong>call by sharing</strong>. In
+one sentence: <strong>the argument and the parameter point to the same
+object on the heap; what the passing process copies is the reference (a
+pointer), not the object itself.</strong></p>
+<p>This sounds like C’s “pass a pointer,” but there’s a crucial
+difference: in C when you pass a pointer, reassigning the parameter
+<code>p = ...</code> inside the function doesn’t affect the caller, but
+you can <code>*p = ...</code> to change the contents; in Python you have
+no “pointer to a pointer” at all, so you cannot make the caller’s name
+point elsewhere. This is clearest along two dimensions:</p>
+<table>
+<colgroup>
+<col style="width: 30%" />
+<col style="width: 70%" />
+</colgroup>
+<thead>
+<tr>
+<th>Dimension</th>
+<th>Python’s behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Can it change what the caller’s variable points
+to?</strong></td>
+<td>No. Reassigning a parameter only rebinds the local name</td>
+</tr>
+<tr>
+<td><strong>Can it change the object’s contents?</strong></td>
+<td>Yes, but only if the object is <strong>mutable</strong>
+(list/dict/set/custom objects)</td>
+</tr>
+</tbody>
+</table>
+<h3
+id="dimension-one-reassigning-a-parameter-never-affects-the-caller">Dimension
+One: Reassigning a Parameter — Never Affects the Caller</h3>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> rebind(x):</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="co"># x initially points to the same object as the caller&#39;s argument;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="co"># the line below makes the local name x point to a new object, unbeknownst to the caller</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    x <span class="op">=</span> <span class="dv">999</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">&quot;inside:&quot;</span>, x)</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>n <span class="op">=</span> <span class="dv">1</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>rebind(n)</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">&quot;outside:&quot;</span>, n)     <span class="co"># 1 —— unchanged</span></span></code></pre></div>
+<p>Memory diagram (at the moment of the call, <code>n</code> and
+<code>x</code> point to the same int object; after assignment,
+<code>x</code> points to a new object):</p>
+<pre><code>At call time:                  After x = 999:
+  n ---&gt; [int 1]                 n ---&gt; [int 1]
+  x ---&gt; [int 1]                 x ---&gt; [int 999]  (new object)</code></pre>
+<p>This is exactly why Python <strong>cannot</strong> write C’s
+<code>void swap(int *a, int *b)</code> style “change the caller’s
+variables through parameters” function. To swap, you can only return new
+values: <code>a, b = b, a</code>, received by the caller.</p>
+<h3
+id="dimension-two-mutating-a-mutable-object-in-place-the-caller-sees-it">Dimension
+Two: Mutating a Mutable Object In Place — The Caller Sees It</h3>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> mutate(lst):</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Doesn&#39;t rebind lst; calls a method to modify the object it points to</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    lst.append(<span class="dv">4</span>)      <span class="co"># in-place modification, produces no new list</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">&quot;inside:&quot;</span>, lst)</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>data <span class="op">=</span> [<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>]</span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>mutate(data)</span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">&quot;outside:&quot;</span>, data)   <span class="co"># [1, 2, 3, 4] —— it changed!</span></span></code></pre></div>
+<p>Memory diagram (only one list object, with both names pointing at
+it):</p>
+<pre><code>  data --\
+          &gt;---&gt; [list: 1,2,3] --append--&gt; [list: 1,2,3,4]
+  lst  --/</code></pre>
+<p>This has the same effect as changing contents via <code>*p</code>
+after passing a pointer in C. The only difference is that in Python
+“whether you can change it” depends on <strong>whether the object itself
+is mutable</strong>, not on how you declared the parameter.</p>
+<h3 id="mutable-vs.-immutable-arguments-side-by-side">Mutable
+vs. Immutable Arguments Side by Side</h3>
+<p>The same “modify the argument” code behaves oppositely for mutable
+and immutable arguments:</p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> try_change(obj):</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="bu">isinstance</span>(obj, <span class="bu">list</span>):</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>        obj <span class="op">+=</span> [<span class="dv">99</span>]        <span class="co"># list&#39;s += is an in-place extend (changes contents)</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">else</span>:</span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>        obj <span class="op">+=</span> <span class="dv">99</span>          <span class="co"># int&#39;s += creates a new object, then rebinds the local obj</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> [<span class="dv">1</span>, <span class="dv">2</span>]</span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>try_change(a)</span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a)          <span class="co"># [1, 2, 99] —— the mutable object was changed</span></span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> <span class="dv">10</span></span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>try_change(b)</span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(b)          <span class="co"># 10 —— an immutable object; the caller is unaffected</span></span></code></pre></div>
+<p>Here’s the trap: <code>obj += [99]</code> and <code>obj += 99</code>
+both look like <code>+=</code>, but for a list it’s an in-place
+modification (equivalent to <code>obj.extend</code>;
+<code>__iadd__</code> returns self), and for an int it’s “create new +
+rebind” (int has no in-place addition, and when <code>__iadd__</code> is
+absent it degrades to <code>obj = obj + 99</code>). Mutability decides
+everything.</p>
+<blockquote>
+<p>Mnemonic: <strong>What’s passed is always a reference; what’s copied
+is always the reference itself (a pointer), never the object. Rebinding
+doesn’t propagate; changing contents shows through if it’s
+mutable.</strong></p>
+</blockquote>
+<h2
+id="kinds-of-parameters-positional-keyword-default-args-kwargs">Kinds of
+Parameters: Positional, Keyword, Default, *args, **kwargs</h2>
+<p>Python’s parameter system is far more flexible than C’s. The complete
+form of the various symbols in a function signature:</p>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> f(pos1, pos2, <span class="op">/</span>, both, <span class="op">*</span>args, kw_only, <span class="op">**</span>kwargs):</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">#   ^^^^^^^^^^   /   ^^^^  ^^^^^  ^^^^^^^   ^^^^^^^^</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    ...</span></code></pre></div>
+<ul>
+<li>Before <code>/</code>: <strong>positional-only</strong> parameters
+(the caller cannot pass <code>pos1=...</code>), 3.8+;</li>
+<li>Between <code>/</code> and <code>*</code>: positional or keyword
+(the most common);</li>
+<li><code>*args</code>: collects extra positional arguments into a
+<strong>tuple</strong>;</li>
+<li>After <code>*</code> (or after <code>*args</code>):
+<strong>keyword-only</strong> parameters, which must be written as
+<code>kw_only=...</code>;</li>
+<li><code>**kwargs</code>: collects extra keyword arguments into a
+<strong>dict</strong>.</li>
+</ul>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> demo(a, b, <span class="op">*</span>args, sep<span class="op">=</span><span class="st">&quot;-&quot;</span>, <span class="op">**</span>kwargs):</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f&quot;a=</span><span class="sc">{</span>a<span class="sc">}</span><span class="ss"> b=</span><span class="sc">{</span>b<span class="sc">}</span><span class="ss">&quot;</span>)</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">&quot;args =&quot;</span>, args)        <span class="co"># tuple</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">&quot;kwargs =&quot;</span>, kwargs)    <span class="co"># dict</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">&quot;sep =&quot;</span>, sep)</span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>demo(<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>, <span class="dv">4</span>, sep<span class="op">=</span><span class="st">&quot;|&quot;</span>, x<span class="op">=</span><span class="dv">10</span>, y<span class="op">=</span><span class="dv">20</span>)</span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a><span class="co"># a=1 b=2</span></span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a><span class="co"># args = (3, 4)</span></span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a><span class="co"># kwargs = {&#39;x&#39;: 10, &#39;y&#39;: 20}</span></span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a><span class="co"># sep = |</span></span></code></pre></div>
+<p>Under the hood, <code>*args</code> <strong>allocates a new
+tuple</strong> to hold those extra arguments, and <code>**kwargs</code>
+<strong>allocates a new dict</strong>. The <code>*</code> /
+<code>**</code> at the call site are the reverse operation
+(unpacking):</p>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>nums <span class="op">=</span> [<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>]</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="op">*</span>nums)             <span class="co"># equivalent to print(1, 2, 3), unpacks the list into positional arguments</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>opts <span class="op">=</span> {<span class="st">&quot;sep&quot;</span>: <span class="st">&quot;/&quot;</span>}</span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">&quot;a&quot;</span>, <span class="st">&quot;b&quot;</span>, <span class="op">**</span>opts)  <span class="co"># unpacks the dict into keyword arguments -&gt; sep=&quot;/&quot;</span></span></code></pre></div>
+<h2
+id="default-arguments-evaluated-once-when-def-runs-a-classic-trap">Default
+Arguments: Evaluated Once When def Runs (a Classic Trap)</h2>
+<p>C++’s default arguments are evaluated on <strong>every call</strong>.
+Python is the opposite: the default value is evaluated <strong>once,
+when the <code>def</code> statement runs</strong>, and the result is
+stored in the function object’s <code>__defaults__</code>, shared by
+every subsequent call. This is fine for immutable defaults, but for
+mutable defaults it’s the famous pitfall:</p>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> bad(item, bucket<span class="op">=</span>[]):     <span class="co"># this [] is created only once, at definition time!</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>    bucket.append(item)</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> bucket</span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(bad(<span class="dv">1</span>))    <span class="co"># [1]</span></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(bad(<span class="dv">2</span>))    <span class="co"># [1, 2] —— surprise! the same list is reused over and over</span></span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(bad(<span class="dv">3</span>))    <span class="co"># [1, 2, 3]</span></span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(bad.__defaults__)   <span class="co"># ([1, 2, 3],) —— the default value lives here and got mutated</span></span></code></pre></div>
+<p>Reason: the default value of <code>bucket</code> is <strong>that
+one</strong> list object created at definition time, stored in
+<code>__defaults__</code>. Each time you omit <code>bucket</code>, the
+parameter binds to this same object, and <code>append</code> keeps
+adding to it.</p>
+<p>The correct way is to use a <code>None</code> sentinel and create a
+new one inside the function body:</p>
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> good(item, bucket<span class="op">=</span><span class="va">None</span>):</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> bucket <span class="kw">is</span> <span class="va">None</span>:</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>        bucket <span class="op">=</span> []           <span class="co"># a fresh one on every call, mutually independent</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>    bucket.append(item)</span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> bucket</span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(good(<span class="dv">1</span>))   <span class="co"># [1]</span></span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(good(<span class="dv">2</span>))   <span class="co"># [2]</span></span></code></pre></div>
+<p>Likewise, don’t use things like <code>time.time()</code>,
+<code>{}</code>, or <code>[]</code> as defaults expecting them to be
+“recomputed on each call”—they’re computed only once.</p>
+<h2 id="returning-multiple-values-its-actually-a-tuple">Returning
+Multiple Values: It’s Actually a Tuple</h2>
+<p>C returns multiple values via output parameters (pointers) or by
+wrapping them in a struct. Python appears to “return multiple values,”
+but under the hood it <strong>packs them into one tuple, then unpacks
+it</strong>:</p>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> divmod2(a, b):</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> a <span class="op">//</span> b, a <span class="op">%</span> b      <span class="co"># a comma builds a tuple, equivalent to return (a//b, a%b)</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>q, r <span class="op">=</span> divmod2(<span class="dv">17</span>, <span class="dv">5</span>)         <span class="co"># the right side is a tuple; the left side is sequence unpacking</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(q, r)                   <span class="co"># 3 2</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>t <span class="op">=</span> divmod2(<span class="dv">17</span>, <span class="dv">5</span>)</span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">type</span>(t), t)             <span class="co"># &lt;class &#39;tuple&#39;&gt; (3, 2)</span></span></code></pre></div>
+<p>There is no true “multiple return values,” only “return one tuple +
+unpacking assignment.” So its cost is allocating a small tuple (CPython
+has a caching optimization for small tuples).</p>
+<h2 id="closures-and-cell-variables">Closures and Cell Variables</h2>
+<p>When an inner function references a local variable of an outer
+function, a <strong>closure</strong> forms. Here Python again parts ways
+with C: C’s local variables live on the stack frame and become invalid
+when the function returns, so you cannot safely return a pointer to one.
+In Python, a variable captured by a closure is placed in a <strong>cell
+object</strong> on the heap, and the variable stays alive even after the
+outer function has returned:</p>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> make_counter():</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>    count <span class="op">=</span> <span class="dv">0</span>                 <span class="co"># referenced by the inner function, promoted to a cell variable</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> inc():</span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>        <span class="kw">nonlocal</span> count        <span class="co"># declares: modify the outer count, don&#39;t create a new local</span></span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>        count <span class="op">+=</span> <span class="dv">1</span></span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> count</span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> inc                <span class="co"># after the outer returns, count is still alive</span></span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>c <span class="op">=</span> make_counter()</span>
+<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(c(), c(), c())          <span class="co"># 1 2 3</span></span>
+<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(c.__closure__)          <span class="co"># (&lt;cell at ...: int object at ...&gt;,)</span></span>
+<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(c.__closure__[<span class="dv">0</span>].cell_contents)   <span class="co"># 3 —— the cell holds the current value</span></span></code></pre></div>
+<p>Memory diagram: <code>count</code> is not on the stack but in a cell,
+and the closure <code>inc</code> holds a reference to that cell through
+<code>__closure__</code>:</p>
+<pre><code>   After make_counter returns, its stack frame is destroyed, but:
+
+   c (function inc) --__closure__--&gt; ( cell )
+                                       |
+                                       v
+                                    [int 3]   &lt;- on the heap, still alive</code></pre>
+<p><code>nonlocal</code> declares “I want to write a variable in an
+enclosing scope”; <code>global</code> declares “I want to write a
+module-level global variable.” Without either, assigning directly makes
+Python treat it as <strong>a new local variable</strong> (because
+assignment creates a local binding by default), raising
+<code>UnboundLocalError</code>—a common beginner mistake:</p>
+<div class="sourceCode" id="cb15"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>x <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> wrong():</span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>    x <span class="op">+=</span> <span class="dv">1</span>          <span class="co"># UnboundLocalError: x is treated as a local but isn&#39;t bound yet when read</span></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> right():</span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">global</span> x</span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>    x <span class="op">+=</span> <span class="dv">1</span>          <span class="co"># OK</span></span></code></pre></div>
+<h2 id="the-call-stack-frame-objects">The Call Stack: frame Objects</h2>
+<p>A C stack frame is a chunk of contiguous memory with a
+compile-time-fixed layout, popped when the function returns. CPython’s
+call stack is made of <strong>frame objects</strong>; each call creates
+a frame containing a local-variable table, a link to the previous frame,
+and so on—it’s a <strong>heap object</strong> (since CPython 3.11 frames
+have an inlining optimization, but semantically you can still access
+them as objects), and it can even be reflected upon at runtime:</p>
+<div class="sourceCode" id="cb16"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sys</span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> inner():</span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>    frame <span class="op">=</span> sys._getframe()           <span class="co"># the current frame</span></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">&quot;current function:&quot;</span>, frame.f_code.co_name)      <span class="co"># &#39;inner&#39;</span></span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">&quot;locals:&quot;</span>, frame.f_locals)             <span class="co"># {&#39;frame&#39;: ...}</span></span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">&quot;caller:&quot;</span>, frame.f_back.f_code.co_name)  <span class="co"># &#39;outer&#39; —— the previous frame</span></span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> outer():</span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a>    inner()</span>
+<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a>outer()</span></code></pre></div>
+<table>
+<colgroup>
+<col style="width: 44%" />
+<col style="width: 56%" />
+</colgroup>
+<thead>
+<tr>
+<th>frame attribute</th>
+<th>Meaning (compared to C)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>f_locals</code></td>
+<td>Dict of local variables (in C, an unnamed chunk of stack
+memory)</td>
+</tr>
+<tr>
+<td><code>f_globals</code></td>
+<td>The global namespace of its module</td>
+</tr>
+<tr>
+<td><code>f_back</code></td>
+<td>Points to the caller’s frame (i.e., one level up the call
+stack)</td>
+</tr>
+<tr>
+<td><code>f_code</code></td>
+<td>The code object being executed</td>
+</tr>
+<tr>
+<td><code>f_lineno</code></td>
+<td>The current line number</td>
+</tr>
+</tbody>
+</table>
+<p>This reflectable frame structure is exactly what lets tracebacks,
+debuggers, and <code>logging</code> print a complete call chain. The
+cost is being heavier than a C stack frame.</p>
+<h3 id="recursion-depth-limit">Recursion Depth Limit</h3>
+<p>In C, recursing too deep is a stack overflow (a segfault). To prevent
+the C-level stack from actually overflowing, CPython sets a <strong>soft
+limit</strong>; exceeding it raises <code>RecursionError</code> instead
+of crashing:</p>
+<div class="sourceCode" id="cb17"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sys</span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.getrecursionlimit())    <span class="co"># usually 1000</span></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> rec(n):</span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="dv">1</span> <span class="cf">if</span> n <span class="op">==</span> <span class="dv">0</span> <span class="cf">else</span> rec(n <span class="op">-</span> <span class="dv">1</span>) <span class="op">+</span> <span class="dv">1</span></span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a><span class="co"># rec(100000) raises RecursionError instead of segfaulting the process</span></span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a>sys.setrecursionlimit(<span class="dv">3000</span>)       <span class="co"># can be raised, but setting it too high may still blow the C stack</span></span></code></pre></div>
+<p>Python has <strong>no tail-call optimization</strong>; for deep
+recursion, rewrite it as iteration or use an explicit stack.</p>
+<h2 id="first-class-functions-and-how-decorators-work">First-Class
+Functions and How Decorators Work</h2>
+<p>Because functions are objects, they can be received, wrapped, and
+returned by other functions. A <strong>decorator</strong> is syntactic
+sugar for exactly this ability: <code>@deco</code> on
+<code>def foo</code> is equivalent to
+<code>foo = deco(foo)</code>—replacing the original name with
+<code>deco</code>’s return value (typically a wrapper function).</p>
+<div class="sourceCode" id="cb18"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> functools, time</span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> timer(func):</span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">@functools.wraps</span>(func)        <span class="co"># copy func&#39;s __name__/__doc__ onto the wrapper</span></span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> wrapper(<span class="op">*</span>args, <span class="op">**</span>kwargs):  <span class="co"># use *args/**kwargs to pass through any arguments</span></span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>        t0 <span class="op">=</span> time.perf_counter()</span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>        result <span class="op">=</span> func(<span class="op">*</span>args, <span class="op">**</span>kwargs)   <span class="co"># call the wrapped original function</span></span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="ss">f&quot;</span><span class="sc">{</span>func<span class="sc">.</span><span class="va">__name__</span><span class="sc">}</span><span class="ss"> took </span><span class="sc">{</span>time<span class="sc">.</span>perf_counter()<span class="op">-</span>t0<span class="sc">:.6f}</span><span class="ss">s&quot;</span>)</span>
+<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> result</span>
+<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> wrapper                 <span class="co"># return the wrapper, replacing the original name</span></span>
+<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-12"><a href="#cb18-12" aria-hidden="true" tabindex="-1"></a><span class="at">@timer</span></span>
+<span id="cb18-13"><a href="#cb18-13" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> work(n):</span>
+<span id="cb18-14"><a href="#cb18-14" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="bu">sum</span>(<span class="bu">range</span>(n))</span>
+<span id="cb18-15"><a href="#cb18-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-16"><a href="#cb18-16" aria-hidden="true" tabindex="-1"></a><span class="co"># The above is fully equivalent to: work = timer(work)</span></span>
+<span id="cb18-17"><a href="#cb18-17" aria-hidden="true" tabindex="-1"></a>work(<span class="dv">1_000_000</span>)</span>
+<span id="cb18-18"><a href="#cb18-18" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(work.<span class="va">__name__</span>)   <span class="co"># &#39;work&#39; —— thanks to functools.wraps, otherwise it would be &#39;wrapper&#39;</span></span></code></pre></div>
+<p>Seen clearly under the hood: when <code>@timer</code> runs, it
+immediately calls <code>timer(work)</code>, obtaining the new function
+object <code>wrapper</code>, then binds it to the name
+<code>work</code>. From then on, calling <code>work(...)</code> actually
+calls <code>wrapper</code>, which internally forwards to the original
+function (captured via the closure <code>__closure__</code> as
+<code>func</code>). That’s “wrapping”—no magic, all first-class
+functions + closures.</p>
+<p><code>functools.wraps</code> matters: without it,
+<code>work.__name__</code> becomes <code>'wrapper'</code>, and
+tracebacks and docs point at the wrapper function, causing confusion
+during debugging.</p>
+<h2 id="summary">Summary</h2>
+<ul>
+<li><code>def</code> creates a <code>function</code> object at runtime;
+functions are first-class citizens.</li>
+<li>Argument passing is <strong>call by object reference / call by
+sharing</strong>: it copies a reference (pointer), not the object.
+Rebinding a parameter doesn’t propagate; mutating an object’s contents
+in place propagates only for mutable objects. This two-dimensional model
+is the core of understanding Python’s argument passing.</li>
+<li>Default arguments are evaluated <strong>once</strong> when
+<code>def</code> runs; a mutable default is reused across calls—avoid it
+with a <code>None</code> sentinel.</li>
+<li>Returning “multiple values” is really returning a tuple and
+unpacking it; closure variables live in a cell on the heap, held via
+<code>__closure__</code>, with <code>nonlocal</code>/<code>global</code>
+controlling writes to enclosing/global scopes.</li>
+<li>The call stack is made of reflectable frame objects
+(<code>f_locals</code>/<code>f_back</code>), has a recursion soft limit,
+and no tail-call optimization; a decorator = syntactic sugar over
+first-class functions + closures.</li>
+</ul>
+<p><a href="05-控制流.html">← Prev: Control Flow</a> · <a
+href="index.html">Index</a> · <a href="07-复合数据结构.html">Next:
+Composite Data Structures</a> →</p>
+</div>
+</body>
+</html>
