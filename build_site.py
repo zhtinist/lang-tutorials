@@ -30,11 +30,17 @@ def src_for(sub_src, lang):
     return sub_src if lang == "zh" else sub_src + "-en"
 
 
+def lang_pair(lang):
+    """中/EN 语言对,当前语言高亮。侧边按钮与顶部入口共用。"""
+    cn = " on" if lang == "zh" else ""
+    en = " on" if lang == "en" else ""
+    return (f'<span class="lp{cn}">中</span><span class="sep">/</span>'
+            f'<span class="lp{en}">EN</span>')
+
+
 def toggle_html(lang):
-    label = "EN" if lang == "zh" else "中"
-    full = "English" if lang == "zh" else "中文"
     return (f'<a class="langtoggle" href="#" onclick="switchLang();return false;" '
-            f'title="切换语言 / Switch language"><b>{label}</b><span>{full}</span></a>'
+            f'title="切换语言:中文 / English">{lang_pair(lang)}</a>'
             f'<script>{TOGGLE_JS}</script>')
 
 
@@ -44,9 +50,8 @@ def navbar(lang, sub_active, lang_root):
     for _, sub, disp in TUTS:
         cls = ' style="color:var(--accent-dark);font-weight:700"' if sub == sub_active else ""
         parts.append(f'<a href="{lang_root}/{sub}/index.html"{cls}>{disp}</a>')
-    lang_label = "🌐 EN" if lang == "zh" else "🌐 中文"
     parts.append(f'<a class="topnav-lang" href="#" onclick="switchLang();return false;" '
-                 f'title="切换语言 / Switch language">{lang_label}</a>')
+                 f'title="切换语言:中文 / English">🌐 {lang_pair(lang)}</a>')
     return ('<div class="topbar"><div class="wrap">' + "\n".join(parts) + '</div></div>'
             + toggle_html(lang) + '\n<div class="wrap">')
 
@@ -118,9 +123,8 @@ def home_html(lang):
                   'Author / maintainer: HTZHU 〈<a href="mailto:zhu.h4@northeastern.edu">zhu.h4@northeastern.edu</a>〉. '
                   'Source on <a href="https://github.com/zhtinist/lang-tutorials">GitHub</a>.')
     nav_items = "".join(f'<a href="{sub}/index.html">{disp}</a>' for _, sub, disp in TUTS)
-    lang_label = "🌐 EN" if lang == "zh" else "🌐 中文"
     nav_items += (f'<a class="topnav-lang" href="#" onclick="switchLang();return false;" '
-                  f'title="切换语言 / Switch language">{lang_label}</a>')
+                  f'title="切换语言:中文 / English">🌐 {lang_pair(lang)}</a>')
     return f"""<!doctype html><html lang="{'zh-CN' if lang=='zh' else 'en'}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{T}</title>
