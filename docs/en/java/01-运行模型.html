@@ -210,6 +210,23 @@ program almost nothing but machine code remains, with symbols gone; a
 <code>.class</code> file inherently carries class names, method
 signatures, and field types—this is the material basis on which
 reflection, dynamic loading, and runtime type checking can exist.</p>
+<p>The code below relies on this retained information to read a method’s
+exact signature <strong>at runtime</strong>—something impossible on a
+<code>strip</code>’d C binary:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">lang</span><span class="op">.</span><span class="im">reflect</span><span class="op">.</span><span class="im">Method</span><span class="op">;</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="bu">Class</span><span class="op">&lt;?&gt;</span> c <span class="op">=</span> java<span class="op">.</span><span class="fu">util</span><span class="op">.</span><span class="fu">ArrayList</span><span class="op">.</span><span class="fu">class</span><span class="op">;</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;class = &quot;</span> <span class="op">+</span> c<span class="op">.</span><span class="fu">getName</span><span class="op">());</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="bu">Method</span> m <span class="op">=</span> c<span class="op">.</span><span class="fu">getMethod</span><span class="op">(</span><span class="st">&quot;add&quot;</span><span class="op">,</span> <span class="bu">Object</span><span class="op">.</span><span class="fu">class</span><span class="op">);</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;method = &quot;</span> <span class="op">+</span> m<span class="op">.</span><span class="fu">getName</span><span class="op">());</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;returns = &quot;</span> <span class="op">+</span> m<span class="op">.</span><span class="fu">getReturnType</span><span class="op">().</span><span class="fu">getName</span><span class="op">());</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;params = &quot;</span> <span class="op">+</span> m<span class="op">.</span><span class="fu">getParameterCount</span><span class="op">());</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a><span class="co">// Output:</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a><span class="co">// class = java.util.ArrayList</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a><span class="co">// method = add</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a><span class="co">// returns = boolean</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a><span class="co">// params = 1</span></span></code></pre></div>
 <h3 id="viewing-bytecode-with-javap">Viewing Bytecode with javap</h3>
 <p><code>javap</code> is the disassembler that ships with the JDK, the
 Java world’s equivalent of <code>objdump -d</code>:</p>
@@ -286,6 +303,33 @@ the first <code>new</code>, accessing a static field/method, reflection,
 etc. The JVM guarantees <code>&lt;clinit&gt;</code> <strong>runs exactly
 once</strong> under multithreading (with a lock), which is why the
 “static singleton + class loading” idiom is thread-safe.</p>
+<p>The code below confirms “lazy + exactly once”: <code>Config</code>’s
+static initialization does not happen until its <strong>first active
+use</strong>, and a second access does not run it again:</p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="dt">static</span> <span class="kw">class</span> Config <span class="op">{</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;  [Config &lt;clinit&gt; runs]&quot;</span><span class="op">);</span> <span class="op">}</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">final</span> <span class="dt">int</span> READY <span class="op">=</span> <span class="fu">compute</span><span class="op">();</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">int</span> <span class="fu">compute</span><span class="op">()</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;  [compute() runs]&quot;</span><span class="op">);</span> <span class="cf">return</span> <span class="dv">42</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> a<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>    <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;main start&quot;</span><span class="op">);</span></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>    <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;before touching Config&quot;</span><span class="op">);</span></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> v <span class="op">=</span> Config<span class="op">.</span><span class="fu">READY</span><span class="op">;</span>   <span class="co">// first active use -&gt; triggers &lt;clinit&gt;</span></span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>    <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;Config.READY = &quot;</span> <span class="op">+</span> v<span class="op">);</span></span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> v2 <span class="op">=</span> Config<span class="op">.</span><span class="fu">READY</span><span class="op">;</span>  <span class="co">// second access -&gt; &lt;clinit&gt; does NOT run again</span></span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>    <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;Config.READY = &quot;</span> <span class="op">+</span> v2<span class="op">);</span></span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a><span class="co">// Output:</span></span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a><span class="co">// main start</span></span>
+<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a><span class="co">// before touching Config</span></span>
+<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a><span class="co">//   [Config &lt;clinit&gt; runs]</span></span>
+<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a><span class="co">//   [compute() runs]</span></span>
+<span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a><span class="co">// Config.READY = 42</span></span>
+<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a><span class="co">// Config.READY = 42</span></span></code></pre></div>
+<p>Notice that <code>[Config &lt;clinit&gt; runs]</code> appears
+<strong>after</strong> <code>before touching Config</code>—class loading
+really is deferred to the moment it is used.</p>
 <h3 id="parent-delegation-model">Parent Delegation Model</h3>
 <p>The JVM has multiple class loaders, forming a hierarchy:</p>
 <pre><code>        Bootstrap ClassLoader   (implemented in C++, loads the java.* core classes)

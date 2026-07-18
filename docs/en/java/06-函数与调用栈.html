@@ -171,6 +171,28 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb1-1"><a href="
 The object’s actual runtime type has no effect whatsoever on
 <strong>overloading</strong> — that’s a different matter entirely from
 <strong>overriding</strong>, discussed below.</p>
+<p>The fact that “overloading looks at the static type” is easily
+confused with overriding. Consider this example: the same object, with
+different declared types, selects a different overload:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> OverloadStatic <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">f</span><span class="op">(</span><span class="bu">Object</span> o<span class="op">)</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;Object&quot;</span><span class="op">);</span> <span class="op">}</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">f</span><span class="op">(</span><span class="bu">String</span> s<span class="op">)</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;String&quot;</span><span class="op">);</span> <span class="op">}</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Object</span> x <span class="op">=</span> <span class="st">&quot;hi&quot;</span><span class="op">;</span>        <span class="co">// actual runtime type is String</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>        <span class="fu">f</span><span class="op">(</span>x<span class="op">);</span>                   <span class="co">// Object —— looks only at x&#39;s static type Object</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>        <span class="fu">f</span><span class="op">(</span><span class="st">&quot;hi&quot;</span><span class="op">);</span>                <span class="co">// String —— the literal&#39;s static type is String</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>        <span class="fu">f</span><span class="op">((</span><span class="bu">Object</span><span class="op">)</span> <span class="st">&quot;hi&quot;</span><span class="op">);</span>       <span class="co">// Object —— the cast changes the static type</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p><code>x</code> clearly holds a <code>String</code> at runtime, yet
+<code>f(x)</code> still selects <code>f(Object)</code> — because
+overloading is fixed at <strong>compile time</strong> by the variable’s
+<strong>declared type</strong>, with the runtime type playing no part.
+This is exactly the opposite of overriding (which goes through the
+vtable by the runtime type): one is decided at compile time by the
+static type, the other at runtime by the dynamic type.</p>
 <h2 id="java-has-only-pass-by-value-worth-repeating">Java has only
 pass-by-value (worth repeating)</h2>
 <p>In C++ you can explicitly distinguish pass-by-value, pass-by-pointer,
@@ -192,28 +214,28 @@ reassigning the copy leaves the original variable untouched.</p>
 <h3
 id="the-swap-counterexample-proof-you-cant-change-the-callers-target">The
 swap counterexample: proof you can’t change the caller’s target</h3>
-<div class="sourceCode" id="cb2"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Swap <span class="op">{</span></span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">class</span> <span class="bu">Box</span> <span class="op">{</span> <span class="dt">int</span> v<span class="op">;</span> <span class="bu">Box</span><span class="op">(</span><span class="dt">int</span> v<span class="op">)</span> <span class="op">{</span> <span class="kw">this</span><span class="op">.</span><span class="fu">v</span> <span class="op">=</span> v<span class="op">;</span> <span class="op">}</span> <span class="op">}</span></span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">// trying to swap two references — doomed to fail</span></span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">swap</span><span class="op">(</span><span class="bu">Box</span> a<span class="op">,</span> <span class="bu">Box</span> b<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Box</span> t <span class="op">=</span> a<span class="op">;</span> a <span class="op">=</span> b<span class="op">;</span> b <span class="op">=</span> t<span class="op">;</span>   <span class="co">// only swaps the copies a and b&#39;s targets</span></span>
-<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="co">// can change the object&#39;s contents — succeeds</span></span>
-<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">fill</span><span class="op">(</span><span class="bu">Box</span> x<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>        x<span class="op">.</span><span class="fu">v</span> <span class="op">=</span> <span class="dv">999</span><span class="op">;</span>                 <span class="co">// writes the field in the heap through the copied reference</span></span>
-<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Box</span> p <span class="op">=</span> <span class="kw">new</span> <span class="bu">Box</span><span class="op">(</span><span class="dv">1</span><span class="op">),</span> q <span class="op">=</span> <span class="kw">new</span> <span class="bu">Box</span><span class="op">(</span><span class="dv">2</span><span class="op">);</span></span>
-<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>        <span class="fu">swap</span><span class="op">(</span>p<span class="op">,</span> q<span class="op">);</span></span>
-<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>p<span class="op">.</span><span class="fu">v</span> <span class="op">+</span> <span class="st">&quot; &quot;</span> <span class="op">+</span> q<span class="op">.</span><span class="fu">v</span><span class="op">);</span> <span class="co">// 1 2: the caller&#39;s targets are unchanged</span></span>
-<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>        <span class="fu">fill</span><span class="op">(</span>p<span class="op">);</span></span>
-<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>p<span class="op">.</span><span class="fu">v</span><span class="op">);</span>             <span class="co">// 999: the object&#39;s contents were changed</span></span>
-<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Swap <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">class</span> <span class="bu">Box</span> <span class="op">{</span> <span class="dt">int</span> v<span class="op">;</span> <span class="bu">Box</span><span class="op">(</span><span class="dt">int</span> v<span class="op">)</span> <span class="op">{</span> <span class="kw">this</span><span class="op">.</span><span class="fu">v</span> <span class="op">=</span> v<span class="op">;</span> <span class="op">}</span> <span class="op">}</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">// trying to swap two references — doomed to fail</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">swap</span><span class="op">(</span><span class="bu">Box</span> a<span class="op">,</span> <span class="bu">Box</span> b<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Box</span> t <span class="op">=</span> a<span class="op">;</span> a <span class="op">=</span> b<span class="op">;</span> b <span class="op">=</span> t<span class="op">;</span>   <span class="co">// only swaps the copies a and b&#39;s targets</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    <span class="co">// can change the object&#39;s contents — succeeds</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">fill</span><span class="op">(</span><span class="bu">Box</span> x<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>        x<span class="op">.</span><span class="fu">v</span> <span class="op">=</span> <span class="dv">999</span><span class="op">;</span>                 <span class="co">// writes the field in the heap through the copied reference</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Box</span> p <span class="op">=</span> <span class="kw">new</span> <span class="bu">Box</span><span class="op">(</span><span class="dv">1</span><span class="op">),</span> q <span class="op">=</span> <span class="kw">new</span> <span class="bu">Box</span><span class="op">(</span><span class="dv">2</span><span class="op">);</span></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>        <span class="fu">swap</span><span class="op">(</span>p<span class="op">,</span> q<span class="op">);</span></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>p<span class="op">.</span><span class="fu">v</span> <span class="op">+</span> <span class="st">&quot; &quot;</span> <span class="op">+</span> q<span class="op">.</span><span class="fu">v</span><span class="op">);</span> <span class="co">// 1 2: the caller&#39;s targets are unchanged</span></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>        <span class="fu">fill</span><span class="op">(</span>p<span class="op">);</span></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>p<span class="op">.</span><span class="fu">v</span><span class="op">);</span>             <span class="co">// 999: the object&#39;s contents were changed</span></span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>Memory diagram (when <code>swap</code> reaches
 <code>b = t;</code>):</p>
 <pre><code>   main frame                    swap frame
@@ -306,11 +328,11 @@ time (<code>stack</code>).</li>
 instruction), a reference to the exception table, and so on.</li>
 </ul>
 <p>Seeing the truth with <code>javap</code>:</p>
-<div class="sourceCode" id="cb5"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Frame.java</span></span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> <span class="bu">Frame</span> <span class="op">{</span></span>
-<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">int</span> <span class="fu">add</span><span class="op">(</span><span class="dt">int</span> a<span class="op">,</span> <span class="dt">int</span> b<span class="op">)</span> <span class="op">{</span> <span class="dt">int</span> c <span class="op">=</span> a <span class="op">+</span> b<span class="op">;</span> <span class="cf">return</span> c<span class="op">;</span> <span class="op">}</span></span>
-<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Frame.java</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> <span class="bu">Frame</span> <span class="op">{</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">int</span> <span class="fu">add</span><span class="op">(</span><span class="dt">int</span> a<span class="op">,</span> <span class="dt">int</span> b<span class="op">)</span> <span class="op">{</span> <span class="dt">int</span> c <span class="op">=</span> a <span class="op">+</span> b<span class="op">;</span> <span class="cf">return</span> c<span class="op">;</span> <span class="op">}</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <pre><code>$ javac Frame.java &amp;&amp; javap -c -v Frame.class
 static int add(int, int);
   Code:
@@ -402,16 +424,16 @@ vtable following right after.</li>
 | instance    |       | vtable[2] -&gt; ...  |
 | fields      |       +------------------+
 +-------------+</code></pre>
-<div class="sourceCode" id="cb8"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> <span class="bu">Dispatch</span> <span class="op">{</span></span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">class</span> Animal <span class="op">{</span> <span class="dt">void</span> <span class="fu">speak</span><span class="op">()</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;...&quot;</span><span class="op">);</span> <span class="op">}</span> <span class="op">}</span></span>
-<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">class</span> Dog <span class="kw">extends</span> Animal <span class="op">{</span> <span class="at">@Override</span> <span class="dt">void</span> <span class="fu">speak</span><span class="op">()</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;Woof&quot;</span><span class="op">);</span> <span class="op">}</span> <span class="op">}</span></span>
-<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>        Animal a <span class="op">=</span> <span class="kw">new</span> <span class="fu">Dog</span><span class="op">();</span></span>
-<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>        a<span class="op">.</span><span class="fu">speak</span><span class="op">();</span>   <span class="co">// invokevirtual: static type Animal, at runtime looks up Dog&#39;s vtable slot -&gt; &quot;Woof&quot;</span></span>
-<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> <span class="bu">Dispatch</span> <span class="op">{</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">class</span> Animal <span class="op">{</span> <span class="dt">void</span> <span class="fu">speak</span><span class="op">()</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;...&quot;</span><span class="op">);</span> <span class="op">}</span> <span class="op">}</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">class</span> Dog <span class="kw">extends</span> Animal <span class="op">{</span> <span class="at">@Override</span> <span class="dt">void</span> <span class="fu">speak</span><span class="op">()</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;Woof&quot;</span><span class="op">);</span> <span class="op">}</span> <span class="op">}</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>        Animal a <span class="op">=</span> <span class="kw">new</span> <span class="fu">Dog</span><span class="op">();</span></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>        a<span class="op">.</span><span class="fu">speak</span><span class="op">();</span>   <span class="co">// invokevirtual: static type Animal, at runtime looks up Dog&#39;s vtable slot -&gt; &quot;Woof&quot;</span></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p><code>invokeinterface</code> is slightly slower: an interface
 method’s vtable index isn’t fixed across implementing classes, so it
 requires an itable (interface method table) lookup or a search; the JIT
@@ -426,17 +448,17 @@ platform-dependent). Exhausting the stack throws
 9</a>). The JVM <strong>does not perform tail-call optimization</strong>
 (TCO), so even tail recursion consumes stack — an important difference
 from many functional languages and some C++ compilers.</p>
-<div class="sourceCode" id="cb9"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Recur <span class="op">{</span></span>
-<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">long</span> depth <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
-<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">dive</span><span class="op">()</span> <span class="op">{</span> depth<span class="op">++;</span> <span class="fu">dive</span><span class="op">();</span> <span class="op">}</span>   <span class="co">// no termination — deliberately blows the stack</span></span>
-<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">{</span> <span class="fu">dive</span><span class="op">();</span> <span class="op">}</span></span>
-<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">catch</span> <span class="op">(</span><span class="bu">StackOverflowError</span> e<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;Blown at depth about: &quot;</span> <span class="op">+</span> depth<span class="op">);</span> <span class="co">// the larger each frame, the fewer levels</span></span>
-<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
-<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Recur <span class="op">{</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">long</span> depth <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">dive</span><span class="op">()</span> <span class="op">{</span> depth<span class="op">++;</span> <span class="fu">dive</span><span class="op">();</span> <span class="op">}</span>   <span class="co">// no termination — deliberately blows the stack</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">{</span> <span class="fu">dive</span><span class="op">();</span> <span class="op">}</span></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">catch</span> <span class="op">(</span><span class="bu">StackOverflowError</span> e<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;Blown at depth about: &quot;</span> <span class="op">+</span> depth<span class="op">);</span> <span class="co">// the larger each frame, the fewer levels</span></span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>Deep recursion should be rewritten as iteration + an explicit
 <code>Deque</code> simulating the stack, moving the frame data off the
 thread stack and onto the heap.</p>
@@ -445,18 +467,18 @@ thread stack and onto the heap.</p>
 site the compiler automatically packs the scattered arguments into an
 <strong>array on the heap</strong> — so every call may incur an array
 allocation.</p>
-<div class="sourceCode" id="cb10"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Varargs <span class="op">{</span></span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">int</span> <span class="fu">sum</span><span class="op">(</span><span class="dt">int</span><span class="kw">...</span> xs<span class="op">)</span> <span class="op">{</span>          <span class="co">// compiles to int[] xs</span></span>
-<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span> s <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> x <span class="op">:</span> xs<span class="op">)</span> s <span class="op">+=</span> x<span class="op">;</span> <span class="cf">return</span> s<span class="op">;</span></span>
-<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="fu">sum</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">));</span> <span class="co">// the compiler generates new int[]{1,2,3}</span></span>
-<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="fu">sum</span><span class="op">());</span>        <span class="co">// passes an empty array new int[]{}, not null</span></span>
-<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span><span class="op">[]</span> arr <span class="op">=</span> <span class="op">{</span><span class="dv">4</span><span class="op">,</span> <span class="dv">5</span><span class="op">};</span></span>
-<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="fu">sum</span><span class="op">(</span>arr<span class="op">));</span>     <span class="co">// passes the array directly, no extra wrapping</span></span>
-<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Varargs <span class="op">{</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">int</span> <span class="fu">sum</span><span class="op">(</span><span class="dt">int</span><span class="kw">...</span> xs<span class="op">)</span> <span class="op">{</span>          <span class="co">// compiles to int[] xs</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span> s <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> x <span class="op">:</span> xs<span class="op">)</span> s <span class="op">+=</span> x<span class="op">;</span> <span class="cf">return</span> s<span class="op">;</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="fu">sum</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">));</span> <span class="co">// the compiler generates new int[]{1,2,3}</span></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="fu">sum</span><span class="op">());</span>        <span class="co">// passes an empty array new int[]{}, not null</span></span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span><span class="op">[]</span> arr <span class="op">=</span> <span class="op">{</span><span class="dv">4</span><span class="op">,</span> <span class="dv">5</span><span class="op">};</span></span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="fu">sum</span><span class="op">(</span>arr<span class="op">));</span>     <span class="co">// passes the array directly, no extra wrapping</span></span>
+<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>When overloading is combined with varargs, the fixed-parameter
 version takes priority over the varargs version (varargs is the last
 tier of resolution).</p>
@@ -468,14 +490,14 @@ and method references: the stage for invokedynamic</h2>
 generate a <code>.class</code> for each lambda at compile time; instead
 it uses <code>invokedynamic</code> to defer the implementation to
 <strong>runtime</strong>.</p>
-<div class="sourceCode" id="cb11"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">function</span><span class="op">.</span><span class="im">IntBinaryOperator</span><span class="op">;</span></span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Lambda <span class="op">{</span></span>
-<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>        IntBinaryOperator add <span class="op">=</span> <span class="op">(</span>a<span class="op">,</span> b<span class="op">)</span> <span class="op">-&gt;</span> a <span class="op">+</span> b<span class="op">;</span>   <span class="co">// compiles to an invokedynamic call site</span></span>
-<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>add<span class="op">.</span><span class="fu">applyAsInt</span><span class="op">(</span><span class="dv">3</span><span class="op">,</span> <span class="dv">4</span><span class="op">));</span></span>
-<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">function</span><span class="op">.</span><span class="im">IntBinaryOperator</span><span class="op">;</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Lambda <span class="op">{</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>        IntBinaryOperator add <span class="op">=</span> <span class="op">(</span>a<span class="op">,</span> b<span class="op">)</span> <span class="op">-&gt;</span> a <span class="op">+</span> b<span class="op">;</span>   <span class="co">// compiles to an invokedynamic call site</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>add<span class="op">.</span><span class="fu">applyAsInt</span><span class="op">(</span><span class="dv">3</span><span class="op">,</span> <span class="dv">4</span><span class="op">));</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p><code>javap -c</code> will show <code>invokedynamic #N, 0</code> with
 a bootstrap method <code>LambdaMetafactory.metafactory</code>. The
 mechanism:</p>
@@ -508,6 +530,31 @@ instance is created — this is close in semantics to C++’s
 <code>[&amp;]</code>-style capture-by-reference of local variables
 (locals live on the stack and become invalid once the method returns, so
 a captured reference would dangle).</p>
+<p>An intuitive runnable check: each iteration of the loop stores
+<code>i</code> into a fresh <code>cur</code> (a new, effectively-final
+variable per iteration), and each lambda captures its own copy of that
+value:</p>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.*;</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">function</span><span class="op">.</span><span class="im">Supplier</span><span class="op">;</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Capture <span class="op">{</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>        <span class="bu">List</span><span class="op">&lt;</span>Supplier<span class="op">&lt;</span><span class="bu">Integer</span><span class="op">&gt;&gt;</span> fns <span class="op">=</span> <span class="kw">new</span> <span class="bu">ArrayList</span><span class="op">&lt;&gt;();</span></span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">3</span><span class="op">;</span> i<span class="op">++)</span> <span class="op">{</span></span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>            <span class="dt">int</span> cur <span class="op">=</span> i<span class="op">;</span>              <span class="co">// a new, effectively-final variable each iteration</span></span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>            fns<span class="op">.</span><span class="fu">add</span><span class="op">(()</span> <span class="op">-&gt;</span> cur<span class="op">);</span>       <span class="co">// captures the value of cur at that moment</span></span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span><span class="dt">var</span> f <span class="op">:</span> fns<span class="op">)</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">print</span><span class="op">(</span>f<span class="op">.</span><span class="fu">get</span><span class="op">()</span> <span class="op">+</span> <span class="st">&quot; &quot;</span><span class="op">);</span>  <span class="co">// 0 1 2</span></span>
+<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">();</span></span>
+<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>The three lambdas print <code>0 1 2</code> respectively, because each
+captured a <strong>copy of <code>cur</code>’s value at creation
+time</strong>, not a shared variable. This contrasts with JavaScript’s
+<code>var</code> closures all capturing the same final <code>i</code>
+(often printing <code>3 3 3</code>) — Java’s “capture a value copy +
+effectively final” avoids this shared-mutable-state pitfall at the
+root.</p>
 <hr />
 <p>Summary: methods belong to classes; parameter passing is always by
 value (reference types pass a copy of the reference value); a stack

@@ -284,14 +284,45 @@ objects themselves).</p>
 new capacity = 10 + 5 = 15, allocate Object[15], copy 10 references over, old array awaits GC</code></pre>
 <p>Compare with C++ <code>std::vector</code>’s common 2× growth
 (libstdc++ uses 2x, MSVC uses 1.5x). Amortized O(1) append.</p>
+<p>Peeking at the real length of the underlying <code>elementData</code>
+array via reflection shows this 1.5× growth curve directly (capacity is
+an implementation detail, so reflection needs
+<code>--add-opens</code>):</p>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">lang</span><span class="op">.</span><span class="im">reflect</span><span class="op">.*;</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.*;</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> GrowDemo <span class="op">{</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">int</span> <span class="fu">cap</span><span class="op">(</span><span class="bu">ArrayList</span><span class="op">&lt;?&gt;</span> list<span class="op">)</span> <span class="kw">throws</span> <span class="bu">Exception</span> <span class="op">{</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Field</span> f <span class="op">=</span> <span class="bu">ArrayList</span><span class="op">.</span><span class="fu">class</span><span class="op">.</span><span class="fu">getDeclaredField</span><span class="op">(</span><span class="st">&quot;elementData&quot;</span><span class="op">);</span></span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>        f<span class="op">.</span><span class="fu">setAccessible</span><span class="op">(</span><span class="kw">true</span><span class="op">);</span></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="op">((</span><span class="bu">Object</span><span class="op">[])</span> f<span class="op">.</span><span class="fu">get</span><span class="op">(</span>list<span class="op">)).</span><span class="fu">length</span><span class="op">;</span></span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="kw">throws</span> <span class="bu">Exception</span> <span class="op">{</span></span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>        <span class="bu">ArrayList</span><span class="op">&lt;</span><span class="bu">Integer</span><span class="op">&gt;</span> list <span class="op">=</span> <span class="kw">new</span> <span class="bu">ArrayList</span><span class="op">&lt;&gt;();</span></span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;initial capacity = &quot;</span> <span class="op">+</span> <span class="fu">cap</span><span class="op">(</span>list<span class="op">));</span></span>
+<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span> last <span class="op">=</span> <span class="op">-</span><span class="dv">1</span><span class="op">;</span></span>
+<span id="cb8-13"><a href="#cb8-13" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">40</span><span class="op">;</span> i<span class="op">++)</span> <span class="op">{</span></span>
+<span id="cb8-14"><a href="#cb8-14" aria-hidden="true" tabindex="-1"></a>            list<span class="op">.</span><span class="fu">add</span><span class="op">(</span>i<span class="op">);</span></span>
+<span id="cb8-15"><a href="#cb8-15" aria-hidden="true" tabindex="-1"></a>            <span class="dt">int</span> c <span class="op">=</span> <span class="fu">cap</span><span class="op">(</span>list<span class="op">);</span></span>
+<span id="cb8-16"><a href="#cb8-16" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> <span class="op">(</span>c <span class="op">!=</span> last<span class="op">)</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;size=&quot;</span> <span class="op">+</span> list<span class="op">.</span><span class="fu">size</span><span class="op">()</span> <span class="op">+</span> <span class="st">&quot; -&gt; capacity=&quot;</span> <span class="op">+</span> c<span class="op">);</span> last <span class="op">=</span> c<span class="op">;</span> <span class="op">}</span></span>
+<span id="cb8-17"><a href="#cb8-17" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb8-18"><a href="#cb8-18" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb8-19"><a href="#cb8-19" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb8-20"><a href="#cb8-20" aria-hidden="true" tabindex="-1"></a><span class="co">// Run: java --add-opens java.base/java.util=ALL-UNNAMED GrowDemo.java</span></span>
+<span id="cb8-21"><a href="#cb8-21" aria-hidden="true" tabindex="-1"></a><span class="co">// initial capacity = 0     &lt;- empty ctor allocates lazily; the length-10 array is built on first add</span></span>
+<span id="cb8-22"><a href="#cb8-22" aria-hidden="true" tabindex="-1"></a><span class="co">// size=1  -&gt; capacity=10</span></span>
+<span id="cb8-23"><a href="#cb8-23" aria-hidden="true" tabindex="-1"></a><span class="co">// size=11 -&gt; capacity=15   &lt;- 10 + (10&gt;&gt;1) = 15</span></span>
+<span id="cb8-24"><a href="#cb8-24" aria-hidden="true" tabindex="-1"></a><span class="co">// size=16 -&gt; capacity=22   &lt;- 15 + (15&gt;&gt;1) = 22</span></span>
+<span id="cb8-25"><a href="#cb8-25" aria-hidden="true" tabindex="-1"></a><span class="co">// size=23 -&gt; capacity=33</span></span>
+<span id="cb8-26"><a href="#cb8-26" aria-hidden="true" tabindex="-1"></a><span class="co">// size=34 -&gt; capacity=49</span></span></code></pre></div>
 <h3 id="linkedlist-a-doubly-linked-list">LinkedList: a doubly linked
 list</h3>
-<div class="sourceCode" id="cb8"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="kw">private</span> <span class="dt">static</span> <span class="kw">class</span> <span class="bu">Node</span><span class="op">&lt;</span>E<span class="op">&gt;</span> <span class="op">{</span></span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>    E item<span class="op">;</span></span>
-<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    <span class="bu">Node</span><span class="op">&lt;</span>E<span class="op">&gt;</span> next<span class="op">;</span></span>
-<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>    <span class="bu">Node</span><span class="op">&lt;</span>E<span class="op">&gt;</span> prev<span class="op">;</span></span>
-<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">private</span> <span class="dt">static</span> <span class="kw">class</span> <span class="bu">Node</span><span class="op">&lt;</span>E<span class="op">&gt;</span> <span class="op">{</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>    E item<span class="op">;</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>    <span class="bu">Node</span><span class="op">&lt;</span>E<span class="op">&gt;</span> next<span class="op">;</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>    <span class="bu">Node</span><span class="op">&lt;</span>E<span class="op">&gt;</span> prev<span class="op">;</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>Each node is an independent heap object: 16-byte object header + 3
 references (item/next/prev, 4 bytes each with compressed pointers) ≈ 32
 bytes/node, a huge overhead to store one element. Memory diagram:</p>
@@ -354,14 +385,14 @@ generally doesn’t give you the node.</p>
 implementation details differ greatly.</p>
 <h3 id="structure-a-bucket-array-linked-listsred-black-trees">Structure:
 a bucket array + linked lists/red-black trees</h3>
-<div class="sourceCode" id="cb10"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="kw">transient</span> <span class="bu">Node</span><span class="op">&lt;</span>K<span class="op">,</span>V<span class="op">&gt;[]</span> table<span class="op">;</span>  <span class="co">// the bucket array, length always a power of 2</span></span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="dt">static</span> <span class="kw">class</span> <span class="bu">Node</span><span class="op">&lt;</span>K<span class="op">,</span>V<span class="op">&gt;</span> <span class="op">{</span></span>
-<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">final</span> <span class="dt">int</span> hash<span class="op">;</span>   <span class="co">// the cached, perturbed hash</span></span>
-<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">final</span> K key<span class="op">;</span></span>
-<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>    V value<span class="op">;</span></span>
-<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>    <span class="bu">Node</span><span class="op">&lt;</span>K<span class="op">,</span>V<span class="op">&gt;</span> next<span class="op">;</span>   <span class="co">// linked-list pointer (chaining to resolve collisions)</span></span>
-<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="kw">transient</span> <span class="bu">Node</span><span class="op">&lt;</span>K<span class="op">,</span>V<span class="op">&gt;[]</span> table<span class="op">;</span>  <span class="co">// the bucket array, length always a power of 2</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="dt">static</span> <span class="kw">class</span> <span class="bu">Node</span><span class="op">&lt;</span>K<span class="op">,</span>V<span class="op">&gt;</span> <span class="op">{</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">final</span> <span class="dt">int</span> hash<span class="op">;</span>   <span class="co">// the cached, perturbed hash</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">final</span> K key<span class="op">;</span></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>    V value<span class="op">;</span></span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>    <span class="bu">Node</span><span class="op">&lt;</span>K<span class="op">,</span>V<span class="op">&gt;</span> next<span class="op">;</span>   <span class="co">// linked-list pointer (chaining to resolve collisions)</span></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>Memory diagram (chaining on collision):</p>
 <pre><code>table (Node[16])
 ┌────┐
@@ -379,11 +410,11 @@ function</h3>
 (because <code>&amp; (n-1)</code> keeps only the low bits), so keys
 differing in the high bits but equal in the low bits would collide.
 Perturbation XORs the high 16 bits into the low bits:</p>
-<div class="sourceCode" id="cb12"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="dt">static</span> <span class="dt">final</span> <span class="dt">int</span> <span class="fu">hash</span><span class="op">(</span><span class="bu">Object</span> key<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> h<span class="op">;</span></span>
-<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="op">(</span>key <span class="op">==</span> <span class="kw">null</span><span class="op">)</span> <span class="op">?</span> <span class="dv">0</span> <span class="op">:</span> <span class="op">(</span>h <span class="op">=</span> key<span class="op">.</span><span class="fu">hashCode</span><span class="op">())</span> <span class="op">^</span> <span class="op">(</span>h <span class="op">&gt;&gt;&gt;</span> <span class="dv">16</span><span class="op">);</span></span>
-<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="dt">static</span> <span class="dt">final</span> <span class="dt">int</span> <span class="fu">hash</span><span class="op">(</span><span class="bu">Object</span> key<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> h<span class="op">;</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="op">(</span>key <span class="op">==</span> <span class="kw">null</span><span class="op">)</span> <span class="op">?</span> <span class="dv">0</span> <span class="op">:</span> <span class="op">(</span>h <span class="op">=</span> key<span class="op">.</span><span class="fu">hashCode</span><span class="op">())</span> <span class="op">^</span> <span class="op">(</span>h <span class="op">&gt;&gt;&gt;</span> <span class="dv">16</span><span class="op">);</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <h3 id="treeify-when-collisions-intensify">treeify when collisions
 intensify</h3>
 <p>When a bucket’s chain length is <strong>≥ 8</strong> and the
@@ -473,6 +504,29 @@ ordered views like
 Keys must be comparable (<code>Comparable</code>, or pass a
 <code>Comparator</code>), see <a href="11-标准库算法.html">“Standard
 Library Algorithms”</a>.</p>
+<p>The iteration order of the three Maps makes the difference plain at a
+glance: <code>HashMap</code> is determined by bucket position
+(unspecified, looks “random”), <code>LinkedHashMap</code> preserves
+insertion order, and <code>TreeMap</code> sorts by key:</p>
+<div class="sourceCode" id="cb17"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.*;</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> MapOrder <span class="op">{</span></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">fill</span><span class="op">(</span><span class="bu">Map</span><span class="op">&lt;</span><span class="bu">String</span><span class="op">,</span><span class="bu">Integer</span><span class="op">&gt;</span> m<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span><span class="bu">String</span> k <span class="op">:</span> <span class="kw">new</span> <span class="bu">String</span><span class="op">[]{</span><span class="st">&quot;banana&quot;</span><span class="op">,</span><span class="st">&quot;apple&quot;</span><span class="op">,</span><span class="st">&quot;cherry&quot;</span><span class="op">,</span><span class="st">&quot;date&quot;</span><span class="op">})</span> m<span class="op">.</span><span class="fu">put</span><span class="op">(</span>k<span class="op">,</span> k<span class="op">.</span><span class="fu">length</span><span class="op">());</span></span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Map</span><span class="op">&lt;</span><span class="bu">String</span><span class="op">,</span><span class="bu">Integer</span><span class="op">&gt;</span> hash <span class="op">=</span> <span class="kw">new</span> <span class="bu">HashMap</span><span class="op">&lt;&gt;();</span></span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Map</span><span class="op">&lt;</span><span class="bu">String</span><span class="op">,</span><span class="bu">Integer</span><span class="op">&gt;</span> linked <span class="op">=</span> <span class="kw">new</span> <span class="bu">LinkedHashMap</span><span class="op">&lt;&gt;();</span></span>
+<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Map</span><span class="op">&lt;</span><span class="bu">String</span><span class="op">,</span><span class="bu">Integer</span><span class="op">&gt;</span> tree <span class="op">=</span> <span class="kw">new</span> <span class="bu">TreeMap</span><span class="op">&lt;&gt;();</span></span>
+<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a>        <span class="fu">fill</span><span class="op">(</span>hash<span class="op">);</span> <span class="fu">fill</span><span class="op">(</span>linked<span class="op">);</span> <span class="fu">fill</span><span class="op">(</span>tree<span class="op">);</span></span>
+<span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;HashMap:       &quot;</span> <span class="op">+</span> hash<span class="op">.</span><span class="fu">keySet</span><span class="op">());</span></span>
+<span id="cb17-12"><a href="#cb17-12" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;LinkedHashMap: &quot;</span> <span class="op">+</span> linked<span class="op">.</span><span class="fu">keySet</span><span class="op">());</span></span>
+<span id="cb17-13"><a href="#cb17-13" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;TreeMap:       &quot;</span> <span class="op">+</span> tree<span class="op">.</span><span class="fu">keySet</span><span class="op">());</span></span>
+<span id="cb17-14"><a href="#cb17-14" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb17-15"><a href="#cb17-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb17-16"><a href="#cb17-16" aria-hidden="true" tabindex="-1"></a><span class="co">// HashMap:       [banana, date, apple, cherry]   &lt;- bucket order, unspecified (never rely on it)</span></span>
+<span id="cb17-17"><a href="#cb17-17" aria-hidden="true" tabindex="-1"></a><span class="co">// LinkedHashMap: [banana, apple, cherry, date]   &lt;- insertion order</span></span>
+<span id="cb17-18"><a href="#cb17-18" aria-hidden="true" tabindex="-1"></a><span class="co">// TreeMap:       [apple, banana, cherry, date]   &lt;- lexicographic order</span></span></code></pre></div>
 <h2 id="hashset-arraydeque">6. HashSet / ArrayDeque</h2>
 <ul>
 <li><strong>HashSet</strong>: internally just a <code>HashMap</code>,
@@ -519,12 +573,32 @@ structural modifications). When an iterator is created it records
 <code>next()</code>; if the collection is modified through a
 non-iterator path in the meantime, it throws
 <code>ConcurrentModificationException</code>.</p>
-<div class="sourceCode" id="cb17"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="bu">List</span><span class="op">&lt;</span><span class="bu">Integer</span><span class="op">&gt;</span> list <span class="op">=</span> <span class="kw">new</span> <span class="bu">ArrayList</span><span class="op">&lt;&gt;(</span><span class="bu">List</span><span class="op">.</span><span class="fu">of</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">));</span></span>
-<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="bu">Integer</span> x <span class="op">:</span> list<span class="op">)</span> <span class="op">{</span>      <span class="co">// the enhanced for uses an Iterator under the hood</span></span>
-<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>x <span class="op">==</span> <span class="dv">2</span><span class="op">)</span> list<span class="op">.</span><span class="fu">remove</span><span class="op">(</span>x<span class="op">);</span> <span class="co">// structural modification → modCount changes → the next next() throws</span></span>
-<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a><span class="co">// correct approach: use iterator.remove() or list.removeIf(x -&gt; x == 2)</span></span></code></pre></div>
+<div class="sourceCode" id="cb19"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="bu">List</span><span class="op">&lt;</span><span class="bu">Integer</span><span class="op">&gt;</span> list <span class="op">=</span> <span class="kw">new</span> <span class="bu">ArrayList</span><span class="op">&lt;&gt;(</span><span class="bu">List</span><span class="op">.</span><span class="fu">of</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">));</span></span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="bu">Integer</span> x <span class="op">:</span> list<span class="op">)</span> <span class="op">{</span>      <span class="co">// the enhanced for uses an Iterator under the hood</span></span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>x <span class="op">==</span> <span class="dv">2</span><span class="op">)</span> list<span class="op">.</span><span class="fu">remove</span><span class="op">(</span>x<span class="op">);</span> <span class="co">// structural modification → modCount changes → the next next() throws</span></span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a><span class="co">// correct approach: use iterator.remove() or list.removeIf(x -&gt; x == 2)</span></span></code></pre></div>
+<p>Running it for real shows the exception is indeed thrown, while
+<code>removeIf</code> is perfectly safe:</p>
+<div class="sourceCode" id="cb20"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.*;</span></span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> FailFast <span class="op">{</span></span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>        <span class="bu">List</span><span class="op">&lt;</span><span class="bu">Integer</span><span class="op">&gt;</span> list <span class="op">=</span> <span class="kw">new</span> <span class="bu">ArrayList</span><span class="op">&lt;&gt;(</span><span class="bu">List</span><span class="op">.</span><span class="fu">of</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">,</span> <span class="dv">4</span><span class="op">));</span></span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">{</span></span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> <span class="op">(</span><span class="bu">Integer</span> x <span class="op">:</span> list<span class="op">)</span> <span class="op">{</span>          <span class="co">// the enhanced for uses an Iterator</span></span>
+<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a>                <span class="cf">if</span> <span class="op">(</span>x <span class="op">==</span> <span class="dv">2</span><span class="op">)</span> list<span class="op">.</span><span class="fu">remove</span><span class="op">(</span>x<span class="op">);</span>   <span class="co">// structural change bumps modCount</span></span>
+<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
+<span id="cb20-9"><a href="#cb20-9" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="cf">catch</span> <span class="op">(</span><span class="bu">ConcurrentModificationException</span> e<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb20-10"><a href="#cb20-10" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;caught: &quot;</span> <span class="op">+</span> e<span class="op">.</span><span class="fu">getClass</span><span class="op">().</span><span class="fu">getSimpleName</span><span class="op">());</span></span>
+<span id="cb20-11"><a href="#cb20-11" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb20-12"><a href="#cb20-12" aria-hidden="true" tabindex="-1"></a>        list<span class="op">.</span><span class="fu">removeIf</span><span class="op">(</span>x <span class="op">-&gt;</span> x <span class="op">==</span> <span class="dv">2</span><span class="op">);</span>           <span class="co">// correct: goes through the iterator, no CME</span></span>
+<span id="cb20-13"><a href="#cb20-13" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;after removeIf: &quot;</span> <span class="op">+</span> list<span class="op">);</span></span>
+<span id="cb20-14"><a href="#cb20-14" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb20-15"><a href="#cb20-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb20-16"><a href="#cb20-16" aria-hidden="true" tabindex="-1"></a><span class="co">// caught: ConcurrentModificationException</span></span>
+<span id="cb20-17"><a href="#cb20-17" aria-hidden="true" tabindex="-1"></a><span class="co">// after removeIf: [1, 3, 4]</span></span></code></pre></div>
 <p>fail-fast is <strong>best-effort</strong> error detection (not
 guaranteed to trigger), not concurrency protection; for real concurrency
 use <code>CopyOnWriteArrayList</code>/<code>ConcurrentHashMap</code>

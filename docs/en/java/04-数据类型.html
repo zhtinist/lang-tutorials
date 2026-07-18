@@ -330,6 +330,26 @@ it’s true, while large integers don’t. <strong>Conclusion: to compare
 the values of wrapper classes, always use <code>equals</code> or unbox
 to primitives first.</strong> Unboxing also carries an NPE risk:
 <code>Integer x = null; int y = x;</code> throws NPE at runtime.</p>
+<p>Another subtle auto-unboxing trap hides in the <strong>ternary
+expression</strong>: when the two branches are different wrapper types,
+the compiler <strong>unboxes both</strong>, does binary numeric
+promotion, then re-boxes—so the result type may not be what you
+expect.</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Ternary <span class="op">{</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Object</span> x <span class="op">=</span> <span class="kw">true</span> <span class="op">?</span> <span class="bu">Integer</span><span class="op">.</span><span class="fu">valueOf</span><span class="op">(</span><span class="dv">1</span><span class="op">)</span> <span class="op">:</span> <span class="bu">Double</span><span class="op">.</span><span class="fu">valueOf</span><span class="op">(</span><span class="dv">2</span><span class="op">);</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>x<span class="op">);</span>                            <span class="co">// 1.0   —— not 1!</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>x<span class="op">.</span><span class="fu">getClass</span><span class="op">().</span><span class="fu">getSimpleName</span><span class="op">());</span> <span class="co">// Double</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p><code>true</code> clearly selected <code>Integer.valueOf(1)</code>,
+but because the other branch is <code>Double</code>, the whole ternary
+is promoted to <code>double</code>: the <code>Integer</code> is unboxed
+to <code>int</code> → promoted to <code>double</code> <code>1.0</code> →
+re-boxed to <code>Double</code>. This is the JLS ternary typing rules
+layered on top of auto-boxing/unboxing; C’s <code>?:</code> only has
+arithmetic promotion, without this boxing layer.</p>
 <h2 id="object-memory-layout-hotspot">3. Object Memory Layout
 (HotSpot)</h2>
 <p>This is the part C programmers care about most: what does a Java
@@ -386,10 +406,10 @@ references (hence the tuning wisdom of “don’t set the heap to just over
 <h2 id="arrays-are-objects">4. Arrays Are Objects</h2>
 <p>Java arrays are <strong>objects on the heap</strong>, not C’s “a
 stretch of raw contiguous memory + a base address.”</p>
-<div class="sourceCode" id="cb5"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span><span class="op">[]</span> a <span class="op">=</span> <span class="kw">new</span> <span class="dt">int</span><span class="op">[</span><span class="dv">5</span><span class="op">];</span>      <span class="co">// allocate an array object on the heap</span></span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>a<span class="op">.</span><span class="fu">length</span><span class="op">);</span>   <span class="co">// 5, length is a built-in field, not a method</span></span>
-<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>a<span class="op">[</span><span class="dv">10</span><span class="op">]</span> <span class="op">=</span> <span class="dv">1</span><span class="op">;</span>                 <span class="co">// ArrayIndexOutOfBoundsException (not trampling memory!)</span></span></code></pre></div>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span><span class="op">[]</span> a <span class="op">=</span> <span class="kw">new</span> <span class="dt">int</span><span class="op">[</span><span class="dv">5</span><span class="op">];</span>      <span class="co">// allocate an array object on the heap</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>a<span class="op">.</span><span class="fu">length</span><span class="op">);</span>   <span class="co">// 5, length is a built-in field, not a method</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>a<span class="op">[</span><span class="dv">10</span><span class="op">]</span> <span class="op">=</span> <span class="dv">1</span><span class="op">;</span>                 <span class="co">// ArrayIndexOutOfBoundsException (not trampling memory!)</span></span></code></pre></div>
 <p>Memory layout: array object = object header (including an extra
 <strong>length field</strong>) + a contiguous element region +
 padding.</p>
@@ -436,10 +456,10 @@ field.</p>
 <h3 id="what-immutability-means">What Immutability Means</h3>
 <p>Any “modifying” method returns a <strong>new object</strong>, leaving
 the original string untouched:</p>
-<div class="sourceCode" id="cb7"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> s <span class="op">=</span> <span class="st">&quot;abc&quot;</span><span class="op">;</span></span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>s<span class="op">.</span><span class="fu">concat</span><span class="op">(</span><span class="st">&quot;d&quot;</span><span class="op">);</span>            <span class="co">// returns the new string &quot;abcd&quot;, but it&#39;s not received, s is still &quot;abc&quot;</span></span>
-<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>s <span class="op">=</span> s<span class="op">.</span><span class="fu">toUpperCase</span><span class="op">();</span>      <span class="co">// &quot;ABC&quot; is a new object, s is repointed to it, the old &quot;abc&quot; awaits reclamation</span></span></code></pre></div>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> s <span class="op">=</span> <span class="st">&quot;abc&quot;</span><span class="op">;</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>s<span class="op">.</span><span class="fu">concat</span><span class="op">(</span><span class="st">&quot;d&quot;</span><span class="op">);</span>            <span class="co">// returns the new string &quot;abcd&quot;, but it&#39;s not received, s is still &quot;abc&quot;</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>s <span class="op">=</span> s<span class="op">.</span><span class="fu">toUpperCase</span><span class="op">();</span>      <span class="co">// &quot;ABC&quot; is a new object, s is repointed to it, the old &quot;abc&quot; awaits reclamation</span></span></code></pre></div>
 <p>Benefits of immutability: safe to share (no synchronization needed
 across threads), the hash can be cached, and it’s safe to use as a Map
 key. The cost: concatenation produces lots of intermediate objects—which
@@ -450,14 +470,14 @@ and intern</h3>
 placed by the JVM into a <strong>string constant pool</strong> (driven
 by the runtime constant pool, located in the heap). Identical literals
 <strong>share the same object</strong>:</p>
-<div class="sourceCode" id="cb8"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> a <span class="op">=</span> <span class="st">&quot;hi&quot;</span><span class="op">;</span></span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> b <span class="op">=</span> <span class="st">&quot;hi&quot;</span><span class="op">;</span></span>
-<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>a <span class="op">==</span> b<span class="op">);</span>          <span class="co">// true! the same object in the pool</span></span>
-<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> c <span class="op">=</span> <span class="kw">new</span> <span class="bu">String</span><span class="op">(</span><span class="st">&quot;hi&quot;</span><span class="op">);</span>         <span class="co">// new forces another new object on the heap</span></span>
-<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>a <span class="op">==</span> c<span class="op">);</span>          <span class="co">// false! different objects</span></span>
-<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>a <span class="op">==</span> c<span class="op">.</span><span class="fu">intern</span><span class="op">());</span> <span class="co">// true! intern() returns the canonical object in the pool</span></span></code></pre></div>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> a <span class="op">=</span> <span class="st">&quot;hi&quot;</span><span class="op">;</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> b <span class="op">=</span> <span class="st">&quot;hi&quot;</span><span class="op">;</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>a <span class="op">==</span> b<span class="op">);</span>          <span class="co">// true! the same object in the pool</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> c <span class="op">=</span> <span class="kw">new</span> <span class="bu">String</span><span class="op">(</span><span class="st">&quot;hi&quot;</span><span class="op">);</span>         <span class="co">// new forces another new object on the heap</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>a <span class="op">==</span> c<span class="op">);</span>          <span class="co">// false! different objects</span></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>a <span class="op">==</span> c<span class="op">.</span><span class="fu">intern</span><span class="op">());</span> <span class="co">// true! intern() returns the canonical object in the pool</span></span></code></pre></div>
 <p>Memory diagram:</p>
 <pre><code>Constant pool (in heap)   Ordinary heap
 [ &quot;hi&quot; object P ]◀──a      [ &quot;hi&quot; object Q ]◀── c (new&#39;d)
@@ -475,17 +495,37 @@ save memory, but overuse bloats the pool, so use it with care.</li>
 (<code>"a" + "b"</code>) is folded by javac directly into the
 <code>"ab"</code> literal and interned.</li>
 </ul>
+<p>The runnable example below makes the difference between “compile-time
+folding” and “runtime concatenation” crystal clear:</p>
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Folding <span class="op">{</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>        <span class="bu">String</span> s           <span class="op">=</span> <span class="st">&quot;ab&quot;</span><span class="op">;</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>        <span class="bu">String</span> compileTime <span class="op">=</span> <span class="st">&quot;a&quot;</span> <span class="op">+</span> <span class="st">&quot;b&quot;</span><span class="op">;</span>   <span class="co">// two literals, javac folds into &quot;ab&quot; and interns</span></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>        <span class="bu">String</span> c           <span class="op">=</span> <span class="st">&quot;a&quot;</span><span class="op">;</span>         <span class="co">// a non-final local variable</span></span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">String</span> runtime     <span class="op">=</span> c <span class="op">+</span> <span class="st">&quot;b&quot;</span><span class="op">;</span>     <span class="co">// concatenated at runtime via StringConcatFactory, a new object</span></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>s <span class="op">==</span> compileTime<span class="op">);</span>      <span class="co">// true  —— same pool object</span></span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>s <span class="op">==</span> runtime<span class="op">);</span>          <span class="co">// false —— newly created at runtime</span></span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>s <span class="op">==</span> runtime<span class="op">.</span><span class="fu">intern</span><span class="op">());</span> <span class="co">// true  —— intern retrieves the canonical pool object</span></span>
+<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>As long as everything in the concatenation is a compile-time constant
+(literals, <code>final</code> constants), the result is folded into a
+single literal at compile time and interned; as soon as one operand is
+only known at runtime (like the non-final <code>c</code> above), the
+concatenation happens at runtime and produces a new object on the
+heap.</p>
 <h3 id="stringbuilder-a-mutable-buffer">StringBuilder: A Mutable
 Buffer</h3>
 <p>When you need frequent concatenation or to build strings in a loop,
 use <code>StringBuilder</code> (not thread-safe, use it single-threaded;
 the thread-safe version is <code>StringBuffer</code>):</p>
-<div class="sourceCode" id="cb10"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="bu">StringBuilder</span> sb <span class="op">=</span> <span class="kw">new</span> <span class="bu">StringBuilder</span><span class="op">();</span></span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">100</span><span class="op">;</span> i<span class="op">++)</span> <span class="op">{</span></span>
-<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>    sb<span class="op">.</span><span class="fu">append</span><span class="op">(</span>i<span class="op">).</span><span class="fu">append</span><span class="op">(</span><span class="ch">&#39;,&#39;</span><span class="op">);</span>   <span class="co">// modifies the internal char/byte buffer in place, building no intermediate String</span></span>
-<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> result <span class="op">=</span> sb<span class="op">.</span><span class="fu">toString</span><span class="op">();</span>  <span class="co">// generate the String once at the end</span></span></code></pre></div>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="bu">StringBuilder</span> sb <span class="op">=</span> <span class="kw">new</span> <span class="bu">StringBuilder</span><span class="op">();</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">100</span><span class="op">;</span> i<span class="op">++)</span> <span class="op">{</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>    sb<span class="op">.</span><span class="fu">append</span><span class="op">(</span>i<span class="op">).</span><span class="fu">append</span><span class="op">(</span><span class="ch">&#39;,&#39;</span><span class="op">);</span>   <span class="co">// modifies the internal char/byte buffer in place, building no intermediate String</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> result <span class="op">=</span> sb<span class="op">.</span><span class="fu">toString</span><span class="op">();</span>  <span class="co">// generate the String once at the end</span></span></code></pre></div>
 <p>Internally it maintains a growable byte array (like a manually
 <code>realloc</code>’d buffer in C), <code>append</code> appends in
 place, and it only grows the capacity when it isn’t enough (usually

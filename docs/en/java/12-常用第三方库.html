@@ -366,6 +366,67 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb11-1"><a href=
 <span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>log<span class="op">.</span><span class="fu">error</span><span class="op">(</span><span class="st">&quot;failed&quot;</span><span class="op">,</span> exception<span class="op">);</span></span></code></pre></div>
 <p>A configuration file (<code>logback.xml</code>) controls the level,
 output format, and rolling strategy, with no code changes needed.</p>
+<blockquote>
+<p>The underlying mechanism for “the facade depends on an interface, the
+implementation is bound at runtime” is the JDK’s own <strong>SPI
+(Service Provider Interface)</strong>:
+<code>java.util.ServiceLoader</code>. This is exactly how SLF4J
+discovers and binds an implementation like <code>Logback</code> at
+runtime. Below is a pure-JDK demonstration—<strong>no third-party
+library required</strong>.</p>
+</blockquote>
+<p>The caller depends only on the <code>Greeter</code> interface;
+implementations register themselves via a config file under
+<code>META-INF/services/</code>, are discovered at runtime by
+<code>ServiceLoader</code>, and neither <code>new</code> nor
+<code>import</code> of them appears in the caller’s code:</p>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="co">// spi/Greeter.java -- the &quot;facade&quot;: the caller depends only on this</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span><span class="im"> spi</span><span class="op">;</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">interface</span> Greeter <span class="op">{</span> <span class="bu">String</span> <span class="fu">greet</span><span class="op">(</span><span class="bu">String</span> name<span class="op">);</span> <span class="op">}</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a><span class="co">// spi/EnglishGreeter.java -- one implementation</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span><span class="im"> spi</span><span class="op">;</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> EnglishGreeter <span class="kw">implements</span> Greeter <span class="op">{</span></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="bu">String</span> <span class="fu">greet</span><span class="op">(</span><span class="bu">String</span> name<span class="op">)</span> <span class="op">{</span> <span class="cf">return</span> <span class="st">&quot;Hello, &quot;</span> <span class="op">+</span> name<span class="op">;</span> <span class="op">}</span></span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a><span class="co">// spi/FrenchGreeter.java -- another implementation</span></span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span><span class="im"> spi</span><span class="op">;</span></span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> FrenchGreeter <span class="kw">implements</span> Greeter <span class="op">{</span></span>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="bu">String</span> <span class="fu">greet</span><span class="op">(</span><span class="bu">String</span> name<span class="op">)</span> <span class="op">{</span> <span class="cf">return</span> <span class="st">&quot;Bonjour, &quot;</span> <span class="op">+</span> name<span class="op">;</span> <span class="op">}</span></span>
+<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a><span class="co">// spi/Main.java -- the caller: discovers implementations at runtime, references none of them</span></span>
+<span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span><span class="im"> spi</span><span class="op">;</span></span>
+<span id="cb12-19"><a href="#cb12-19" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">ServiceLoader</span><span class="op">;</span></span>
+<span id="cb12-20"><a href="#cb12-20" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Main <span class="op">{</span></span>
+<span id="cb12-21"><a href="#cb12-21" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb12-22"><a href="#cb12-22" aria-hidden="true" tabindex="-1"></a>        <span class="bu">ServiceLoader</span><span class="op">&lt;</span>Greeter<span class="op">&gt;</span> loader <span class="op">=</span> <span class="bu">ServiceLoader</span><span class="op">.</span><span class="fu">load</span><span class="op">(</span>Greeter<span class="op">.</span><span class="fu">class</span><span class="op">);</span></span>
+<span id="cb12-23"><a href="#cb12-23" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span>Greeter g <span class="op">:</span> loader<span class="op">)</span> <span class="op">{</span>   <span class="co">// discovered at runtime; the caller does not new/import concrete impls</span></span>
+<span id="cb12-24"><a href="#cb12-24" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>g<span class="op">.</span><span class="fu">getClass</span><span class="op">().</span><span class="fu">getSimpleName</span><span class="op">()</span> <span class="op">+</span> <span class="st">&quot; -&gt; &quot;</span> <span class="op">+</span> g<span class="op">.</span><span class="fu">greet</span><span class="op">(</span><span class="st">&quot;Ada&quot;</span><span class="op">));</span></span>
+<span id="cb12-25"><a href="#cb12-25" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb12-26"><a href="#cb12-26" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb12-27"><a href="#cb12-27" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>The registration file (plain text, one implementation’s
+fully-qualified name per line) lives under
+<code>META-INF/services/</code> on the classpath, with the <strong>file
+name = the interface’s fully-qualified name</strong>:</p>
+<pre><code>File: META-INF/services/spi.Greeter
+spi.EnglishGreeter
+spi.FrenchGreeter</code></pre>
+<p>Compile and run (the <code>out</code> directory holds both the
+classes and <code>META-INF/services/</code>):</p>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="ex">javac</span> <span class="at">-d</span> out spi/<span class="pp">*</span>.java</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="ex">java</span> <span class="at">-cp</span> out spi.Main</span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="co"># EnglishGreeter -&gt; Hello, Ada</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a><span class="co"># FrenchGreeter -&gt; Bonjour, Ada</span></span></code></pre></div>
+<p>Adding a new implementation only requires a new class plus one more
+line in the registration file—<strong>zero changes</strong> to the
+caller. This is the JDK-native support for “program to an interface +
+pluggable implementations,” and it is the common foundation for JDBC
+drivers, SLF4J binding, <code>java.nio.file.spi</code>, and more.</p>
 <h3 id="high-performance-networking-netty">High-Performance Networking:
 Netty</h3>
 <p>An asynchronous, event-driven networking framework based on Java NIO
@@ -399,10 +460,10 @@ runs directly. Spring Boot uses <code>spring-boot-maven-plugin</code>;
 ordinary projects use <code>maven-shade-plugin</code> or Gradle’s
 <code>shadow</code> plugin.</li>
 </ul>
-<div class="sourceCode" id="cb12"><pre
-class="sourceCode bash"><code class="sourceCode bash"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="ex">mvn</span> package                       <span class="co"># produces target/app.jar</span></span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="ex">java</span> <span class="at">-jar</span> target/app.jar          <span class="co"># a fat-jar runs directly</span></span>
-<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="ex">java</span> <span class="at">-cp</span> <span class="st">&quot;app.jar:libs/*&quot;</span> Main    <span class="co"># an ordinary jar needs an explicit classpath</span></span></code></pre></div>
+<div class="sourceCode" id="cb15"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="ex">mvn</span> package                       <span class="co"># produces target/app.jar</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="ex">java</span> <span class="at">-jar</span> target/app.jar          <span class="co"># a fat-jar runs directly</span></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a><span class="ex">java</span> <span class="at">-cp</span> <span class="st">&quot;app.jar:libs/*&quot;</span> Main    <span class="co"># an ordinary jar needs an explicit classpath</span></span></code></pre></div>
 <blockquote>
 <p>In a fat-jar, multiple dependencies containing same-named resources
 (such as each one’s <code>META-INF/services</code>) will conflict; the
@@ -413,11 +474,11 @@ shade plugin’s transformer is responsible for merging them.</p>
 (when you need to reuse an existing native library or do CPU-intensive
 computation). But the cost is not small, and it is usually a last
 resort:</p>
-<div class="sourceCode" id="cb13"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> NativeLib <span class="op">{</span></span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">loadLibrary</span><span class="op">(</span><span class="st">&quot;mylib&quot;</span><span class="op">);</span> <span class="op">}</span>   <span class="co">// load libmylib.so/.dll</span></span>
-<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="kw">native</span> <span class="dt">int</span> <span class="fu">compute</span><span class="op">(</span><span class="dt">int</span><span class="op">[]</span> data<span class="op">);</span>    <span class="co">// native method, implemented on the C side</span></span>
-<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb16"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> NativeLib <span class="op">{</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">loadLibrary</span><span class="op">(</span><span class="st">&quot;mylib&quot;</span><span class="op">);</span> <span class="op">}</span>   <span class="co">// load libmylib.so/.dll</span></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="kw">native</span> <span class="dt">int</span> <span class="fu">compute</span><span class="op">(</span><span class="dt">int</span><span class="op">[]</span> data<span class="op">);</span>    <span class="co">// native method, implemented on the C side</span></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>Sources of cost: - <strong>Call overhead</strong>: each crossing of
 the JNI boundary has a fixed cost (parameter marshaling, state
 switching), unsuitable for high-frequency fine-grained calls. -

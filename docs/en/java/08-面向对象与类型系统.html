@@ -202,6 +202,27 @@ state. C++ statically binds virtual calls during construction to the
 current class’s version; <strong>Java, by contrast, dynamically binds to
 the subclass’s version</strong>, which is more dangerous.</li>
 </ul>
+<p>See the pitfall for yourself: the superclass constructor calls the
+virtual method <code>size()</code>, which dispatches to the subclass
+version, but at that point the subclass field <code>value</code> is
+still its zero value:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> CtorVirtual <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">class</span> Base <span class="op">{</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>        <span class="fu">Base</span><span class="op">()</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;Base ctor sees size = &quot;</span> <span class="op">+</span> <span class="fu">size</span><span class="op">());</span> <span class="op">}</span> <span class="co">// virtual call</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span> <span class="fu">size</span><span class="op">()</span> <span class="op">{</span> <span class="cf">return</span> <span class="dv">0</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">class</span> Derived <span class="kw">extends</span> Base <span class="op">{</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span> value <span class="op">=</span> <span class="dv">42</span><span class="op">;</span>                 <span class="co">// initialized only AFTER super() runs</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>        <span class="at">@Override</span> <span class="dt">int</span> <span class="fu">size</span><span class="op">()</span> <span class="op">{</span> <span class="cf">return</span> value<span class="op">;</span> <span class="op">}</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>        Derived d <span class="op">=</span> <span class="kw">new</span> <span class="fu">Derived</span><span class="op">();</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;after ctor  size = &quot;</span> <span class="op">+</span> d<span class="op">.</span><span class="fu">size</span><span class="op">());</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a><span class="co">// Base ctor sees size = 0    &lt;- dynamically dispatched to Derived.size(), but value isn&#39;t set yet (zero)</span></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a><span class="co">// after ctor  size = 42      &lt;- only 42 once construction completes</span></span></code></pre></div>
 <h2 id="encapsulation">2. Encapsulation</h2>
 <p>Access modifiers: <code>private</code> &lt; package-level (default,
 no keyword) &lt; <code>protected</code> &lt; <code>public</code>. Note
@@ -214,8 +235,8 @@ Inheritance: single inheritance + multiple interfaces</h2>
 <p>Java <strong>classes can only inherit singly</strong> (avoiding the
 complexity of C++’s diamond inheritance and virtual inheritance), but a
 class can implement any number of interfaces:</p>
-<div class="sourceCode" id="cb3"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> <span class="bu">Service</span> <span class="kw">extends</span> AbstractBase <span class="kw">implements</span> <span class="bu">Runnable</span><span class="op">,</span> AutoCloseable <span class="op">{</span> <span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> <span class="bu">Service</span> <span class="kw">extends</span> AbstractBase <span class="kw">implements</span> <span class="bu">Runnable</span><span class="op">,</span> AutoCloseable <span class="op">{</span> <span class="op">}</span></span></code></pre></div>
 <p>Interfaces once could only have abstract methods; since JDK 8 they
 can have <strong>default methods</strong> (with implementations) and
 <strong>static methods</strong>, and since JDK 9 they can have
@@ -345,18 +366,48 @@ uses a <strong>thread-local xorshift pseudo-random number</strong>,
 computed lazily on the first call, stored into the object header’s mark
 word, and unchanged thereafter (see <a href="04-数据类型.html">“Data
 Types”</a>).</p>
-<div class="sourceCode" id="cb5"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="dt">final</span> <span class="kw">class</span> <span class="bu">Point</span> <span class="op">{</span></span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">final</span> <span class="dt">int</span> x<span class="op">,</span> y<span class="op">;</span></span>
-<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    <span class="bu">Point</span><span class="op">(</span><span class="dt">int</span> x<span class="op">,</span> <span class="dt">int</span> y<span class="op">){</span> <span class="kw">this</span><span class="op">.</span><span class="fu">x</span><span class="op">=</span>x<span class="op">;</span> <span class="kw">this</span><span class="op">.</span><span class="fu">y</span><span class="op">=</span>y<span class="op">;</span> <span class="op">}</span></span>
-<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">@Override</span> <span class="kw">public</span> <span class="dt">boolean</span> <span class="fu">equals</span><span class="op">(</span><span class="bu">Object</span> o<span class="op">){</span></span>
-<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span><span class="kw">this</span> <span class="op">==</span> o<span class="op">)</span> <span class="cf">return</span> <span class="kw">true</span><span class="op">;</span></span>
-<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(!(</span>o <span class="kw">instanceof</span> <span class="bu">Point</span> p<span class="op">))</span> <span class="cf">return</span> <span class="kw">false</span><span class="op">;</span> <span class="co">// pattern-matching instanceof</span></span>
-<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> x <span class="op">==</span> p<span class="op">.</span><span class="fu">x</span> <span class="op">&amp;&amp;</span> y <span class="op">==</span> p<span class="op">.</span><span class="fu">y</span><span class="op">;</span></span>
-<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>    <span class="at">@Override</span> <span class="kw">public</span> <span class="dt">int</span> <span class="fu">hashCode</span><span class="op">(){</span> <span class="cf">return</span> Objects<span class="op">.</span><span class="fu">hash</span><span class="op">(</span>x<span class="op">,</span> y<span class="op">);</span> <span class="op">}</span></span>
-<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="dt">final</span> <span class="kw">class</span> <span class="bu">Point</span> <span class="op">{</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">final</span> <span class="dt">int</span> x<span class="op">,</span> y<span class="op">;</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    <span class="bu">Point</span><span class="op">(</span><span class="dt">int</span> x<span class="op">,</span> <span class="dt">int</span> y<span class="op">){</span> <span class="kw">this</span><span class="op">.</span><span class="fu">x</span><span class="op">=</span>x<span class="op">;</span> <span class="kw">this</span><span class="op">.</span><span class="fu">y</span><span class="op">=</span>y<span class="op">;</span> <span class="op">}</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">@Override</span> <span class="kw">public</span> <span class="dt">boolean</span> <span class="fu">equals</span><span class="op">(</span><span class="bu">Object</span> o<span class="op">){</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span><span class="kw">this</span> <span class="op">==</span> o<span class="op">)</span> <span class="cf">return</span> <span class="kw">true</span><span class="op">;</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(!(</span>o <span class="kw">instanceof</span> <span class="bu">Point</span> p<span class="op">))</span> <span class="cf">return</span> <span class="kw">false</span><span class="op">;</span> <span class="co">// pattern-matching instanceof</span></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> x <span class="op">==</span> p<span class="op">.</span><span class="fu">x</span> <span class="op">&amp;&amp;</span> y <span class="op">==</span> p<span class="op">.</span><span class="fu">y</span><span class="op">;</span></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>    <span class="at">@Override</span> <span class="kw">public</span> <span class="dt">int</span> <span class="fu">hashCode</span><span class="op">(){</span> <span class="cf">return</span> Objects<span class="op">.</span><span class="fu">hash</span><span class="op">(</span>x<span class="op">,</span> y<span class="op">);</span> <span class="op">}</span></span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>A <code>record</code> can generate these automatically (below).</p>
+<p>The cost of violating the contract is directly observable: override
+only <code>equals</code> without <code>hashCode</code>, and equal
+objects scatter to different buckets, so a <code>HashSet</code> can no
+longer find them:</p>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.*;</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> HashContract <span class="op">{</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    <span class="co">// equals overridden, but hashCode NOT -&gt; violates the contract</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">class</span> Bad <span class="op">{</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>        <span class="dt">final</span> <span class="dt">int</span> id<span class="op">;</span> <span class="fu">Bad</span><span class="op">(</span><span class="dt">int</span> id<span class="op">){</span> <span class="kw">this</span><span class="op">.</span><span class="fu">id</span> <span class="op">=</span> id<span class="op">;</span> <span class="op">}</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>        <span class="at">@Override</span> <span class="kw">public</span> <span class="dt">boolean</span> <span class="fu">equals</span><span class="op">(</span><span class="bu">Object</span> o<span class="op">){</span> <span class="cf">return</span> o <span class="kw">instanceof</span> Bad b <span class="op">&amp;&amp;</span> b<span class="op">.</span><span class="fu">id</span> <span class="op">==</span> id<span class="op">;</span> <span class="op">}</span></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>    <span class="co">// both overridden -&gt; correct</span></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">class</span> Good <span class="op">{</span></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>        <span class="dt">final</span> <span class="dt">int</span> id<span class="op">;</span> <span class="fu">Good</span><span class="op">(</span><span class="dt">int</span> id<span class="op">){</span> <span class="kw">this</span><span class="op">.</span><span class="fu">id</span> <span class="op">=</span> id<span class="op">;</span> <span class="op">}</span></span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>        <span class="at">@Override</span> <span class="kw">public</span> <span class="dt">boolean</span> <span class="fu">equals</span><span class="op">(</span><span class="bu">Object</span> o<span class="op">){</span> <span class="cf">return</span> o <span class="kw">instanceof</span> Good g <span class="op">&amp;&amp;</span> g<span class="op">.</span><span class="fu">id</span> <span class="op">==</span> id<span class="op">;</span> <span class="op">}</span></span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>        <span class="at">@Override</span> <span class="kw">public</span> <span class="dt">int</span> <span class="fu">hashCode</span><span class="op">(){</span> <span class="cf">return</span> <span class="bu">Integer</span><span class="op">.</span><span class="fu">hashCode</span><span class="op">(</span>id<span class="op">);</span> <span class="op">}</span></span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;Bad  equal? &quot;</span> <span class="op">+</span> <span class="kw">new</span> <span class="fu">Bad</span><span class="op">(</span><span class="dv">1</span><span class="op">).</span><span class="fu">equals</span><span class="op">(</span><span class="kw">new</span> <span class="fu">Bad</span><span class="op">(</span><span class="dv">1</span><span class="op">)));</span></span>
+<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Set</span><span class="op">&lt;</span>Bad<span class="op">&gt;</span> bad <span class="op">=</span> <span class="kw">new</span> <span class="bu">HashSet</span><span class="op">&lt;&gt;();</span> bad<span class="op">.</span><span class="fu">add</span><span class="op">(</span><span class="kw">new</span> <span class="fu">Bad</span><span class="op">(</span><span class="dv">1</span><span class="op">));</span></span>
+<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;Bad  contains equal obj? &quot;</span> <span class="op">+</span> bad<span class="op">.</span><span class="fu">contains</span><span class="op">(</span><span class="kw">new</span> <span class="fu">Bad</span><span class="op">(</span><span class="dv">1</span><span class="op">)));</span></span>
+<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Set</span><span class="op">&lt;</span>Good<span class="op">&gt;</span> good <span class="op">=</span> <span class="kw">new</span> <span class="bu">HashSet</span><span class="op">&lt;&gt;();</span> good<span class="op">.</span><span class="fu">add</span><span class="op">(</span><span class="kw">new</span> <span class="fu">Good</span><span class="op">(</span><span class="dv">1</span><span class="op">));</span></span>
+<span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;Good contains equal obj? &quot;</span> <span class="op">+</span> good<span class="op">.</span><span class="fu">contains</span><span class="op">(</span><span class="kw">new</span> <span class="fu">Good</span><span class="op">(</span><span class="dv">1</span><span class="op">)));</span></span>
+<span id="cb7-21"><a href="#cb7-21" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb7-22"><a href="#cb7-22" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb7-23"><a href="#cb7-23" aria-hidden="true" tabindex="-1"></a><span class="co">// Bad  equal? true                 &lt;- the two Bad(1) are equal</span></span>
+<span id="cb7-24"><a href="#cb7-24" aria-hidden="true" tabindex="-1"></a><span class="co">// Bad  contains equal obj? false   &lt;- but their default hashCodes differ, so they land in different buckets: not found!</span></span>
+<span id="cb7-25"><a href="#cb7-25" aria-hidden="true" tabindex="-1"></a><span class="co">// Good contains equal obj? true    &lt;- only found once hashCode is correctly overridden</span></span></code></pre></div>
 <h2
 id="generics-and-type-erasure-the-fundamental-divide-from-c-templates">7.
 Generics and type erasure (the fundamental divide from C++
@@ -373,42 +424,66 @@ both the same <code>List</code> class at runtime (the raw type
 to the upper bound if bounded). The compiler inserts
 <strong>casts</strong> where needed and performs static type
 checking.</p>
-<div class="sourceCode" id="cb6"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="bu">List</span><span class="op">&lt;</span><span class="bu">String</span><span class="op">&gt;</span> ls <span class="op">=</span> <span class="kw">new</span> <span class="bu">ArrayList</span><span class="op">&lt;&gt;();</span></span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>ls<span class="op">.</span><span class="fu">add</span><span class="op">(</span><span class="st">&quot;hi&quot;</span><span class="op">);</span></span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> s <span class="op">=</span> ls<span class="op">.</span><span class="fu">get</span><span class="op">(</span><span class="dv">0</span><span class="op">);</span>   <span class="co">// the compiler inserts a (String) cast</span></span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="co">// at runtime: ls.getClass() == ArrayList.class, exactly the same as List&lt;Integer&gt;</span></span></code></pre></div>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="bu">List</span><span class="op">&lt;</span><span class="bu">String</span><span class="op">&gt;</span> ls <span class="op">=</span> <span class="kw">new</span> <span class="bu">ArrayList</span><span class="op">&lt;&gt;();</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>ls<span class="op">.</span><span class="fu">add</span><span class="op">(</span><span class="st">&quot;hi&quot;</span><span class="op">);</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> s <span class="op">=</span> ls<span class="op">.</span><span class="fu">get</span><span class="op">(</span><span class="dv">0</span><span class="op">);</span>   <span class="co">// the compiler inserts a (String) cast</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="co">// at runtime: ls.getClass() == ArrayList.class, exactly the same as List&lt;Integer&gt;</span></span></code></pre></div>
 <p>Compared with C++: templates are <strong>monomorphized</strong>, so
 <code>vector&lt;int&gt;</code> and <code>vector&lt;string&gt;</code>
 compile to two independent copies of code, with their own types at
 runtime — a zero-cost abstraction but with code bloat. Java has only one
 copy of code, no bloat, but the type is lost at runtime, giving rise to
 a series of restrictions.</p>
+<p>At runtime the two generic instances are the <strong>same</strong>
+<code>Class</code> object; a raw type exposes even more clearly that
+“there is no type check at runtime”:</p>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.*;</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Erasure <span class="op">{</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>        <span class="bu">List</span><span class="op">&lt;</span><span class="bu">String</span><span class="op">&gt;</span>  ls <span class="op">=</span> <span class="kw">new</span> <span class="bu">ArrayList</span><span class="op">&lt;&gt;();</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>        <span class="bu">List</span><span class="op">&lt;</span><span class="bu">Integer</span><span class="op">&gt;</span> li <span class="op">=</span> <span class="kw">new</span> <span class="bu">ArrayList</span><span class="op">&lt;&gt;();</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>ls<span class="op">.</span><span class="fu">getClass</span><span class="op">());</span>                 <span class="co">// both erase to ArrayList</span></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>li<span class="op">.</span><span class="fu">getClass</span><span class="op">());</span></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;same Class object? &quot;</span> <span class="op">+</span> <span class="op">(</span>ls<span class="op">.</span><span class="fu">getClass</span><span class="op">()</span> <span class="op">==</span> li<span class="op">.</span><span class="fu">getClass</span><span class="op">()));</span></span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>        <span class="co">// the runtime keeps no type argument, so the line below stores fine until you pull it out and use it:</span></span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a>        <span class="bu">List</span> raw <span class="op">=</span> li<span class="op">;</span>                 <span class="co">// raw type</span></span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a>        raw<span class="op">.</span><span class="fu">add</span><span class="op">(</span><span class="st">&quot;oops&quot;</span><span class="op">);</span>               <span class="co">// no ClassCastException here (only a compile warning)</span></span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;li now holds: &quot;</span> <span class="op">+</span> li<span class="op">.</span><span class="fu">get</span><span class="op">(</span><span class="dv">0</span><span class="op">));</span>  <span class="co">// stored despite List&lt;Integer&gt;</span></span>
+<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb9-14"><a href="#cb9-14" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb9-15"><a href="#cb9-15" aria-hidden="true" tabindex="-1"></a><span class="co">// At compile time: an unchecked warning at raw.add(&quot;oops&quot;)</span></span>
+<span id="cb9-16"><a href="#cb9-16" aria-hidden="true" tabindex="-1"></a><span class="co">// Runtime output (stdout):</span></span>
+<span id="cb9-17"><a href="#cb9-17" aria-hidden="true" tabindex="-1"></a><span class="co">// class java.util.ArrayList</span></span>
+<span id="cb9-18"><a href="#cb9-18" aria-hidden="true" tabindex="-1"></a><span class="co">// class java.util.ArrayList</span></span>
+<span id="cb9-19"><a href="#cb9-19" aria-hidden="true" tabindex="-1"></a><span class="co">// same Class object? true</span></span>
+<span id="cb9-20"><a href="#cb9-20" aria-hidden="true" tabindex="-1"></a><span class="co">// li now holds: oops</span></span></code></pre></div>
 <h3 id="the-four-big-restrictions-from-erasure">The four big
 restrictions from erasure</h3>
-<div class="sourceCode" id="cb7"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="co">// 1. Can&#39;t new T[] (the runtime type can&#39;t be determined, and covariant arrays would miss checks)</span></span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="co">// T[] arr = new T[10];              // compile error</span></span>
-<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>T<span class="op">[]</span> arr <span class="op">=</span> <span class="op">(</span>T<span class="op">[])</span> <span class="kw">new</span> <span class="bu">Object</span><span class="op">[</span><span class="dv">10</span><span class="op">];</span>       <span class="co">// workaround: cast, with an unchecked warning</span></span>
-<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a><span class="co">// 2. Can&#39;t new T() (don&#39;t know which class to construct)</span></span>
-<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a><span class="co">// T t = new T();                     // compile error, need to pass a Supplier&lt;T&gt; or Class&lt;T&gt;</span></span>
-<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a><span class="co">// 3. instanceof can&#39;t carry a type parameter (no such info at runtime)</span></span>
-<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a><span class="co">// if (x instanceof List&lt;String&gt;)     // compile error</span></span>
-<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="op">(</span>x <span class="kw">instanceof</span> <span class="bu">List</span><span class="op">&lt;?&gt;)</span> <span class="op">{</span> <span class="op">}</span>         <span class="co">// can only use a wildcard</span></span>
-<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a><span class="co">// 4. Static fields can&#39;t use type parameters; can&#39;t catch a generic exception</span></span></code></pre></div>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="co">// 1. Can&#39;t new T[] (the runtime type can&#39;t be determined, and covariant arrays would miss checks)</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="co">// T[] arr = new T[10];              // compile error</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>T<span class="op">[]</span> arr <span class="op">=</span> <span class="op">(</span>T<span class="op">[])</span> <span class="kw">new</span> <span class="bu">Object</span><span class="op">[</span><span class="dv">10</span><span class="op">];</span>       <span class="co">// workaround: cast, with an unchecked warning</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a><span class="co">// 2. Can&#39;t new T() (don&#39;t know which class to construct)</span></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a><span class="co">// T t = new T();                     // compile error, need to pass a Supplier&lt;T&gt; or Class&lt;T&gt;</span></span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a><span class="co">// 3. instanceof can&#39;t carry a type parameter (no such info at runtime)</span></span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a><span class="co">// if (x instanceof List&lt;String&gt;)     // compile error</span></span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="op">(</span>x <span class="kw">instanceof</span> <span class="bu">List</span><span class="op">&lt;?&gt;)</span> <span class="op">{</span> <span class="op">}</span>         <span class="co">// can only use a wildcard</span></span>
+<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a><span class="co">// 4. Static fields can&#39;t use type parameters; can&#39;t catch a generic exception</span></span></code></pre></div>
 <h3 id="bridge-methods">Bridge methods</h3>
 <p>Erasure would break covariant returns and generic overriding, so the
 compiler generates <strong>bridge methods</strong> to bridge the
 gap:</p>
-<div class="sourceCode" id="cb8"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> <span class="bu">Node</span><span class="op">&lt;</span>T<span class="op">&gt;</span> <span class="op">{</span> T <span class="fu">get</span><span class="op">(){</span><span class="kw">...</span><span class="op">}</span> <span class="dt">void</span> <span class="fu">set</span><span class="op">(</span>T t<span class="op">){</span><span class="kw">...</span><span class="op">}</span> <span class="op">}</span></span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> StrNode <span class="kw">extends</span> <span class="bu">Node</span><span class="op">&lt;</span><span class="bu">String</span><span class="op">&gt;</span> <span class="op">{</span></span>
-<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    <span class="at">@Override</span> <span class="bu">String</span> <span class="fu">get</span><span class="op">(){</span><span class="kw">...</span><span class="op">}</span>        <span class="co">// what you wrote</span></span>
-<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">// the compiler also secretly generates: Object get(){ return get(); }  ← bridge, matching the parent&#39;s erased signature Object get()</span></span>
-<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> <span class="bu">Node</span><span class="op">&lt;</span>T<span class="op">&gt;</span> <span class="op">{</span> T <span class="fu">get</span><span class="op">(){</span><span class="kw">...</span><span class="op">}</span> <span class="dt">void</span> <span class="fu">set</span><span class="op">(</span>T t<span class="op">){</span><span class="kw">...</span><span class="op">}</span> <span class="op">}</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> StrNode <span class="kw">extends</span> <span class="bu">Node</span><span class="op">&lt;</span><span class="bu">String</span><span class="op">&gt;</span> <span class="op">{</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>    <span class="at">@Override</span> <span class="bu">String</span> <span class="fu">get</span><span class="op">(){</span><span class="kw">...</span><span class="op">}</span>        <span class="co">// what you wrote</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">// the compiler also secretly generates: Object get(){ return get(); }  ← bridge, matching the parent&#39;s erased signature Object get()</span></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>Otherwise the parent <code>Node</code> erases to
 <code>Object get()</code>, the subclass has <code>String get()</code>
 with a different signature, and virtual dispatch wouldn’t line up.
@@ -428,44 +503,44 @@ unknown).</li>
 <li>The mnemonic <strong>PECS</strong>: Producer-Extends,
 Consumer-Super.</li>
 </ul>
-<div class="sourceCode" id="cb9"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="co">// read from src, write to dst: src is the producer, use extends; dst is the consumer, use super</span></span>
-<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="dt">static</span> <span class="op">&lt;</span>T<span class="op">&gt;</span> <span class="dt">void</span> <span class="fu">copy</span><span class="op">(</span><span class="bu">List</span><span class="op">&lt;?</span> <span class="kw">super</span> T<span class="op">&gt;</span> dst<span class="op">,</span> <span class="bu">List</span><span class="op">&lt;?</span> <span class="kw">extends</span> T<span class="op">&gt;</span> src<span class="op">){</span></span>
-<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span>T t <span class="op">:</span> src<span class="op">)</span> dst<span class="op">.</span><span class="fu">add</span><span class="op">(</span>t<span class="op">);</span></span>
-<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="co">// read from src, write to dst: src is the producer, use extends; dst is the consumer, use super</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="dt">static</span> <span class="op">&lt;</span>T<span class="op">&gt;</span> <span class="dt">void</span> <span class="fu">copy</span><span class="op">(</span><span class="bu">List</span><span class="op">&lt;?</span> <span class="kw">super</span> T<span class="op">&gt;</span> dst<span class="op">,</span> <span class="bu">List</span><span class="op">&lt;?</span> <span class="kw">extends</span> T<span class="op">&gt;</span> src<span class="op">){</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span>T t <span class="op">:</span> src<span class="op">)</span> dst<span class="op">.</span><span class="fu">add</span><span class="op">(</span>t<span class="op">);</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>C++20 concepts / old-style SFINAE solve a similar problem of
 “constraining type parameters,” but the mechanism is entirely different
 (compile-time duck typing vs nominal subtyping + erasure).</p>
 <h2 id="record-an-immutable-data-carrier">8. record: an immutable data
 carrier</h2>
-<div class="sourceCode" id="cb10"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="kw">record</span> <span class="bu">Point</span><span class="op">(</span><span class="dt">int</span> x<span class="op">,</span> <span class="dt">int</span> y<span class="op">)</span> <span class="op">{</span> <span class="op">}</span></span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="co">// auto-generated: private final fields, an all-args constructor, accessors x()/y(), equals/hashCode/toString</span></span></code></pre></div>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="kw">record</span> <span class="bu">Point</span><span class="op">(</span><span class="dt">int</span> x<span class="op">,</span> <span class="dt">int</span> y<span class="op">)</span> <span class="op">{</span> <span class="op">}</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="co">// auto-generated: private final fields, an all-args constructor, accessors x()/y(), equals/hashCode/toString</span></span></code></pre></div>
 <p>A <code>record</code> is <strong>implicitly final</strong>, with
 final fields, semantically a “transparent aggregate of data.” Analogous
 to a C++ aggregate struct + an auto-generated <code>operator==</code>.
 You can add a compact constructor to do validation:</p>
-<div class="sourceCode" id="cb11"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="kw">record</span> <span class="fu">Range</span><span class="op">(</span><span class="dt">int</span> lo<span class="op">,</span> <span class="dt">int</span> hi<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>    Range <span class="op">{</span>   <span class="co">// compact constructor, assigns automatically after validation</span></span>
-<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>lo <span class="op">&gt;</span> hi<span class="op">)</span> <span class="cf">throw</span> <span class="kw">new</span> <span class="bu">IllegalArgumentException</span><span class="op">();</span></span>
-<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="kw">record</span> <span class="fu">Range</span><span class="op">(</span><span class="dt">int</span> lo<span class="op">,</span> <span class="dt">int</span> hi<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>    Range <span class="op">{</span>   <span class="co">// compact constructor, assigns automatically after validation</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>lo <span class="op">&gt;</span> hi<span class="op">)</span> <span class="cf">throw</span> <span class="kw">new</span> <span class="bu">IllegalArgumentException</span><span class="op">();</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <h2 id="sealed-sealed-types-controlled-inheritance">9. sealed: sealed
 types (controlled inheritance)</h2>
 <p>Restricts who can inherit/implement, working with pattern matching to
 do exhaustiveness checking:</p>
-<div class="sourceCode" id="cb12"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="kw">sealed</span> <span class="kw">interface</span> <span class="bu">Shape</span> <span class="kw">permits</span> Circle<span class="op">,</span> Square <span class="op">{</span> <span class="op">}</span></span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="kw">record</span> <span class="fu">Circle</span><span class="op">(</span><span class="dt">double</span> r<span class="op">)</span> <span class="kw">implements</span> <span class="bu">Shape</span> <span class="op">{</span> <span class="op">}</span></span>
-<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="kw">record</span> <span class="fu">Square</span><span class="op">(</span><span class="dt">double</span> s<span class="op">)</span> <span class="kw">implements</span> <span class="bu">Shape</span> <span class="op">{</span> <span class="op">}</span></span>
-<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a><span class="dt">double</span> <span class="fu">area</span><span class="op">(</span><span class="bu">Shape</span> sh<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="cf">switch</span> <span class="op">(</span>sh<span class="op">)</span> <span class="op">{</span>          <span class="co">// the compiler knows there are only two, no default needed</span></span>
-<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> Circle c <span class="op">-&gt;</span> <span class="bu">Math</span><span class="op">.</span><span class="fu">PI</span> <span class="op">*</span> c<span class="op">.</span><span class="fu">r</span><span class="op">()</span> <span class="op">*</span> c<span class="op">.</span><span class="fu">r</span><span class="op">();</span></span>
-<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> Square s <span class="op">-&gt;</span> s<span class="op">.</span><span class="fu">s</span><span class="op">()</span> <span class="op">*</span> s<span class="op">.</span><span class="fu">s</span><span class="op">();</span></span>
-<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">};</span></span>
-<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb15"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="kw">sealed</span> <span class="kw">interface</span> <span class="bu">Shape</span> <span class="kw">permits</span> Circle<span class="op">,</span> Square <span class="op">{</span> <span class="op">}</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="kw">record</span> <span class="fu">Circle</span><span class="op">(</span><span class="dt">double</span> r<span class="op">)</span> <span class="kw">implements</span> <span class="bu">Shape</span> <span class="op">{</span> <span class="op">}</span></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a><span class="kw">record</span> <span class="fu">Square</span><span class="op">(</span><span class="dt">double</span> s<span class="op">)</span> <span class="kw">implements</span> <span class="bu">Shape</span> <span class="op">{</span> <span class="op">}</span></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a><span class="dt">double</span> <span class="fu">area</span><span class="op">(</span><span class="bu">Shape</span> sh<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="cf">switch</span> <span class="op">(</span>sh<span class="op">)</span> <span class="op">{</span>          <span class="co">// the compiler knows there are only two, no default needed</span></span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> Circle c <span class="op">-&gt;</span> <span class="bu">Math</span><span class="op">.</span><span class="fu">PI</span> <span class="op">*</span> c<span class="op">.</span><span class="fu">r</span><span class="op">()</span> <span class="op">*</span> c<span class="op">.</span><span class="fu">r</span><span class="op">();</span></span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> Square s <span class="op">-&gt;</span> s<span class="op">.</span><span class="fu">s</span><span class="op">()</span> <span class="op">*</span> s<span class="op">.</span><span class="fu">s</span><span class="op">();</span></span>
+<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">};</span></span>
+<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>Similar to expressing a closed sum type in C++ with
 <code>std::variant</code> + <code>std::visit</code>. <code>sealed</code>
 lets the compiler verify the switch is exhaustive.</p>
@@ -475,13 +550,13 @@ compiled into a class extending <code>java.lang.Enum</code>, with each
 enum constant being a <strong>singleton object</strong> (guaranteed by
 the JVM). It can have fields, methods, and constructors, and even a
 method body per constant (constant-specific behavior):</p>
-<div class="sourceCode" id="cb13"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="kw">enum</span> Planet <span class="op">{</span></span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>    <span class="fu">EARTH</span><span class="op">(</span><span class="fl">5.97e24</span><span class="op">,</span> <span class="fl">6.37e6</span><span class="op">),</span> <span class="fu">MARS</span><span class="op">(</span><span class="fl">6.42e23</span><span class="op">,</span> <span class="fl">3.39e6</span><span class="op">);</span>  <span class="co">// calls the constructor</span></span>
-<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">private</span> <span class="dt">final</span> <span class="dt">double</span> mass<span class="op">,</span> radius<span class="op">;</span></span>
-<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">Planet</span><span class="op">(</span><span class="dt">double</span> m<span class="op">,</span> <span class="dt">double</span> r<span class="op">){</span> mass<span class="op">=</span>m<span class="op">;</span> radius<span class="op">=</span>r<span class="op">;</span> <span class="op">}</span></span>
-<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">double</span> <span class="fu">gravity</span><span class="op">(){</span> <span class="cf">return</span> <span class="fl">6.67e-11</span> <span class="op">*</span> mass <span class="op">/</span> <span class="op">(</span>radius<span class="op">*</span>radius<span class="op">);</span> <span class="op">}</span></span>
-<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb16"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="kw">enum</span> Planet <span class="op">{</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>    <span class="fu">EARTH</span><span class="op">(</span><span class="fl">5.97e24</span><span class="op">,</span> <span class="fl">6.37e6</span><span class="op">),</span> <span class="fu">MARS</span><span class="op">(</span><span class="fl">6.42e23</span><span class="op">,</span> <span class="fl">3.39e6</span><span class="op">);</span>  <span class="co">// calls the constructor</span></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">private</span> <span class="dt">final</span> <span class="dt">double</span> mass<span class="op">,</span> radius<span class="op">;</span></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">Planet</span><span class="op">(</span><span class="dt">double</span> m<span class="op">,</span> <span class="dt">double</span> r<span class="op">){</span> mass<span class="op">=</span>m<span class="op">;</span> radius<span class="op">=</span>r<span class="op">;</span> <span class="op">}</span></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">double</span> <span class="fu">gravity</span><span class="op">(){</span> <span class="cf">return</span> <span class="fl">6.67e-11</span> <span class="op">*</span> mass <span class="op">/</span> <span class="op">(</span>radius<span class="op">*</span>radius<span class="op">);</span> <span class="op">}</span></span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>Being singletons, enums can be safely compared with <code>==</code>,
 making them the best way to implement the singleton pattern;
 <code>EnumMap</code>/<code>EnumSet</code> use the ordinal for a
@@ -506,10 +581,10 @@ must be effectively final</h3>
 <p>A <strong>local variable captured</strong> by an anonymous
 class/lambda must be <strong>final or effectively final</strong> (never
 reassigned after initialization):</p>
-<div class="sourceCode" id="cb14"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> base <span class="op">=</span> <span class="dv">10</span><span class="op">;</span>                 <span class="co">// effectively final</span></span>
-<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="bu">Runnable</span> r <span class="op">=</span> <span class="op">()</span> <span class="op">-&gt;</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>base <span class="op">+</span> <span class="dv">1</span><span class="op">);</span></span>
-<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="co">// base = 20;                  // uncomment this and the line above becomes a compile error</span></span></code></pre></div>
+<div class="sourceCode" id="cb17"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> base <span class="op">=</span> <span class="dv">10</span><span class="op">;</span>                 <span class="co">// effectively final</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="bu">Runnable</span> r <span class="op">=</span> <span class="op">()</span> <span class="op">-&gt;</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>base <span class="op">+</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a><span class="co">// base = 20;                  // uncomment this and the line above becomes a compile error</span></span></code></pre></div>
 <p><strong>Why?</strong> A local variable lives in the <strong>stack
 frame</strong>, which is destroyed after the method returns; whereas the
 lambda/anonymous-class object lives on the <strong>heap</strong> and may

@@ -253,19 +253,38 @@ UB！）；但<strong>浮点</strong>除零得到
 里”非零即真”在 Java 不成立，从根上杜绝 <code>if (a = b)</code>
 笔误。</li>
 </ul>
+<p>把上面几个坑放到一起实测：</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co">// 1) 移位计数按宽度取模：int 按 &amp; 31</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="dv">1</span> <span class="op">&lt;&lt;</span> <span class="dv">32</span><span class="op">);</span>        <span class="co">// 1  (32 &amp; 31 == 0, 即 1&lt;&lt;0)</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="dv">1</span> <span class="op">&lt;&lt;</span> <span class="dv">33</span><span class="op">);</span>        <span class="co">// 2  (33 &amp; 31 == 1)</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="co">// 2) &gt;&gt;&gt; 逻辑右移(补0)，&gt;&gt; 算术右移(补符号位)</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(-</span><span class="dv">8</span> <span class="op">&gt;&gt;</span> <span class="dv">1</span><span class="op">);</span>        <span class="co">// -4</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(-</span><span class="dv">8</span> <span class="op">&gt;&gt;&gt;</span> <span class="dv">28</span><span class="op">);</span>      <span class="co">// 15</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a><span class="co">// 3) 整数除零抛异常；浮点除零不抛</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a><span class="cf">try</span> <span class="op">{</span> <span class="dt">int</span> x <span class="op">=</span> <span class="dv">1</span> <span class="op">/</span> <span class="dv">0</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a><span class="cf">catch</span> <span class="op">(</span><span class="bu">ArithmeticException</span> e<span class="op">)</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>e<span class="op">.</span><span class="fu">getMessage</span><span class="op">());</span> <span class="op">}</span> <span class="co">// / by zero</span></span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="fl">1.0</span> <span class="op">/</span> <span class="dv">0</span><span class="op">);</span>        <span class="co">// Infinity</span></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="fl">0.0</span> <span class="op">/</span> <span class="dv">0</span><span class="op">);</span>        <span class="co">// NaN</span></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a><span class="co">// 4) 有 String 参与时 &#39;+&#39; 是拼接，从左到右求值</span></span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;sum=&quot;</span> <span class="op">+</span> <span class="dv">1</span> <span class="op">+</span> <span class="dv">2</span><span class="op">);</span> <span class="co">// sum=12  (不是 sum=3)</span></span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="dv">1</span> <span class="op">+</span> <span class="dv">2</span> <span class="op">+</span> <span class="st">&quot;=sum&quot;</span><span class="op">);</span> <span class="co">// 3=sum</span></span></code></pre></div>
 <h2 id="五字符串">五、字符串</h2>
 <p><code>String</code> 是<strong>类</strong>，不是
 <code>char*</code>，也不是
 <code>char[]</code>。它<strong>不可变（immutable）</strong>，内容存在堆上（内部是
 <code>byte[]</code> + 编码标记）。</p>
-<div class="sourceCode" id="cb5"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> s <span class="op">=</span> <span class="st">&quot;hello&quot;</span><span class="op">;</span></span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> n <span class="op">=</span> s<span class="op">.</span><span class="fu">length</span><span class="op">();</span>               <span class="co">// 不是 strlen；不靠 \0 结尾</span></span>
-<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="dt">char</span> c <span class="op">=</span> s<span class="op">.</span><span class="fu">charAt</span><span class="op">(</span><span class="dv">0</span><span class="op">);</span></span>
-<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="dt">boolean</span> same <span class="op">=</span> s<span class="op">.</span><span class="fu">equals</span><span class="op">(</span><span class="st">&quot;hello&quot;</span><span class="op">);</span> <span class="co">// 比内容用 equals，不是 ==！</span></span>
-<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> up <span class="op">=</span> s<span class="op">.</span><span class="fu">toUpperCase</span><span class="op">();</span>      <span class="co">// 返回新串，s 本身不变</span></span>
-<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> cat <span class="op">=</span> s <span class="op">+</span> <span class="st">&quot; world&quot;</span><span class="op">;</span>        <span class="co">// 拼接</span></span>
-<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> f <span class="op">=</span> <span class="bu">String</span><span class="op">.</span><span class="fu">format</span><span class="op">(</span><span class="st">&quot;</span><span class="sc">%d</span><span class="st">-</span><span class="sc">%s</span><span class="st">&quot;</span><span class="op">,</span> <span class="dv">42</span><span class="op">,</span> <span class="st">&quot;x&quot;</span><span class="op">);</span>  <span class="co">// 类 printf</span></span></code></pre></div>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> s <span class="op">=</span> <span class="st">&quot;hello&quot;</span><span class="op">;</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> n <span class="op">=</span> s<span class="op">.</span><span class="fu">length</span><span class="op">();</span>               <span class="co">// 不是 strlen；不靠 \0 结尾</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="dt">char</span> c <span class="op">=</span> s<span class="op">.</span><span class="fu">charAt</span><span class="op">(</span><span class="dv">0</span><span class="op">);</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="dt">boolean</span> same <span class="op">=</span> s<span class="op">.</span><span class="fu">equals</span><span class="op">(</span><span class="st">&quot;hello&quot;</span><span class="op">);</span> <span class="co">// 比内容用 equals，不是 ==！</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> up <span class="op">=</span> s<span class="op">.</span><span class="fu">toUpperCase</span><span class="op">();</span>      <span class="co">// 返回新串，s 本身不变</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> cat <span class="op">=</span> s <span class="op">+</span> <span class="st">&quot; world&quot;</span><span class="op">;</span>        <span class="co">// 拼接</span></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> f <span class="op">=</span> <span class="bu">String</span><span class="op">.</span><span class="fu">format</span><span class="op">(</span><span class="st">&quot;</span><span class="sc">%d</span><span class="st">-</span><span class="sc">%s</span><span class="st">&quot;</span><span class="op">,</span> <span class="dv">42</span><span class="op">,</span> <span class="st">&quot;x&quot;</span><span class="op">);</span>  <span class="co">// 类 printf</span></span></code></pre></div>
 <p>对 C 程序员的三个必记点： 1. <strong>不以 <code>\0</code>
 结尾</strong>，长度是显式字段，<code>length()</code> 是 O(1)。 2.
 <strong>比较内容用 <code>.equals()</code>，不要用
@@ -275,18 +294,28 @@ href="03-变量与内存模型.html">「变量与内存模型」</a>会从内存
 3. <strong>不可变</strong>：任何”修改”都返回新对象。频繁拼接用
 <code>StringBuilder</code>（类似手动管理的可变缓冲区），细节见<a
 href="04-数据类型.html">「数据类型」</a>。</p>
+<p>实测”不可变”——所有”修改”方法都返回新串，原串纹丝不动：</p>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> s <span class="op">=</span> <span class="st">&quot;hello&quot;</span><span class="op">;</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> up <span class="op">=</span> s<span class="op">.</span><span class="fu">toUpperCase</span><span class="op">();</span>   <span class="co">// 返回一个新对象</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> rep <span class="op">=</span> s<span class="op">.</span><span class="fu">replace</span><span class="op">(</span><span class="ch">&#39;l&#39;</span><span class="op">,</span> <span class="ch">&#39;L&#39;</span><span class="op">);</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>s<span class="op">);</span>         <span class="co">// hello   &lt;- 原串没变</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>up<span class="op">);</span>        <span class="co">// HELLO</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>rep<span class="op">);</span>       <span class="co">// heLLo</span></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>s <span class="op">==</span> up<span class="op">);</span>   <span class="co">// false   &lt;- up 是另一个对象</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>s<span class="op">.</span><span class="fu">length</span><span class="op">());</span><span class="co">// 5       &lt;- 长度是 O(1) 字段，不扫描 \0</span></span></code></pre></div>
 <h2 id="六控制台-io">六、控制台 IO</h2>
-<div class="sourceCode" id="cb6"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co">// 输出</span></span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;整行带换行&quot;</span><span class="op">);</span></span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">print</span><span class="op">(</span><span class="st">&quot;不带换行&quot;</span><span class="op">);</span></span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">printf</span><span class="op">(</span><span class="st">&quot;</span><span class="sc">%d</span><span class="st"> 和 </span><span class="sc">%.2f%n</span><span class="st">&quot;</span><span class="op">,</span> <span class="dv">10</span><span class="op">,</span> <span class="fl">3.14159</span><span class="op">);</span>  <span class="co">// 类 printf，%n 是平台换行</span></span>
-<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a><span class="co">// 输入</span></span>
-<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">Scanner</span><span class="op">;</span></span>
-<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a><span class="bu">Scanner</span> sc <span class="op">=</span> <span class="kw">new</span> <span class="bu">Scanner</span><span class="op">(</span><span class="bu">System</span><span class="op">.</span><span class="fu">in</span><span class="op">);</span></span>
-<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> x <span class="op">=</span> sc<span class="op">.</span><span class="fu">nextInt</span><span class="op">();</span></span>
-<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> line <span class="op">=</span> sc<span class="op">.</span><span class="fu">nextLine</span><span class="op">();</span></span></code></pre></div>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="co">// 输出</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;整行带换行&quot;</span><span class="op">);</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">print</span><span class="op">(</span><span class="st">&quot;不带换行&quot;</span><span class="op">);</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">printf</span><span class="op">(</span><span class="st">&quot;</span><span class="sc">%d</span><span class="st"> 和 </span><span class="sc">%.2f%n</span><span class="st">&quot;</span><span class="op">,</span> <span class="dv">10</span><span class="op">,</span> <span class="fl">3.14159</span><span class="op">);</span>  <span class="co">// 类 printf，%n 是平台换行</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a><span class="co">// 输入</span></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">Scanner</span><span class="op">;</span></span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a><span class="bu">Scanner</span> sc <span class="op">=</span> <span class="kw">new</span> <span class="bu">Scanner</span><span class="op">(</span><span class="bu">System</span><span class="op">.</span><span class="fu">in</span><span class="op">);</span></span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> x <span class="op">=</span> sc<span class="op">.</span><span class="fu">nextInt</span><span class="op">();</span></span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> line <span class="op">=</span> sc<span class="op">.</span><span class="fu">nextLine</span><span class="op">();</span></span></code></pre></div>
 <p><code>System.out</code> 是一个 <code>PrintStream</code> 对象（对应
 stdout），<code>System.in</code> 是
 <code>InputStream</code>（stdin），<code>System.err</code> 是
@@ -294,16 +323,16 @@ stderr。没有 <code>printf/scanf</code>
 那套可变参格式的类型不安全问题——<code>printf</code> 在 Java
 里做运行时检查，类型不符抛异常而非静默 UB。</p>
 <h2 id="七注释与-javadoc">七、注释与 Javadoc</h2>
-<div class="sourceCode" id="cb7"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="co">// 单行</span></span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="co">/* 多行 */</span></span>
-<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="co">/**</span></span>
-<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a> <span class="co">*</span> Javadoc <span class="co">文档注释，用</span> javadoc <span class="co">工具生成</span> HTML API <span class="co">文档。</span></span>
-<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span><span class="an">@param</span><span class="co"> </span><span class="an">n</span><span class="co"> 输入数量</span></span>
-<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a> <span class="co">*</span> <span class="an">@return</span> <span class="co">计算结果</span></span>
-<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a> <span class="co">*/</span></span>
-<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="dt">int</span> <span class="fu">compute</span><span class="op">(</span><span class="dt">int</span> n<span class="op">)</span> <span class="op">{</span> <span class="cf">return</span> n <span class="op">*</span> <span class="dv">2</span><span class="op">;</span> <span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="co">// 单行</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="co">/* 多行 */</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="co">/**</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a> <span class="co">*</span> Javadoc <span class="co">文档注释，用</span> javadoc <span class="co">工具生成</span> HTML API <span class="co">文档。</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span><span class="an">@param</span><span class="co"> </span><span class="an">n</span><span class="co"> 输入数量</span></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a> <span class="co">*</span> <span class="an">@return</span> <span class="co">计算结果</span></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a> <span class="co">*/</span></span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="dt">int</span> <span class="fu">compute</span><span class="op">(</span><span class="dt">int</span> n<span class="op">)</span> <span class="op">{</span> <span class="cf">return</span> n <span class="op">*</span> <span class="dv">2</span><span class="op">;</span> <span class="op">}</span></span></code></pre></div>
 <p>Javadoc 相当于 Doxygen
 内置进工具链，<code>@param</code>/<code>@return</code>/<code>@throws</code>
 等标签是约定。IDE 也据此显示悬停文档。</p>

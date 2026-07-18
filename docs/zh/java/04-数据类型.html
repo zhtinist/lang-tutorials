@@ -310,6 +310,22 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb3-1"><a href="
 true，大整数则否。<strong>结论：包装类比较值一律用 <code>equals</code>
 或先拆箱成基本类型比。</strong> 拆箱还有 NPE
 风险：<code>Integer x = null; int y = x;</code> 运行时 NPE。</p>
+<p>另一个自动拆箱的隐蔽坑藏在<strong>三元表达式</strong>里：当两个分支是不同的包装类型时，编译器会把两边<strong>都拆箱</strong>再做二元数值提升，最后再装箱——结果类型可能和你想的不一样。</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Ternary <span class="op">{</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Object</span> x <span class="op">=</span> <span class="kw">true</span> <span class="op">?</span> <span class="bu">Integer</span><span class="op">.</span><span class="fu">valueOf</span><span class="op">(</span><span class="dv">1</span><span class="op">)</span> <span class="op">:</span> <span class="bu">Double</span><span class="op">.</span><span class="fu">valueOf</span><span class="op">(</span><span class="dv">2</span><span class="op">);</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>x<span class="op">);</span>                            <span class="co">// 1.0   —— 不是 1！</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>x<span class="op">.</span><span class="fu">getClass</span><span class="op">().</span><span class="fu">getSimpleName</span><span class="op">());</span> <span class="co">// Double</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p><code>true</code> 明明选了
+<code>Integer.valueOf(1)</code>，但因为另一分支是
+<code>Double</code>，整个三元表达式被提升为
+<code>double</code>：<code>Integer</code> 先拆箱成 <code>int</code> →
+提升为 <code>double</code> <code>1.0</code> → 再装箱成
+<code>Double</code>。这是 JLS 三元表达式类型规则叠加自动拆装箱的产物，C
+的 <code>?:</code> 只有算术提升、没有装箱这一层。</p>
 <h2 id="三对象内存布局hotspot">三、对象内存布局（HotSpot）</h2>
 <p>这是 C 程序员最关心的部分：一个 Java 对象在堆上到底长什么样？在
 HotSpot 中，对象由三部分构成：</p>
@@ -357,10 +373,10 @@ Object Pointers）</strong>：把引用编码成 32 位，访问时按对象 8
 <h2 id="四数组是对象">四、数组是对象</h2>
 <p>Java 数组是<strong>堆上的对象</strong>，不是 C 那种”一段裸连续内存 +
 首地址”。</p>
-<div class="sourceCode" id="cb5"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span><span class="op">[]</span> a <span class="op">=</span> <span class="kw">new</span> <span class="dt">int</span><span class="op">[</span><span class="dv">5</span><span class="op">];</span>      <span class="co">// 堆上分配一个数组对象</span></span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>a<span class="op">.</span><span class="fu">length</span><span class="op">);</span>   <span class="co">// 5，length 是内建字段，非方法</span></span>
-<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>a<span class="op">[</span><span class="dv">10</span><span class="op">]</span> <span class="op">=</span> <span class="dv">1</span><span class="op">;</span>                 <span class="co">// ArrayIndexOutOfBoundsException（不是踩内存！）</span></span></code></pre></div>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span><span class="op">[]</span> a <span class="op">=</span> <span class="kw">new</span> <span class="dt">int</span><span class="op">[</span><span class="dv">5</span><span class="op">];</span>      <span class="co">// 堆上分配一个数组对象</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>a<span class="op">.</span><span class="fu">length</span><span class="op">);</span>   <span class="co">// 5，length 是内建字段，非方法</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>a<span class="op">[</span><span class="dv">10</span><span class="op">]</span> <span class="op">=</span> <span class="dv">1</span><span class="op">;</span>                 <span class="co">// ArrayIndexOutOfBoundsException（不是踩内存！）</span></span></code></pre></div>
 <p>内存布局：数组对象 = 对象头（含额外的 <strong>length 字段</strong>）+
 连续的元素区 + 对齐填充。</p>
 <pre><code>int[5] 在堆上：
@@ -396,10 +412,10 @@ UTF-16、每字符 2 字节</strong>。它<strong>不以 <code>\0</code>
 结尾</strong>，长度是显式字段。</p>
 <h3 id="不可变意味着什么">不可变意味着什么</h3>
 <p>任何”修改”方法都返回<strong>新对象</strong>，原串不动：</p>
-<div class="sourceCode" id="cb7"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> s <span class="op">=</span> <span class="st">&quot;abc&quot;</span><span class="op">;</span></span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>s<span class="op">.</span><span class="fu">concat</span><span class="op">(</span><span class="st">&quot;d&quot;</span><span class="op">);</span>            <span class="co">// 返回新串 &quot;abcd&quot;，但没接收，s 还是 &quot;abc&quot;</span></span>
-<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>s <span class="op">=</span> s<span class="op">.</span><span class="fu">toUpperCase</span><span class="op">();</span>      <span class="co">// &quot;ABC&quot; 是新对象，s 改指向它，旧的 &quot;abc&quot; 待回收</span></span></code></pre></div>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> s <span class="op">=</span> <span class="st">&quot;abc&quot;</span><span class="op">;</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>s<span class="op">.</span><span class="fu">concat</span><span class="op">(</span><span class="st">&quot;d&quot;</span><span class="op">);</span>            <span class="co">// 返回新串 &quot;abcd&quot;，但没接收，s 还是 &quot;abc&quot;</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>s <span class="op">=</span> s<span class="op">.</span><span class="fu">toUpperCase</span><span class="op">();</span>      <span class="co">// &quot;ABC&quot; 是新对象，s 改指向它，旧的 &quot;abc&quot; 待回收</span></span></code></pre></div>
 <p>不可变的好处：可安全共享（多线程无需同步）、可缓存哈希、可放心用作
 Map 的 key。代价：拼接产生大量中间对象——所以要用
 <code>StringBuilder</code>。</p>
@@ -407,14 +423,14 @@ Map 的 key。代价：拼接产生大量中间对象——所以要用
 <p><strong>字符串字面量</strong>（源码里的 <code>"hello"</code>）由 JVM
 放进一个<strong>字符串常量池</strong>（driven by
 运行时常量池，位于堆中）。相同字面量<strong>共享同一个对象</strong>：</p>
-<div class="sourceCode" id="cb8"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> a <span class="op">=</span> <span class="st">&quot;hi&quot;</span><span class="op">;</span></span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> b <span class="op">=</span> <span class="st">&quot;hi&quot;</span><span class="op">;</span></span>
-<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>a <span class="op">==</span> b<span class="op">);</span>          <span class="co">// true！同一个池中对象</span></span>
-<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> c <span class="op">=</span> <span class="kw">new</span> <span class="bu">String</span><span class="op">(</span><span class="st">&quot;hi&quot;</span><span class="op">);</span>         <span class="co">// new 强制在堆上另建新对象</span></span>
-<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>a <span class="op">==</span> c<span class="op">);</span>          <span class="co">// false！不同对象</span></span>
-<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>a <span class="op">==</span> c<span class="op">.</span><span class="fu">intern</span><span class="op">());</span> <span class="co">// true！intern() 返回池中的规范对象</span></span></code></pre></div>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> a <span class="op">=</span> <span class="st">&quot;hi&quot;</span><span class="op">;</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> b <span class="op">=</span> <span class="st">&quot;hi&quot;</span><span class="op">;</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>a <span class="op">==</span> b<span class="op">);</span>          <span class="co">// true！同一个池中对象</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> c <span class="op">=</span> <span class="kw">new</span> <span class="bu">String</span><span class="op">(</span><span class="st">&quot;hi&quot;</span><span class="op">);</span>         <span class="co">// new 强制在堆上另建新对象</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>a <span class="op">==</span> c<span class="op">);</span>          <span class="co">// false！不同对象</span></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>a <span class="op">==</span> c<span class="op">.</span><span class="fu">intern</span><span class="op">());</span> <span class="co">// true！intern() 返回池中的规范对象</span></span></code></pre></div>
 <p>内存图：</p>
 <pre><code>常量池（堆内）          普通堆
 [ &quot;hi&quot; 对象P ]◀──a      [ &quot;hi&quot; 对象Q ]◀── c (new 出来的)
@@ -430,16 +446,32 @@ c.intern() 查池，返回 P；故 a == c.intern() 为 true</code></pre>
 <li>编译期能确定的常量拼接（<code>"a" + "b"</code>）会被 javac
 直接折叠成 <code>"ab"</code> 字面量入池。</li>
 </ul>
+<p>下面这个可运行例子把”编译期折叠”与”运行期拼接”的区别看得一清二楚：</p>
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Folding <span class="op">{</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>        <span class="bu">String</span> s           <span class="op">=</span> <span class="st">&quot;ab&quot;</span><span class="op">;</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>        <span class="bu">String</span> compileTime <span class="op">=</span> <span class="st">&quot;a&quot;</span> <span class="op">+</span> <span class="st">&quot;b&quot;</span><span class="op">;</span>   <span class="co">// 两个字面量，javac 折叠成 &quot;ab&quot; 入池</span></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>        <span class="bu">String</span> c           <span class="op">=</span> <span class="st">&quot;a&quot;</span><span class="op">;</span>         <span class="co">// 非 final 局部变量</span></span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">String</span> runtime     <span class="op">=</span> c <span class="op">+</span> <span class="st">&quot;b&quot;</span><span class="op">;</span>     <span class="co">// 运行期用 StringConcatFactory 拼接，新对象</span></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>s <span class="op">==</span> compileTime<span class="op">);</span>      <span class="co">// true  —— 同一池对象</span></span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>s <span class="op">==</span> runtime<span class="op">);</span>          <span class="co">// false —— 运行期新建</span></span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>s <span class="op">==</span> runtime<span class="op">.</span><span class="fu">intern</span><span class="op">());</span> <span class="co">// true  —— intern 取回池中规范对象</span></span>
+<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>只要参与拼接的都是编译期常量（字面量、<code>final</code>
+常量），结果就在编译期折叠成一个字面量、进常量池；只要有一个运行期才知道的变量（如上面非
+final 的 <code>c</code>），拼接就发生在运行期、产生堆上新对象。</p>
 <h3 id="stringbuilder可变缓冲">StringBuilder：可变缓冲</h3>
 <p>需要频繁拼接、循环构造字符串时用
 <code>StringBuilder</code>（非线程安全，单线程用它；线程安全版是
 <code>StringBuffer</code>）：</p>
-<div class="sourceCode" id="cb10"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="bu">StringBuilder</span> sb <span class="op">=</span> <span class="kw">new</span> <span class="bu">StringBuilder</span><span class="op">();</span></span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">100</span><span class="op">;</span> i<span class="op">++)</span> <span class="op">{</span></span>
-<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>    sb<span class="op">.</span><span class="fu">append</span><span class="op">(</span>i<span class="op">).</span><span class="fu">append</span><span class="op">(</span><span class="ch">&#39;,&#39;</span><span class="op">);</span>   <span class="co">// 就地修改内部 char/byte 缓冲，不建中间 String</span></span>
-<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> result <span class="op">=</span> sb<span class="op">.</span><span class="fu">toString</span><span class="op">();</span>  <span class="co">// 最后一次性生成 String</span></span></code></pre></div>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="bu">StringBuilder</span> sb <span class="op">=</span> <span class="kw">new</span> <span class="bu">StringBuilder</span><span class="op">();</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">100</span><span class="op">;</span> i<span class="op">++)</span> <span class="op">{</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>    sb<span class="op">.</span><span class="fu">append</span><span class="op">(</span>i<span class="op">).</span><span class="fu">append</span><span class="op">(</span><span class="ch">&#39;,&#39;</span><span class="op">);</span>   <span class="co">// 就地修改内部 char/byte 缓冲，不建中间 String</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> result <span class="op">=</span> sb<span class="op">.</span><span class="fu">toString</span><span class="op">();</span>  <span class="co">// 最后一次性生成 String</span></span></code></pre></div>
 <p>它内部维护一个可扩容的字节数组（类似 C 里手动 <code>realloc</code>
 的缓冲区），<code>append</code>
 就地追加，容量不够才扩容（通常翻倍）。<strong>编译器会把

@@ -312,6 +312,62 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb11-1"><a href=
 <span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>log<span class="op">.</span><span class="fu">info</span><span class="op">(</span><span class="st">&quot;user {} logged in&quot;</span><span class="op">,</span> userId<span class="op">);</span>   <span class="co">// 占位符 {} 惰性拼接,级别不够时不构造字符串,省开销</span></span>
 <span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>log<span class="op">.</span><span class="fu">error</span><span class="op">(</span><span class="st">&quot;failed&quot;</span><span class="op">,</span> exception<span class="op">);</span></span></code></pre></div>
 <p>配置文件(<code>logback.xml</code>)控制级别、输出格式、滚动策略,无需改代码。</p>
+<blockquote>
+<p>“门面依赖接口、运行期绑定实现”的底层机制,就是 JDK 自带的
+<strong>SPI(Service Provider
+Interface)</strong>:<code>java.util.ServiceLoader</code>。SLF4J
+正是靠它在运行期发现并绑定 <code>Logback</code> 等实现。下面用纯 JDK
+演示这套机制——<strong>无需任何第三方库</strong>。</p>
+</blockquote>
+<p>调用方只依赖接口 <code>Greeter</code>,实现类通过
+<code>META-INF/services/</code> 下的配置文件注册,运行期由
+<code>ServiceLoader</code> 发现,<code>new</code>/<code>import</code>
+都不出现在调用方代码里:</p>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="co">// spi/Greeter.java —— &quot;门面&quot;:调用方只依赖它</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span><span class="im"> spi</span><span class="op">;</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">interface</span> Greeter <span class="op">{</span> <span class="bu">String</span> <span class="fu">greet</span><span class="op">(</span><span class="bu">String</span> name<span class="op">);</span> <span class="op">}</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a><span class="co">// spi/EnglishGreeter.java —— 实现之一</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span><span class="im"> spi</span><span class="op">;</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> EnglishGreeter <span class="kw">implements</span> Greeter <span class="op">{</span></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="bu">String</span> <span class="fu">greet</span><span class="op">(</span><span class="bu">String</span> name<span class="op">)</span> <span class="op">{</span> <span class="cf">return</span> <span class="st">&quot;Hello, &quot;</span> <span class="op">+</span> name<span class="op">;</span> <span class="op">}</span></span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a><span class="co">// spi/FrenchGreeter.java —— 实现之二</span></span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span><span class="im"> spi</span><span class="op">;</span></span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> FrenchGreeter <span class="kw">implements</span> Greeter <span class="op">{</span></span>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="bu">String</span> <span class="fu">greet</span><span class="op">(</span><span class="bu">String</span> name<span class="op">)</span> <span class="op">{</span> <span class="cf">return</span> <span class="st">&quot;Bonjour, &quot;</span> <span class="op">+</span> name<span class="op">;</span> <span class="op">}</span></span>
+<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a><span class="co">// spi/Main.java —— 调用方:运行期发现实现,不引用任何实现类</span></span>
+<span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span><span class="im"> spi</span><span class="op">;</span></span>
+<span id="cb12-19"><a href="#cb12-19" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">ServiceLoader</span><span class="op">;</span></span>
+<span id="cb12-20"><a href="#cb12-20" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Main <span class="op">{</span></span>
+<span id="cb12-21"><a href="#cb12-21" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb12-22"><a href="#cb12-22" aria-hidden="true" tabindex="-1"></a>        <span class="bu">ServiceLoader</span><span class="op">&lt;</span>Greeter<span class="op">&gt;</span> loader <span class="op">=</span> <span class="bu">ServiceLoader</span><span class="op">.</span><span class="fu">load</span><span class="op">(</span>Greeter<span class="op">.</span><span class="fu">class</span><span class="op">);</span></span>
+<span id="cb12-23"><a href="#cb12-23" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span>Greeter g <span class="op">:</span> loader<span class="op">)</span> <span class="op">{</span>   <span class="co">// 运行期发现,调用方不 new/import 具体实现</span></span>
+<span id="cb12-24"><a href="#cb12-24" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>g<span class="op">.</span><span class="fu">getClass</span><span class="op">().</span><span class="fu">getSimpleName</span><span class="op">()</span> <span class="op">+</span> <span class="st">&quot; -&gt; &quot;</span> <span class="op">+</span> g<span class="op">.</span><span class="fu">greet</span><span class="op">(</span><span class="st">&quot;Ada&quot;</span><span class="op">));</span></span>
+<span id="cb12-25"><a href="#cb12-25" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb12-26"><a href="#cb12-26" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb12-27"><a href="#cb12-27" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>注册文件(纯文本,每行一个实现类全名),放在类路径的
+<code>META-INF/services/</code> 下,<strong>文件名 =
+接口全名</strong>:</p>
+<pre><code>文件:META-INF/services/spi.Greeter
+spi.EnglishGreeter
+spi.FrenchGreeter</code></pre>
+<p>编译运行(<code>out</code> 目录同时含 class 与
+<code>META-INF/services/</code>):</p>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="ex">javac</span> <span class="at">-d</span> out spi/<span class="pp">*</span>.java</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="ex">java</span> <span class="at">-cp</span> out spi.Main</span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="co"># EnglishGreeter -&gt; Hello, Ada</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a><span class="co"># FrenchGreeter -&gt; Bonjour, Ada</span></span></code></pre></div>
+<p>新增一种实现只需加一个类 +
+在注册文件里加一行,调用方<strong>零改动</strong>——这正是”面向接口编程 +
+可插拔实现”的 JDK 原生支撑,也是 JDBC 驱动、SLF4J
+绑定、<code>java.nio.file.spi</code> 等的共同底座。</p>
 <h3 id="高性能网络netty">高性能网络:Netty</h3>
 <p>异步事件驱动的网络框架,基于 Java NIO(多路复用 epoll/kqueue),用
 <strong>Reactor 模式</strong> + 少量线程处理海量连接。RPC
@@ -338,10 +394,10 @@ jar,<code>java -jar app.jar</code> 直接跑。Spring Boot 用
 <code>maven-shade-plugin</code> 或 Gradle <code>shadow</code>
 插件。</li>
 </ul>
-<div class="sourceCode" id="cb12"><pre
-class="sourceCode bash"><code class="sourceCode bash"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="ex">mvn</span> package                       <span class="co"># 产出 target/app.jar</span></span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="ex">java</span> <span class="at">-jar</span> target/app.jar          <span class="co"># fat-jar 直接运行</span></span>
-<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="ex">java</span> <span class="at">-cp</span> <span class="st">&quot;app.jar:libs/*&quot;</span> Main    <span class="co"># 普通 jar 需指定 classpath</span></span></code></pre></div>
+<div class="sourceCode" id="cb15"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="ex">mvn</span> package                       <span class="co"># 产出 target/app.jar</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="ex">java</span> <span class="at">-jar</span> target/app.jar          <span class="co"># fat-jar 直接运行</span></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a><span class="ex">java</span> <span class="at">-cp</span> <span class="st">&quot;app.jar:libs/*&quot;</span> Main    <span class="co"># 普通 jar 需指定 classpath</span></span></code></pre></div>
 <blockquote>
 <p>fat-jar 里多个依赖含同名资源(如各自的
 <code>META-INF/services</code>)会冲突,shade 插件的 transformer
@@ -351,11 +407,11 @@ class="sourceCode bash"><code class="sourceCode bash"><span id="cb12-1"><a href=
 <p>Java 通过 <strong>JNI(Java Native Interface)</strong> 调
 C/C++(如需复用现有本地库、做 CPU
 密集计算)。但代价不小,通常是最后手段:</p>
-<div class="sourceCode" id="cb13"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> NativeLib <span class="op">{</span></span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">loadLibrary</span><span class="op">(</span><span class="st">&quot;mylib&quot;</span><span class="op">);</span> <span class="op">}</span>   <span class="co">// 加载 libmylib.so/.dll</span></span>
-<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="kw">native</span> <span class="dt">int</span> <span class="fu">compute</span><span class="op">(</span><span class="dt">int</span><span class="op">[]</span> data<span class="op">);</span>    <span class="co">// native 方法,实现在 C 侧</span></span>
-<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb16"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> NativeLib <span class="op">{</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">loadLibrary</span><span class="op">(</span><span class="st">&quot;mylib&quot;</span><span class="op">);</span> <span class="op">}</span>   <span class="co">// 加载 libmylib.so/.dll</span></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="kw">native</span> <span class="dt">int</span> <span class="fu">compute</span><span class="op">(</span><span class="dt">int</span><span class="op">[]</span> data<span class="op">);</span>    <span class="co">// native 方法,实现在 C 侧</span></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>代价来源: - <strong>调用开销</strong>:每次跨越 JNI
 边界有固定成本(参数封送、状态切换),不适合高频细粒度调用。 -
 <strong>对象封送</strong>:Java 对象/数组在托管堆,C 侧访问需

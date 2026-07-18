@@ -257,13 +257,42 @@ vector。要连续存基本类型,得用原生 <code>int[]</code>
 新容量 = 10 + 5 = 15,分配 Object[15],拷贝 10 个引用过去,旧数组待 GC</code></pre>
 <p>对比 C++ <code>std::vector</code> 常见 2 倍扩容(libstdc++ 用 2x,MSVC
 用 1.5x)。均摊 O(1) 追加。</p>
-<h3 id="linkedlist双向链表">LinkedList:双向链表</h3>
+<p>用反射窥探底层 <code>elementData</code> 数组的真实长度,可直接观察这条
+1.5 倍增长曲线(容量是内部实现,反射需加 <code>--add-opens</code>):</p>
 <div class="sourceCode" id="cb8"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="kw">private</span> <span class="dt">static</span> <span class="kw">class</span> <span class="bu">Node</span><span class="op">&lt;</span>E<span class="op">&gt;</span> <span class="op">{</span></span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>    E item<span class="op">;</span></span>
-<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    <span class="bu">Node</span><span class="op">&lt;</span>E<span class="op">&gt;</span> next<span class="op">;</span></span>
-<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>    <span class="bu">Node</span><span class="op">&lt;</span>E<span class="op">&gt;</span> prev<span class="op">;</span></span>
-<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+class="sourceCode java"><code class="sourceCode java"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">lang</span><span class="op">.</span><span class="im">reflect</span><span class="op">.*;</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.*;</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> GrowDemo <span class="op">{</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">int</span> <span class="fu">cap</span><span class="op">(</span><span class="bu">ArrayList</span><span class="op">&lt;?&gt;</span> list<span class="op">)</span> <span class="kw">throws</span> <span class="bu">Exception</span> <span class="op">{</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Field</span> f <span class="op">=</span> <span class="bu">ArrayList</span><span class="op">.</span><span class="fu">class</span><span class="op">.</span><span class="fu">getDeclaredField</span><span class="op">(</span><span class="st">&quot;elementData&quot;</span><span class="op">);</span></span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>        f<span class="op">.</span><span class="fu">setAccessible</span><span class="op">(</span><span class="kw">true</span><span class="op">);</span></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="op">((</span><span class="bu">Object</span><span class="op">[])</span> f<span class="op">.</span><span class="fu">get</span><span class="op">(</span>list<span class="op">)).</span><span class="fu">length</span><span class="op">;</span></span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="kw">throws</span> <span class="bu">Exception</span> <span class="op">{</span></span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>        <span class="bu">ArrayList</span><span class="op">&lt;</span><span class="bu">Integer</span><span class="op">&gt;</span> list <span class="op">=</span> <span class="kw">new</span> <span class="bu">ArrayList</span><span class="op">&lt;&gt;();</span></span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;initial capacity = &quot;</span> <span class="op">+</span> <span class="fu">cap</span><span class="op">(</span>list<span class="op">));</span></span>
+<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span> last <span class="op">=</span> <span class="op">-</span><span class="dv">1</span><span class="op">;</span></span>
+<span id="cb8-13"><a href="#cb8-13" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">40</span><span class="op">;</span> i<span class="op">++)</span> <span class="op">{</span></span>
+<span id="cb8-14"><a href="#cb8-14" aria-hidden="true" tabindex="-1"></a>            list<span class="op">.</span><span class="fu">add</span><span class="op">(</span>i<span class="op">);</span></span>
+<span id="cb8-15"><a href="#cb8-15" aria-hidden="true" tabindex="-1"></a>            <span class="dt">int</span> c <span class="op">=</span> <span class="fu">cap</span><span class="op">(</span>list<span class="op">);</span></span>
+<span id="cb8-16"><a href="#cb8-16" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> <span class="op">(</span>c <span class="op">!=</span> last<span class="op">)</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;size=&quot;</span> <span class="op">+</span> list<span class="op">.</span><span class="fu">size</span><span class="op">()</span> <span class="op">+</span> <span class="st">&quot; -&gt; capacity=&quot;</span> <span class="op">+</span> c<span class="op">);</span> last <span class="op">=</span> c<span class="op">;</span> <span class="op">}</span></span>
+<span id="cb8-17"><a href="#cb8-17" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb8-18"><a href="#cb8-18" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb8-19"><a href="#cb8-19" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb8-20"><a href="#cb8-20" aria-hidden="true" tabindex="-1"></a><span class="co">// 运行:java --add-opens java.base/java.util=ALL-UNNAMED GrowDemo.java</span></span>
+<span id="cb8-21"><a href="#cb8-21" aria-hidden="true" tabindex="-1"></a><span class="co">// initial capacity = 0     &lt;- 空构造器懒分配,首次 add 才建长度 10 的数组</span></span>
+<span id="cb8-22"><a href="#cb8-22" aria-hidden="true" tabindex="-1"></a><span class="co">// size=1  -&gt; capacity=10</span></span>
+<span id="cb8-23"><a href="#cb8-23" aria-hidden="true" tabindex="-1"></a><span class="co">// size=11 -&gt; capacity=15   &lt;- 10 + (10&gt;&gt;1) = 15</span></span>
+<span id="cb8-24"><a href="#cb8-24" aria-hidden="true" tabindex="-1"></a><span class="co">// size=16 -&gt; capacity=22   &lt;- 15 + (15&gt;&gt;1) = 22</span></span>
+<span id="cb8-25"><a href="#cb8-25" aria-hidden="true" tabindex="-1"></a><span class="co">// size=23 -&gt; capacity=33</span></span>
+<span id="cb8-26"><a href="#cb8-26" aria-hidden="true" tabindex="-1"></a><span class="co">// size=34 -&gt; capacity=49</span></span></code></pre></div>
+<h3 id="linkedlist双向链表">LinkedList:双向链表</h3>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">private</span> <span class="dt">static</span> <span class="kw">class</span> <span class="bu">Node</span><span class="op">&lt;</span>E<span class="op">&gt;</span> <span class="op">{</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>    E item<span class="op">;</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>    <span class="bu">Node</span><span class="op">&lt;</span>E<span class="op">&gt;</span> next<span class="op">;</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>    <span class="bu">Node</span><span class="op">&lt;</span>E<span class="op">&gt;</span> prev<span class="op">;</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>每个节点是独立堆对象:对象头 16 字节 + 3
 个引用(item/next/prev,压缩指针各 4 字节)≈ 32
 字节/节点,存一个元素开销巨大。内存图:</p>
@@ -322,14 +351,14 @@ O(n)(从最近的一端走)。<strong>实践中 <code>ArrayList</code>
 <h2 id="四hashmap重头戏">四、HashMap:重头戏</h2>
 <p>对应 C++ <code>std::unordered_map</code>,但实现细节差别很大。</p>
 <h3 id="结构桶数组-链表红黑树">结构:桶数组 + 链表/红黑树</h3>
-<div class="sourceCode" id="cb10"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="kw">transient</span> <span class="bu">Node</span><span class="op">&lt;</span>K<span class="op">,</span>V<span class="op">&gt;[]</span> table<span class="op">;</span>  <span class="co">// 桶数组,长度总是 2 的幂</span></span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="dt">static</span> <span class="kw">class</span> <span class="bu">Node</span><span class="op">&lt;</span>K<span class="op">,</span>V<span class="op">&gt;</span> <span class="op">{</span></span>
-<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">final</span> <span class="dt">int</span> hash<span class="op">;</span>   <span class="co">// 缓存的扰动后哈希</span></span>
-<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">final</span> K key<span class="op">;</span></span>
-<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>    V value<span class="op">;</span></span>
-<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>    <span class="bu">Node</span><span class="op">&lt;</span>K<span class="op">,</span>V<span class="op">&gt;</span> next<span class="op">;</span>   <span class="co">// 链表指针(拉链法解决冲突)</span></span>
-<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="kw">transient</span> <span class="bu">Node</span><span class="op">&lt;</span>K<span class="op">,</span>V<span class="op">&gt;[]</span> table<span class="op">;</span>  <span class="co">// 桶数组,长度总是 2 的幂</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="dt">static</span> <span class="kw">class</span> <span class="bu">Node</span><span class="op">&lt;</span>K<span class="op">,</span>V<span class="op">&gt;</span> <span class="op">{</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">final</span> <span class="dt">int</span> hash<span class="op">;</span>   <span class="co">// 缓存的扰动后哈希</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">final</span> K key<span class="op">;</span></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>    V value<span class="op">;</span></span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>    <span class="bu">Node</span><span class="op">&lt;</span>K<span class="op">,</span>V<span class="op">&gt;</span> next<span class="op">;</span>   <span class="co">// 链表指针(拉链法解决冲突)</span></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>内存图(冲突时拉链):</p>
 <pre><code>table (Node[16])
 ┌────┐
@@ -344,11 +373,11 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb10-1"><a href=
 的幂,等价取模但更快)。若直接用
 <code>key.hashCode()</code>,高位不参与运算(因为 <code>&amp; (n-1)</code>
 只保留低位),高位不同、低位相同的键会撞。扰动把高 16 位异或到低位:</p>
-<div class="sourceCode" id="cb12"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="dt">static</span> <span class="dt">final</span> <span class="dt">int</span> <span class="fu">hash</span><span class="op">(</span><span class="bu">Object</span> key<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> h<span class="op">;</span></span>
-<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="op">(</span>key <span class="op">==</span> <span class="kw">null</span><span class="op">)</span> <span class="op">?</span> <span class="dv">0</span> <span class="op">:</span> <span class="op">(</span>h <span class="op">=</span> key<span class="op">.</span><span class="fu">hashCode</span><span class="op">())</span> <span class="op">^</span> <span class="op">(</span>h <span class="op">&gt;&gt;&gt;</span> <span class="dv">16</span><span class="op">);</span></span>
-<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="dt">static</span> <span class="dt">final</span> <span class="dt">int</span> <span class="fu">hash</span><span class="op">(</span><span class="bu">Object</span> key<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> h<span class="op">;</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="op">(</span>key <span class="op">==</span> <span class="kw">null</span><span class="op">)</span> <span class="op">?</span> <span class="dv">0</span> <span class="op">:</span> <span class="op">(</span>h <span class="op">=</span> key<span class="op">.</span><span class="fu">hashCode</span><span class="op">())</span> <span class="op">^</span> <span class="op">(</span>h <span class="op">&gt;&gt;&gt;</span> <span class="dv">16</span><span class="op">);</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <h3 id="冲突加剧时-treeify">冲突加剧时 treeify</h3>
 <p>同一个桶的链表长度 <strong>≥ 8</strong> 且 <strong>table 长度 ≥
 64</strong> 时,链表转为<strong>红黑树</strong>,把该桶最坏查找从 O(n)
@@ -423,6 +452,28 @@ head ──▶ node ──▶ node ──▶ node ──▶ tail</code></pre>
 等有序视图。key 需可比较(<code>Comparable</code> 或传
 <code>Comparator</code>),见<a
 href="11-标准库算法.html">「标准库算法」</a>。</p>
+<p>三种 Map 的迭代顺序对比一目了然:<code>HashMap</code>
+由桶位置决定(未指定、看着”乱”),<code>LinkedHashMap</code>
+保插入序,<code>TreeMap</code> 按 key 排序:</p>
+<div class="sourceCode" id="cb17"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.*;</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> MapOrder <span class="op">{</span></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">fill</span><span class="op">(</span><span class="bu">Map</span><span class="op">&lt;</span><span class="bu">String</span><span class="op">,</span><span class="bu">Integer</span><span class="op">&gt;</span> m<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span><span class="bu">String</span> k <span class="op">:</span> <span class="kw">new</span> <span class="bu">String</span><span class="op">[]{</span><span class="st">&quot;banana&quot;</span><span class="op">,</span><span class="st">&quot;apple&quot;</span><span class="op">,</span><span class="st">&quot;cherry&quot;</span><span class="op">,</span><span class="st">&quot;date&quot;</span><span class="op">})</span> m<span class="op">.</span><span class="fu">put</span><span class="op">(</span>k<span class="op">,</span> k<span class="op">.</span><span class="fu">length</span><span class="op">());</span></span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Map</span><span class="op">&lt;</span><span class="bu">String</span><span class="op">,</span><span class="bu">Integer</span><span class="op">&gt;</span> hash <span class="op">=</span> <span class="kw">new</span> <span class="bu">HashMap</span><span class="op">&lt;&gt;();</span></span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Map</span><span class="op">&lt;</span><span class="bu">String</span><span class="op">,</span><span class="bu">Integer</span><span class="op">&gt;</span> linked <span class="op">=</span> <span class="kw">new</span> <span class="bu">LinkedHashMap</span><span class="op">&lt;&gt;();</span></span>
+<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Map</span><span class="op">&lt;</span><span class="bu">String</span><span class="op">,</span><span class="bu">Integer</span><span class="op">&gt;</span> tree <span class="op">=</span> <span class="kw">new</span> <span class="bu">TreeMap</span><span class="op">&lt;&gt;();</span></span>
+<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a>        <span class="fu">fill</span><span class="op">(</span>hash<span class="op">);</span> <span class="fu">fill</span><span class="op">(</span>linked<span class="op">);</span> <span class="fu">fill</span><span class="op">(</span>tree<span class="op">);</span></span>
+<span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;HashMap:       &quot;</span> <span class="op">+</span> hash<span class="op">.</span><span class="fu">keySet</span><span class="op">());</span></span>
+<span id="cb17-12"><a href="#cb17-12" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;LinkedHashMap: &quot;</span> <span class="op">+</span> linked<span class="op">.</span><span class="fu">keySet</span><span class="op">());</span></span>
+<span id="cb17-13"><a href="#cb17-13" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;TreeMap:       &quot;</span> <span class="op">+</span> tree<span class="op">.</span><span class="fu">keySet</span><span class="op">());</span></span>
+<span id="cb17-14"><a href="#cb17-14" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb17-15"><a href="#cb17-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb17-16"><a href="#cb17-16" aria-hidden="true" tabindex="-1"></a><span class="co">// HashMap:       [banana, date, apple, cherry]   &lt;- 桶顺序,未指定(切勿依赖)</span></span>
+<span id="cb17-17"><a href="#cb17-17" aria-hidden="true" tabindex="-1"></a><span class="co">// LinkedHashMap: [banana, apple, cherry, date]   &lt;- 插入顺序</span></span>
+<span id="cb17-18"><a href="#cb17-18" aria-hidden="true" tabindex="-1"></a><span class="co">// TreeMap:       [apple, banana, cherry, date]   &lt;- 字典序</span></span></code></pre></div>
 <h2 id="六hashset-arraydeque">六、HashSet / ArrayDeque</h2>
 <ul>
 <li><strong>HashSet</strong>:内部就是一个 <code>HashMap</code>,元素当
@@ -458,12 +509,31 @@ Collections、fastutil)。</p>
 <code>expectedModCount</code>,每次 <code>next()</code>
 校验;若期间集合被非迭代器途径修改,抛
 <code>ConcurrentModificationException</code>。</p>
-<div class="sourceCode" id="cb17"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="bu">List</span><span class="op">&lt;</span><span class="bu">Integer</span><span class="op">&gt;</span> list <span class="op">=</span> <span class="kw">new</span> <span class="bu">ArrayList</span><span class="op">&lt;&gt;(</span><span class="bu">List</span><span class="op">.</span><span class="fu">of</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">));</span></span>
-<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="bu">Integer</span> x <span class="op">:</span> list<span class="op">)</span> <span class="op">{</span>      <span class="co">// 增强 for 底层用 Iterator</span></span>
-<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>x <span class="op">==</span> <span class="dv">2</span><span class="op">)</span> list<span class="op">.</span><span class="fu">remove</span><span class="op">(</span>x<span class="op">);</span> <span class="co">// 结构修改 → modCount 变 → 下次 next() 抛异常</span></span>
-<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a><span class="co">// 正确做法:用 iterator.remove() 或 list.removeIf(x -&gt; x == 2)</span></span></code></pre></div>
+<div class="sourceCode" id="cb19"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="bu">List</span><span class="op">&lt;</span><span class="bu">Integer</span><span class="op">&gt;</span> list <span class="op">=</span> <span class="kw">new</span> <span class="bu">ArrayList</span><span class="op">&lt;&gt;(</span><span class="bu">List</span><span class="op">.</span><span class="fu">of</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">));</span></span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="bu">Integer</span> x <span class="op">:</span> list<span class="op">)</span> <span class="op">{</span>      <span class="co">// 增强 for 底层用 Iterator</span></span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>x <span class="op">==</span> <span class="dv">2</span><span class="op">)</span> list<span class="op">.</span><span class="fu">remove</span><span class="op">(</span>x<span class="op">);</span> <span class="co">// 结构修改 → modCount 变 → 下次 next() 抛异常</span></span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a><span class="co">// 正确做法:用 iterator.remove() 或 list.removeIf(x -&gt; x == 2)</span></span></code></pre></div>
+<p>实际跑一遍能看到异常确实抛出,而 <code>removeIf</code> 安全无恙:</p>
+<div class="sourceCode" id="cb20"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.*;</span></span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> FailFast <span class="op">{</span></span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>        <span class="bu">List</span><span class="op">&lt;</span><span class="bu">Integer</span><span class="op">&gt;</span> list <span class="op">=</span> <span class="kw">new</span> <span class="bu">ArrayList</span><span class="op">&lt;&gt;(</span><span class="bu">List</span><span class="op">.</span><span class="fu">of</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">,</span> <span class="dv">4</span><span class="op">));</span></span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">{</span></span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> <span class="op">(</span><span class="bu">Integer</span> x <span class="op">:</span> list<span class="op">)</span> <span class="op">{</span>          <span class="co">// 增强 for 底层用 Iterator</span></span>
+<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a>                <span class="cf">if</span> <span class="op">(</span>x <span class="op">==</span> <span class="dv">2</span><span class="op">)</span> list<span class="op">.</span><span class="fu">remove</span><span class="op">(</span>x<span class="op">);</span>   <span class="co">// 结构性修改,modCount 变化</span></span>
+<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
+<span id="cb20-9"><a href="#cb20-9" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="cf">catch</span> <span class="op">(</span><span class="bu">ConcurrentModificationException</span> e<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb20-10"><a href="#cb20-10" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;caught: &quot;</span> <span class="op">+</span> e<span class="op">.</span><span class="fu">getClass</span><span class="op">().</span><span class="fu">getSimpleName</span><span class="op">());</span></span>
+<span id="cb20-11"><a href="#cb20-11" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb20-12"><a href="#cb20-12" aria-hidden="true" tabindex="-1"></a>        list<span class="op">.</span><span class="fu">removeIf</span><span class="op">(</span>x <span class="op">-&gt;</span> x <span class="op">==</span> <span class="dv">2</span><span class="op">);</span>           <span class="co">// 正确:内部走迭代器,不抛 CME</span></span>
+<span id="cb20-13"><a href="#cb20-13" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;after removeIf: &quot;</span> <span class="op">+</span> list<span class="op">);</span></span>
+<span id="cb20-14"><a href="#cb20-14" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb20-15"><a href="#cb20-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb20-16"><a href="#cb20-16" aria-hidden="true" tabindex="-1"></a><span class="co">// caught: ConcurrentModificationException</span></span>
+<span id="cb20-17"><a href="#cb20-17" aria-hidden="true" tabindex="-1"></a><span class="co">// after removeIf: [1, 3, 4]</span></span></code></pre></div>
 <p>fail-fast
 是<strong>尽力而为</strong>的错误检测(不保证一定触发),不是并发保护;真正并发用
 <code>CopyOnWriteArrayList</code>/<code>ConcurrentHashMap</code>(弱一致迭代器,不抛此异常)。C++
