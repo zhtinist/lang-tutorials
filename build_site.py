@@ -77,7 +77,11 @@ def main():
 <div class="wrap">
 <div class="hero"><h1>面向 C/C++ 程序员的其他语言教程</h1>
 <p>假设你已精通 C/C++——指针、栈/堆、值传递与引用、手动内存管理。<br>
-这三套教程不重复基础语法,而是讲清 <b>每个操作在底层到底发生了什么</b>,并处处与 C/C++ 对照。</p></div>
+这三套教程不重复基础语法,而是讲清 <b>每个操作在底层到底发生了什么</b>,并处处与 C/C++ 对照。</p>
+<p style="text-align:center;margin:8px 0 0">
+<a href="https://github.com/zhtinist/lang-tutorials/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/zhtinist/lang-tutorials?style=flat-square&logo=github&label=Stars"></a>
+<a href="https://github.com/zhtinist/lang-tutorials/watchers"><img alt="Watchers" src="https://img.shields.io/github/watchers/zhtinist/lang-tutorials?style=flat-square&logo=github&label=Watchers"></a>
+<a href="https://github.com/zhtinist/lang-tutorials/network/members"><img alt="Forks" src="https://img.shields.io/github/forks/zhtinist/lang-tutorials?style=flat-square&logo=github&label=Forks"></a></p></div>
 <div class="cards">{cards}</div>
 <h2>为什么是这三门</h2>
 <ul>
@@ -85,8 +89,13 @@ def main():
 <li><b>Java</b>——基本类型 vs 引用类型、对象头与逃逸分析、JMM 与虚拟线程、GC 演进。</li>
 <li><b>Go</b>——一切皆值拷贝、slice/map/channel 的表头结构、逃逸分析、GMP 调度、Swiss Tables。</li>
 </ul>
-<p class="note">本教程内容在创作过程中借助了 <b>Claude</b> 与 <b>Cursor</b> 辅助撰写与校对,
-作者/维护者为 HTZHU(本仓库唯一 contributor)。源码见
+<h2>⭐ Star 趋势</h2>
+<a href="https://star-history.com/#zhtinist/lang-tutorials&Date" target="_blank" rel="noopener">
+<img alt="Star History Chart" style="max-width:100%;border:1px solid var(--border);border-radius:8px"
+src="https://api.star-history.com/svg?repos=zhtinist/lang-tutorials&type=Date"></a>
+<p class="note">star 增长曲线(数据来自 star-history.com);实时 star / watch 数见页首徽章。</p>
+<p class="note">本教程内容在创作过程中借助了 <b>Claude</b> 与 <b>Cursor</b> 辅助撰写与校对。
+作者 / 维护者:HTZHU〈<a href="mailto:zhu.h4@northeastern.edu">zhu.h4@northeastern.edu</a>〉。源码见
 <a href="https://github.com/zhtinist/lang-tutorials">GitHub 仓库</a>。</p>
 </div></body></html>"""
     open(os.path.join(DOCS, "index.html"), "w", encoding="utf-8").write(home)

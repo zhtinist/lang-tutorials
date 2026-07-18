@@ -31,7 +31,7 @@ python3 build_site.py       # 依赖 pandoc;输出到 docs/,可用作 GitHub Pag
 
 本教程内容在创作过程中**借助了 [Claude](https://claude.com/claude-code) 与 [Cursor](https://cursor.com) 辅助**撰写、校对与勘误;
 所有事实性结论均经作者复核(如 CPython 3.14 的字节码/内存池、Go 1.24 的 Swiss Tables、JDK 24 的虚拟线程 pinning 等)。
-**作者与唯一维护者(contributor)为 [HTZHU](https://github.com/zhtinist)。**
+作者 / 维护者:**HTZHU**(zhu.h4@northeastern.edu,GitHub [@zhtinist](https://github.com/zhtinist))。
 
 ## 许可证
 

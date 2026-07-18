@@ -190,9 +190,11 @@ href="12-常用第三方库.html">见「常用第三方库」</a>):numpy 的 nda
 <h3 id="over-allocation-扩容策略">1.2 over-allocation 扩容策略</h3>
 <p>append 时若 <code>ob_size == allocated</code>,需要扩容。CPython
 不是简单翻倍,而是用一个温和的增长公式(<code>list_resize</code>,简化):</p>
-<div class="sourceCode" id="cb4"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>new_allocated <span class="op">=</span> new_size <span class="op">+</span> <span class="op">(</span>new_size <span class="op">&gt;&gt;</span> <span class="dv">3</span><span class="op">)</span> <span class="op">+</span> <span class="op">(</span>new_size <span class="op">&lt;</span> <span class="dv">9</span> <span class="op">?</span> <span class="dv">3</span> <span class="op">:</span> <span class="dv">6</span><span class="op">);</span></span></code></pre></div>
-<p>即大约多分配 <strong>1/8</strong> 再加一个小常数。增长序列大致是:</p>
-<pre><code>0, 4, 8, 16, 25, 35, 46, 58, 72, 88, ...</code></pre>
+<div class="sourceCode" id="cb4"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co">/* 现行 CPython list_resize:多分配约 1/8,再向上对齐到 4 的倍数 */</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>new_allocated <span class="op">=</span> <span class="op">(</span>new_size <span class="op">+</span> <span class="op">(</span>new_size <span class="op">&gt;&gt;</span> <span class="dv">3</span><span class="op">)</span> <span class="op">+</span> <span class="dv">6</span><span class="op">)</span> <span class="op">&amp;</span> <span class="op">~</span><span class="dv">3</span><span class="op">;</span></span></code></pre></div>
+<p>即大约多分配 <strong>1/8</strong> 再加一个小常数并对齐。实测(CPython
+3.14)<code>allocated</code> 增长序列是:</p>
+<pre><code>0, 4, 8, 16, 24, 32, 40, 52, 64, 76, 92, 108, 128, ...</code></pre>
 <p>对比 C++ <code>std::vector</code> 常见的 1.5x 或 2x 增长。CPython 用
 1/8 是在”内存浪费”和”重分配次数”之间取的折中,因为它假设 list
 的典型用法追加量不会特别夸张。</p>

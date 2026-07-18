@@ -344,31 +344,35 @@ class="sourceCode python"><code class="sourceCode python"><span id="cb10-1"><a h
 里”必须先分配数组再遍历”截然不同。要真正物化才用
 <code>list(range(...))</code>。</p>
 <h2 id="推导式有独立作用域">推导式:有独立作用域</h2>
-<p>列表/字典/集合推导式不只是语法糖。在 Python 3
-里,推导式<strong>运行在自己独立的函数作用域</strong>中——CPython
-把推导式体编译成一个匿名函数并立即调用它:</p>
+<p>列表/字典/集合推导式不只是语法糖:它有<strong>自己的作用域</strong>,循环变量不会泄漏到外层。</p>
 <div class="sourceCode" id="cb11"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> dis</span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> make():</span>
-<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> [i <span class="op">*</span> <span class="dv">2</span> <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">3</span>)]</span>
-<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>dis.dis(make)</span></code></pre></div>
-<p>反汇编里你会看到 <code>MAKE_FUNCTION</code> +
-<code>CALL</code>,以及一个名为 <code>&lt;listcomp&gt;</code> 的内层 code
-对象。后果:</p>
+class="sourceCode python"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>i <span class="op">=</span> <span class="st">&quot;外层&quot;</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>squares <span class="op">=</span> [i <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">3</span>)]</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(i)          <span class="co"># &quot;外层&quot; —— 循环变量 i 不泄漏到外层!</span></span></code></pre></div>
+<p>而”独立作用域”具体怎么实现,<strong>分版本</strong>:</p>
+<ul>
+<li><strong>Python ≤
+3.11</strong>:把推导式体编译成一个<strong>匿名函数并立即调用</strong>——反汇编能看到
+<code>MAKE_FUNCTION</code> + <code>CALL</code> 和一个名为
+<code>&lt;listcomp&gt;</code> 的内层 code 对象,靠独立栈帧隔离变量。</li>
+<li><strong>Python 3.12+(PEP 709)</strong>:list/dict/set
+推导式已<strong>内联(inlined)</strong>到当前函数里,<strong>不再</strong>生成匿名函数、也没有独立栈帧或
+<code>&lt;listcomp&gt;</code> code 对象。<code>dis</code> 里看到的是
+<code>LOAD_FAST_AND_CLEAR</code> + <code>FOR_ITER</code> +
+<code>LIST_APPEND</code>:进入推导式时把外层同名变量”借走并清空”、结束后再<strong>恢复</strong>它,从而既内联(更快)又不泄漏。</li>
+</ul>
 <div class="sourceCode" id="cb12"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>i <span class="op">=</span> <span class="st">&quot;外层&quot;</span></span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>squares <span class="op">=</span> [i <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">3</span>)]</span>
-<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(i)          <span class="co"># &quot;外层&quot; —— 循环变量 i 不泄漏到外层!</span></span></code></pre></div>
-<p>这与 C 的块作用域不同,也与 Python 2
-不同(那时会泄漏)。因为有独立栈帧,推导式里的循环变量、临时值都在那个内层帧的
-<code>f_locals</code> 里,函数返回即销毁。</p>
+class="sourceCode python"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> dis</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> make():</span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> [i <span class="op">*</span> <span class="dv">2</span> <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">3</span>)]</span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>dis.dis(make)     <span class="co"># 3.12+:无 MAKE_FUNCTION、无 &lt;listcomp&gt;;3.11 及更早才有</span></span></code></pre></div>
+<p>这与 C 的块作用域不同,也与 Python 2 不同(那时推导式变量会泄漏)。</p>
 <blockquote>
 <p>注意:普通 <code>for</code>
 语句<strong>没有</strong>独立作用域,循环变量会留在当前作用域。只有推导式和生成器表达式才有。</p>
 </blockquote>
-<p>生成器表达式更进一步,连结果列表都不物化,返回一个迭代器,惰性产出:</p>
+<p>生成器表达式更进一步,连结果列表都不物化,返回一个迭代器,惰性产出(注意:<strong>生成器表达式并没有被内联</strong>,它仍编译成一个独立的
+<code>&lt;genexpr&gt;</code> 函数,这也是它天然拥有独立作用域的原因):</p>
 <div class="sourceCode" id="cb13"><pre
 class="sourceCode python"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>gen <span class="op">=</span> (i <span class="op">*</span> <span class="dv">2</span> <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">1_000_000</span>))   <span class="co"># 不计算任何值,不分配百万列表</span></span>
 <span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">next</span>(gen))   <span class="co"># 0 —— 此刻才算第一个</span></span></code></pre></div>
