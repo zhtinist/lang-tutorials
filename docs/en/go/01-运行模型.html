@@ -304,6 +304,36 @@ contrast, spinning up a thread in C costs several MB of stack plus
 kernel scheduling overhead, so a few thousand is already a strain;
 running hundreds of thousands of goroutines in Go is entirely
 routine.</p>
+<p>You can observe this directly with the <code>runtime</code> package:
+pin the number of Ps to 2, then spawn 1000 goroutines—all of them
+multiplexed onto those 2 logical processors:</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="op">(</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;runtime&quot;</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a><span class="op">)</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>    runtime<span class="op">.</span>GOMAXPROCS<span class="op">(</span><span class="dv">2</span><span class="op">)</span>              <span class="co">// pin logical processors P to 2 (deterministic)</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>runtime<span class="op">.</span>GOMAXPROCS<span class="op">(</span><span class="dv">0</span><span class="op">))</span> <span class="co">// 2   (passing 0 = query only, don&#39;t change)</span></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>runtime<span class="op">.</span>NumGoroutine<span class="op">())</span> <span class="co">// 1   (only the main goroutine so far)</span></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>    ch <span class="op">:=</span> <span class="bu">make</span><span class="op">(</span><span class="kw">chan</span> <span class="kw">struct</span><span class="op">{})</span></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> i <span class="op">:=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">1000</span><span class="op">;</span> i<span class="op">++</span> <span class="op">{</span></span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>        <span class="cf">go</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span> <span class="op">&lt;-</span>ch <span class="op">}()</span> <span class="co">// 1000 goroutines, all parked waiting on ch</span></span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> runtime<span class="op">.</span>NumGoroutine<span class="op">()</span> <span class="op">&lt;</span> <span class="dv">1001</span> <span class="op">{</span> <span class="co">// wait until all have been created</span></span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>        runtime<span class="op">.</span>Gosched<span class="op">()</span></span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>runtime<span class="op">.</span>NumGoroutine<span class="op">())</span> <span class="co">// 1001 (main + 1000) on just 2 OS threads</span></span>
+<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a>    <span class="bu">close</span><span class="op">(</span>ch<span class="op">)</span> <span class="co">// release them all at once</span></span>
+<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>1001 goroutines coexist happily on 2 Ps—with C’s 1:1 threads, 1000
+threads would need several GB of stack alone. This is the M:N scheduling
+model made concrete.</p>
 <h3 id="the-garbage-collector-gc">2. The Garbage Collector (GC)</h3>
 <p>In C you <code>malloc</code>/<code>free</code> yourself, and dangling
 pointers and memory leaks all rely on self-discipline. Go has a
@@ -364,12 +394,12 @@ larger binary + GC overhead,” plus trade-offs in language expressiveness
 (no generics early on, etc.).</p>
 <h2 id="common-commands-go-run-build-mod">5. Common Commands:
 <code>go run</code> / <code>build</code> / <code>mod</code></h2>
-<div class="sourceCode" id="cb6"><pre
-class="sourceCode bash"><code class="sourceCode bash"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> run main.go        <span class="co"># compile to a temp directory and run immediately (leaves no binary), for quick experiments</span></span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> build ./...        <span class="co"># compile all packages in the current module, produce an executable (when there&#39;s a main package)</span></span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> install ./cmd/foo  <span class="co"># compile and install the binary into $GOBIN (default ~/go/bin)</span></span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> test ./...         <span class="co"># compile and run tests</span></span>
-<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> vet ./...          <span class="co"># static analysis for suspicious code</span></span></code></pre></div>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> run main.go        <span class="co"># compile to a temp directory and run immediately (leaves no binary), for quick experiments</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> build ./...        <span class="co"># compile all packages in the current module, produce an executable (when there&#39;s a main package)</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> install ./cmd/foo  <span class="co"># compile and install the binary into $GOBIN (default ~/go/bin)</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> test ./...         <span class="co"># compile and run tests</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> vet ./...          <span class="co"># static analysis for suspicious code</span></span></code></pre></div>
 <p>Note that <code>go run</code> is <strong>not interpreted
 execution</strong>—it really does compile to native code first and then
 run, it just puts the binary in a temp directory and deletes it when
@@ -379,10 +409,10 @@ model.”</p>
 Management</h3>
 <p>Go uses <strong>modules</strong> to manage dependencies (replacing
 the old GOPATH mode):</p>
-<div class="sourceCode" id="cb7"><pre
-class="sourceCode bash"><code class="sourceCode bash"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> mod init example.com/myapp   <span class="co"># generate go.mod, declaring the module path</span></span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> get github.com/foo/bar@v1.2.3 <span class="co"># add/upgrade a dependency, writing go.mod and go.sum</span></span>
-<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> mod tidy                      <span class="co"># add/remove dependencies to match the source imports</span></span></code></pre></div>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> mod init example.com/myapp   <span class="co"># generate go.mod, declaring the module path</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> get github.com/foo/bar@v1.2.3 <span class="co"># add/upgrade a dependency, writing go.mod and go.sum</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> mod tidy                      <span class="co"># add/remove dependencies to match the source imports</span></span></code></pre></div>
 <ul>
 <li><code>go.mod</code>: declares the module path, Go version,
 dependencies and their versions.</li>
@@ -401,17 +431,17 @@ platform’s libc, a sysroot, and so on. Because Go by default doesn’t
 depend on libc, and the toolchain ships with the runtime for every
 target platform, cross-compilation is just setting two environment
 variables:</p>
-<div class="sourceCode" id="cb8"><pre
-class="sourceCode bash"><code class="sourceCode bash"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="co"># On macOS/arm64, build for Linux/amd64:</span></span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="va">GOOS</span><span class="op">=</span>linux <span class="va">GOARCH</span><span class="op">=</span>amd64 <span class="ex">go</span> build <span class="at">-o</span> hello-linux-amd64</span>
-<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Build for Windows:</span></span>
-<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a><span class="va">GOOS</span><span class="op">=</span>windows <span class="va">GOARCH</span><span class="op">=</span>amd64 <span class="ex">go</span> build <span class="at">-o</span> hello.exe</span>
-<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Build for a Raspberry Pi (Linux/arm64):</span></span>
-<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a><span class="va">GOOS</span><span class="op">=</span>linux <span class="va">GOARCH</span><span class="op">=</span>arm64 <span class="ex">go</span> build <span class="at">-o</span> hello-pi</span>
-<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> tool dist list   <span class="co"># list all supported GOOS/GOARCH combinations</span></span></code></pre></div>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="co"># On macOS/arm64, build for Linux/amd64:</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="va">GOOS</span><span class="op">=</span>linux <span class="va">GOARCH</span><span class="op">=</span>amd64 <span class="ex">go</span> build <span class="at">-o</span> hello-linux-amd64</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Build for Windows:</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a><span class="va">GOOS</span><span class="op">=</span>windows <span class="va">GOARCH</span><span class="op">=</span>amd64 <span class="ex">go</span> build <span class="at">-o</span> hello.exe</span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Build for a Raspberry Pi (Linux/arm64):</span></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a><span class="va">GOOS</span><span class="op">=</span>linux <span class="va">GOARCH</span><span class="op">=</span>arm64 <span class="ex">go</span> build <span class="at">-o</span> hello-pi</span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> tool dist list   <span class="co"># list all supported GOOS/GOARCH combinations</span></span></code></pre></div>
 <ul>
 <li><code>GOOS</code>: target operating system
 (<code>linux</code>/<code>darwin</code>/<code>windows</code>/<code>freebsd</code>…).</li>

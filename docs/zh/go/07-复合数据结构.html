@@ -254,6 +254,37 @@ cap==len,下一次 append 必然分配新数组,不会踩到 <code>a</code>。</
 class="sourceCode go"><code class="sourceCode go"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>dst <span class="op">:=</span> <span class="bu">make</span><span class="op">([]</span><span class="dt">int</span><span class="op">,</span> <span class="bu">len</span><span class="op">(</span>src<span class="op">))</span></span>
 <span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="bu">copy</span><span class="op">(</span>dst<span class="op">,</span> src<span class="op">)</span>   <span class="co">// 逐元素拷贝, 返回拷贝个数 min(len(dst),len(src))</span></span></code></pre></div>
 <p><code>copy</code> 底层是 <code>memmove</code>,允许源和目标重叠。</p>
+<h3 id="一个可运行程序串起全流程">一个可运行程序串起全流程</h3>
+<p>原地别名、三索引限容、扩容后脱钩——都在一个程序里:</p>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>    a <span class="op">:=</span> <span class="op">[]</span><span class="dt">int</span><span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">,</span> <span class="dv">4</span><span class="op">,</span> <span class="dv">5</span><span class="op">}</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>    s <span class="op">:=</span> a<span class="op">[</span><span class="dv">0</span><span class="op">:</span><span class="dv">2</span><span class="op">]</span>                 <span class="co">// len=2 cap=5, 与 a 共享底层数组</span></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="bu">len</span><span class="op">(</span>s<span class="op">),</span> <span class="bu">cap</span><span class="op">(</span>s<span class="op">))</span> <span class="co">// 2 5</span></span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>    s <span class="op">=</span> <span class="bu">append</span><span class="op">(</span>s<span class="op">,</span> <span class="dv">99</span><span class="op">)</span>           <span class="co">// cap 够 → 原地写 a[2]</span></span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>a<span class="op">)</span>              <span class="co">// [1 2 99 4 5]  ← a 被 s 改了</span></span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a>    b <span class="op">:=</span> <span class="op">[]</span><span class="dt">int</span><span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">,</span> <span class="dv">4</span><span class="op">,</span> <span class="dv">5</span><span class="op">}</span></span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a>    t <span class="op">:=</span> b<span class="op">[</span><span class="dv">0</span><span class="op">:</span><span class="dv">2</span><span class="op">:</span><span class="dv">2</span><span class="op">]</span>               <span class="co">// 三索引切片: len=2 cap=2</span></span>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="bu">len</span><span class="op">(</span>t<span class="op">),</span> <span class="bu">cap</span><span class="op">(</span>t<span class="op">))</span> <span class="co">// 2 2</span></span>
+<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a>    t <span class="op">=</span> <span class="bu">append</span><span class="op">(</span>t<span class="op">,</span> <span class="dv">99</span><span class="op">)</span>           <span class="co">// cap 用满 → 新数组, b 不受影响</span></span>
+<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>b<span class="op">)</span>              <span class="co">// [1 2 3 4 5]</span></span>
+<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>t<span class="op">)</span>              <span class="co">// [1 2 99]</span></span>
+<span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-19"><a href="#cb12-19" aria-hidden="true" tabindex="-1"></a>    c <span class="op">:=</span> <span class="op">[]</span><span class="dt">int</span><span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">}</span></span>
+<span id="cb12-20"><a href="#cb12-20" aria-hidden="true" tabindex="-1"></a>    d <span class="op">:=</span> c<span class="op">[</span><span class="dv">0</span><span class="op">:</span><span class="dv">1</span><span class="op">]</span>                 <span class="co">// len=1 cap=3, 仍与 c 共享</span></span>
+<span id="cb12-21"><a href="#cb12-21" aria-hidden="true" tabindex="-1"></a>    d <span class="op">=</span> <span class="bu">append</span><span class="op">(</span>d<span class="op">,</span> <span class="dv">20</span><span class="op">)</span>           <span class="co">// cap 够 → 写 c[1]</span></span>
+<span id="cb12-22"><a href="#cb12-22" aria-hidden="true" tabindex="-1"></a>    d <span class="op">=</span> <span class="bu">append</span><span class="op">(</span>d<span class="op">,</span> <span class="dv">30</span><span class="op">)</span>           <span class="co">// cap 够 → 写 c[2]</span></span>
+<span id="cb12-23"><a href="#cb12-23" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>c<span class="op">)</span>              <span class="co">// [1 20 30]  ← 仍耦合</span></span>
+<span id="cb12-24"><a href="#cb12-24" aria-hidden="true" tabindex="-1"></a>    d <span class="op">=</span> <span class="bu">append</span><span class="op">(</span>d<span class="op">,</span> <span class="dv">40</span><span class="op">)</span>           <span class="co">// len==cap → 扩容, 此时与 c 脱钩</span></span>
+<span id="cb12-25"><a href="#cb12-25" aria-hidden="true" tabindex="-1"></a>    d<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="dv">999</span></span>
+<span id="cb12-26"><a href="#cb12-26" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>c<span class="op">)</span>              <span class="co">// [1 20 30]       ← c 不再受影响</span></span>
+<span id="cb12-27"><a href="#cb12-27" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>d<span class="op">)</span>              <span class="co">// [999 20 30 40]</span></span>
+<span id="cb12-28"><a href="#cb12-28" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <h2 id="三map哈希表">三、map:哈希表</h2>
 <blockquote>
 <p><strong>版本提示</strong>:下面描述的
@@ -269,24 +300,24 @@ class="sourceCode go"><code class="sourceCode go"><span id="cb11-1"><a href="#cb
 <p>map 的运行时类型是 <code>*hmap</code>(<code>runtime/map.go</code>,Go
 ≤ 1.23)——注意 <strong>map 变量本身就是一个指针</strong>(一个字),这是它和
 slice 表头的一个差异。</p>
-<div class="sourceCode" id="cb12"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> hmap <span class="kw">struct</span> <span class="op">{</span></span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>    count     <span class="dt">int</span>    <span class="co">// 元素个数, len(m) 直接读它 O(1)</span></span>
-<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>    flags     <span class="dt">uint8</span></span>
-<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>    B         <span class="dt">uint8</span>  <span class="co">// 桶数量 = 2^B</span></span>
-<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>    noverflow <span class="dt">uint16</span></span>
-<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>    hash0     <span class="dt">uint32</span> <span class="co">// 哈希种子(每个 map 随机, 防 hash flooding 攻击)</span></span>
-<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>    buckets   unsafe<span class="op">.</span>Pointer <span class="co">// 指向 2^B 个 bmap 桶的数组</span></span>
-<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>    oldbuckets unsafe<span class="op">.</span>Pointer <span class="co">// 扩容时的旧桶数组</span></span>
-<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>    nevacuate <span class="dt">uintptr</span></span>
-<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>    extra     <span class="op">*</span>mapextra</span>
-<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
-<p>桶 <code>bmap</code>:每个桶固定 <strong>8 个槽位</strong>。</p>
 <div class="sourceCode" id="cb13"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> bmap <span class="kw">struct</span> <span class="op">{</span></span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>    tophash <span class="op">[</span><span class="dv">8</span><span class="op">]</span><span class="dt">uint8</span> <span class="co">// 每个 key 哈希值的高 8 位(快速比较用)</span></span>
-<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 编译器在后面追加: keys[8], values[8], overflow *bmap</span></span>
-<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+class="sourceCode go"><code class="sourceCode go"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> hmap <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>    count     <span class="dt">int</span>    <span class="co">// 元素个数, len(m) 直接读它 O(1)</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    flags     <span class="dt">uint8</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>    B         <span class="dt">uint8</span>  <span class="co">// 桶数量 = 2^B</span></span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>    noverflow <span class="dt">uint16</span></span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>    hash0     <span class="dt">uint32</span> <span class="co">// 哈希种子(每个 map 随机, 防 hash flooding 攻击)</span></span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>    buckets   unsafe<span class="op">.</span>Pointer <span class="co">// 指向 2^B 个 bmap 桶的数组</span></span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>    oldbuckets unsafe<span class="op">.</span>Pointer <span class="co">// 扩容时的旧桶数组</span></span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>    nevacuate <span class="dt">uintptr</span></span>
+<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a>    extra     <span class="op">*</span>mapextra</span>
+<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>桶 <code>bmap</code>:每个桶固定 <strong>8 个槽位</strong>。</p>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> bmap <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>    tophash <span class="op">[</span><span class="dv">8</span><span class="op">]</span><span class="dt">uint8</span> <span class="co">// 每个 key 哈希值的高 8 位(快速比较用)</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 编译器在后面追加: keys[8], values[8], overflow *bmap</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>内存布局是
 <code>8 个 tophash │ 8 个 key │ 8 个 value │ 溢出桶指针</code>。注意
 <strong>key 和 value 分别连续存放</strong>(不是 kv/kv/kv
@@ -327,26 +358,49 @@ class="sourceCode go"><code class="sourceCode go"><span id="cb13-1"><a href="#cb
 <p><strong>1. 迭代顺序是随机的,故意的。</strong> 每次
 <code>for k, v := range m</code>
 的起始桶和起始槽都随机化。这是为了防止程序依赖顺序(以后实现变了就崩)。要有序必须自己排序:</p>
-<div class="sourceCode" id="cb15"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>keys <span class="op">:=</span> <span class="bu">make</span><span class="op">([]</span><span class="dt">string</span><span class="op">,</span> <span class="dv">0</span><span class="op">,</span> <span class="bu">len</span><span class="op">(</span>m<span class="op">))</span></span>
-<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> k <span class="op">:=</span> <span class="kw">range</span> m <span class="op">{</span></span>
-<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>    keys <span class="op">=</span> <span class="bu">append</span><span class="op">(</span>keys<span class="op">,</span> k<span class="op">)</span></span>
-<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>sort<span class="op">.</span>Strings<span class="op">(</span>keys<span class="op">)</span> <span class="co">// 见第11章</span></span>
-<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> _<span class="op">,</span> k <span class="op">:=</span> <span class="kw">range</span> keys <span class="op">{</span></span>
-<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>k<span class="op">,</span> m<span class="op">[</span>k<span class="op">])</span></span>
-<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb16"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>keys <span class="op">:=</span> <span class="bu">make</span><span class="op">([]</span><span class="dt">string</span><span class="op">,</span> <span class="dv">0</span><span class="op">,</span> <span class="bu">len</span><span class="op">(</span>m<span class="op">))</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> k <span class="op">:=</span> <span class="kw">range</span> m <span class="op">{</span></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>    keys <span class="op">=</span> <span class="bu">append</span><span class="op">(</span>keys<span class="op">,</span> k<span class="op">)</span></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>sort<span class="op">.</span>Strings<span class="op">(</span>keys<span class="op">)</span> <span class="co">// 见第11章</span></span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> _<span class="op">,</span> k <span class="op">:=</span> <span class="kw">range</span> keys <span class="op">{</span></span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>k<span class="op">,</span> m<span class="op">[</span>k<span class="op">])</span></span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p><strong>2. 元素不可取地址。</strong> <code>&amp;m[k]</code>
 编译错误。因为扩容会搬动 value
 的内存位置,指针会失效。所以不能就地改结构体字段:</p>
-<div class="sourceCode" id="cb16"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>m <span class="op">:=</span> <span class="kw">map</span><span class="op">[</span><span class="dt">string</span><span class="op">]</span>Point<span class="op">{</span><span class="st">&quot;a&quot;</span><span class="op">:</span> <span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">}}</span></span>
-<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="co">// m[&quot;a&quot;].X = 10        // 编译错误: cannot assign to struct field</span></span>
-<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>p <span class="op">:=</span> m<span class="op">[</span><span class="st">&quot;a&quot;</span><span class="op">];</span> p<span class="op">.</span>X <span class="op">=</span> <span class="dv">10</span><span class="op">;</span> m<span class="op">[</span><span class="st">&quot;a&quot;</span><span class="op">]</span> <span class="op">=</span> p   <span class="co">// 取出→改→写回</span></span>
-<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a><span class="co">// 或者存指针: map[string]*Point, 这样 m[&quot;a&quot;].X = 10 可以</span></span></code></pre></div>
-<p><strong>3. 读缺失键返回零值 + ok。</strong> 逗号 ok 惯用法:</p>
 <div class="sourceCode" id="cb17"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>v<span class="op">,</span> ok <span class="op">:=</span> m<span class="op">[</span>k<span class="op">]</span> <span class="co">// ok 为 false 表示不存在, v 是零值</span></span></code></pre></div>
+class="sourceCode go"><code class="sourceCode go"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>m <span class="op">:=</span> <span class="kw">map</span><span class="op">[</span><span class="dt">string</span><span class="op">]</span>Point<span class="op">{</span><span class="st">&quot;a&quot;</span><span class="op">:</span> <span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">}}</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="co">// m[&quot;a&quot;].X = 10        // 编译错误: cannot assign to struct field</span></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>p <span class="op">:=</span> m<span class="op">[</span><span class="st">&quot;a&quot;</span><span class="op">];</span> p<span class="op">.</span>X <span class="op">=</span> <span class="dv">10</span><span class="op">;</span> m<span class="op">[</span><span class="st">&quot;a&quot;</span><span class="op">]</span> <span class="op">=</span> p   <span class="co">// 取出→改→写回</span></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a><span class="co">// 或者存指针: map[string]*Point, 这样 m[&quot;a&quot;].X = 10 可以</span></span></code></pre></div>
+<p>可运行(注释掉的那行会编译错误):</p>
+<div class="sourceCode" id="cb18"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Point <span class="kw">struct</span><span class="op">{</span> X<span class="op">,</span> Y <span class="dt">int</span> <span class="op">}</span></span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a>    m <span class="op">:=</span> <span class="kw">map</span><span class="op">[</span><span class="dt">string</span><span class="op">]</span>Point<span class="op">{</span><span class="st">&quot;a&quot;</span><span class="op">:</span> <span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">}}</span></span>
+<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a>    <span class="co">// m[&quot;a&quot;].X = 10 // 编译错误: cannot assign to struct field m[&quot;a&quot;].X</span></span>
+<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a>    p <span class="op">:=</span> m<span class="op">[</span><span class="st">&quot;a&quot;</span><span class="op">]</span>         <span class="co">// 取出</span></span>
+<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a>    p<span class="op">.</span>X <span class="op">=</span> <span class="dv">10</span>            <span class="co">// 改副本</span></span>
+<span id="cb18-12"><a href="#cb18-12" aria-hidden="true" tabindex="-1"></a>    m<span class="op">[</span><span class="st">&quot;a&quot;</span><span class="op">]</span> <span class="op">=</span> p          <span class="co">// 写回</span></span>
+<span id="cb18-13"><a href="#cb18-13" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>m<span class="op">[</span><span class="st">&quot;a&quot;</span><span class="op">])</span> <span class="co">// {10 2}</span></span>
+<span id="cb18-14"><a href="#cb18-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-15"><a href="#cb18-15" aria-hidden="true" tabindex="-1"></a>    pm <span class="op">:=</span> <span class="kw">map</span><span class="op">[</span><span class="dt">string</span><span class="op">]*</span>Point<span class="op">{</span><span class="st">&quot;a&quot;</span><span class="op">:</span> <span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">}}</span> <span class="co">// 改存指针</span></span>
+<span id="cb18-16"><a href="#cb18-16" aria-hidden="true" tabindex="-1"></a>    pm<span class="op">[</span><span class="st">&quot;a&quot;</span><span class="op">].</span>X <span class="op">=</span> <span class="dv">10</span>                       <span class="co">// 就地改可行: value 是指针</span></span>
+<span id="cb18-17"><a href="#cb18-17" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(*</span>pm<span class="op">[</span><span class="st">&quot;a&quot;</span><span class="op">])</span>                <span class="co">// {10 2}</span></span>
+<span id="cb18-18"><a href="#cb18-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-19"><a href="#cb18-19" aria-hidden="true" tabindex="-1"></a>    v<span class="op">,</span> ok <span class="op">:=</span> m<span class="op">[</span><span class="st">&quot;missing&quot;</span><span class="op">]</span> <span class="co">// 读缺失键</span></span>
+<span id="cb18-20"><a href="#cb18-20" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>v<span class="op">,</span> ok<span class="op">)</span>    <span class="co">// {0 0} false</span></span>
+<span id="cb18-21"><a href="#cb18-21" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p><strong>3. 读缺失键返回零值 + ok。</strong> 逗号 ok 惯用法:</p>
+<div class="sourceCode" id="cb19"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>v<span class="op">,</span> ok <span class="op">:=</span> m<span class="op">[</span>k<span class="op">]</span> <span class="co">// ok 为 false 表示不存在, v 是零值</span></span></code></pre></div>
 <p><strong>4. 并发不安全。</strong>
 并发读写(哪怕一读一写)会被运行时检测到并直接
 <code>fatal error: concurrent map read and map write</code> 崩溃(不是
@@ -360,19 +414,19 @@ href="10-并发模型.html">第10章</a>)。</p>
 <p>channel 是 Go 并发的核心原语,底层是
 <code>*hchan</code>(<code>runtime/chan.go</code>),channel
 变量也是一个指针。</p>
-<div class="sourceCode" id="cb18"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> hchan <span class="kw">struct</span> <span class="op">{</span></span>
-<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>    qcount   <span class="dt">uint</span>           <span class="co">// 当前缓冲区里的元素数</span></span>
-<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>    dataqsiz <span class="dt">uint</span>           <span class="co">// 缓冲区容量(make 时的第二个参数)</span></span>
-<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>    buf      unsafe<span class="op">.</span>Pointer <span class="co">// 指向环形缓冲数组(有缓冲时)</span></span>
-<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>    elemsize <span class="dt">uint16</span></span>
-<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>    closed   <span class="dt">uint32</span></span>
-<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>    sendx    <span class="dt">uint</span>           <span class="co">// 环形缓冲的写下标</span></span>
-<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a>    recvx    <span class="dt">uint</span>           <span class="co">// 环形缓冲的读下标</span></span>
-<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a>    recvq    waitq          <span class="co">// 等待接收的 goroutine 队列</span></span>
-<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a>    sendq    waitq          <span class="co">// 等待发送的 goroutine 队列</span></span>
-<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a>    lock     mutex          <span class="co">// 保护上面所有字段</span></span>
-<span id="cb18-12"><a href="#cb18-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb20"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> hchan <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>    qcount   <span class="dt">uint</span>           <span class="co">// 当前缓冲区里的元素数</span></span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>    dataqsiz <span class="dt">uint</span>           <span class="co">// 缓冲区容量(make 时的第二个参数)</span></span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>    buf      unsafe<span class="op">.</span>Pointer <span class="co">// 指向环形缓冲数组(有缓冲时)</span></span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>    elemsize <span class="dt">uint16</span></span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>    closed   <span class="dt">uint32</span></span>
+<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a>    sendx    <span class="dt">uint</span>           <span class="co">// 环形缓冲的写下标</span></span>
+<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a>    recvx    <span class="dt">uint</span>           <span class="co">// 环形缓冲的读下标</span></span>
+<span id="cb20-9"><a href="#cb20-9" aria-hidden="true" tabindex="-1"></a>    recvq    waitq          <span class="co">// 等待接收的 goroutine 队列</span></span>
+<span id="cb20-10"><a href="#cb20-10" aria-hidden="true" tabindex="-1"></a>    sendq    waitq          <span class="co">// 等待发送的 goroutine 队列</span></span>
+<span id="cb20-11"><a href="#cb20-11" aria-hidden="true" tabindex="-1"></a>    lock     mutex          <span class="co">// 保护上面所有字段</span></span>
+<span id="cb20-12"><a href="#cb20-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <pre><code>有缓冲 channel  make(chan int, 4):
         ┌─────────────────────────────┐
 buf ──▶ │  slot0 slot1 slot2 slot3    │  环形缓冲
@@ -420,16 +474,34 @@ goroutine 唤醒。这就是 goroutine 廉价并发的基础——阻塞一个 g
 <p>一个优化:若发送时 recvq
 里已有等待的接收者,数据<strong>跳过缓冲区直接拷给那个接收者</strong>并唤醒它,省一次拷贝。</p>
 <h3 id="close-与-nil">close 与 nil</h3>
-<div class="sourceCode" id="cb20"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="bu">close</span><span class="op">(</span>ch<span class="op">)</span>          <span class="co">// 关闭; 之后发送 panic; 接收立即返回零值</span></span>
-<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>v<span class="op">,</span> ok <span class="op">:=</span> <span class="op">&lt;-</span>ch      <span class="co">// ok==false 表示 channel 已关闭且缓冲已空</span></span>
-<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> v <span class="op">:=</span> <span class="kw">range</span> ch  <span class="co">// 一直收到 channel 关闭为止</span></span></code></pre></div>
+<div class="sourceCode" id="cb22"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="bu">close</span><span class="op">(</span>ch<span class="op">)</span>          <span class="co">// 关闭; 之后发送 panic; 接收立即返回零值</span></span>
+<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a>v<span class="op">,</span> ok <span class="op">:=</span> <span class="op">&lt;-</span>ch      <span class="co">// ok==false 表示 channel 已关闭且缓冲已空</span></span>
+<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> v <span class="op">:=</span> <span class="kw">range</span> ch  <span class="co">// 一直收到 channel 关闭为止</span></span></code></pre></div>
 <p>对 nil channel 收发<strong>永久阻塞</strong>(常用于在
 <code>select</code> 中动态”关掉某个分支”)。</p>
 <p>channel
 传递的是<strong>元素的拷贝</strong>(值语义):<code>ch &lt;- x</code> 把
 <code>x</code> 拷进缓冲,<code>&lt;-ch</code>
 拷出。如果元素是大结构体就拷整块;传指针则拷指针(此时要注意共享数据的并发安全)。</p>
+<h3 id="有缓冲收发close-与-range可运行">有缓冲收发、close 与
+range(可运行)</h3>
+<div class="sourceCode" id="cb23"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb23-4"><a href="#cb23-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-5"><a href="#cb23-5" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb23-6"><a href="#cb23-6" aria-hidden="true" tabindex="-1"></a>    ch <span class="op">:=</span> <span class="bu">make</span><span class="op">(</span><span class="kw">chan</span> <span class="dt">int</span><span class="op">,</span> <span class="dv">2</span><span class="op">)</span></span>
+<span id="cb23-7"><a href="#cb23-7" aria-hidden="true" tabindex="-1"></a>    ch <span class="op">&lt;-</span> <span class="dv">1</span></span>
+<span id="cb23-8"><a href="#cb23-8" aria-hidden="true" tabindex="-1"></a>    ch <span class="op">&lt;-</span> <span class="dv">2</span></span>
+<span id="cb23-9"><a href="#cb23-9" aria-hidden="true" tabindex="-1"></a>    <span class="bu">close</span><span class="op">(</span>ch<span class="op">)</span>           <span class="co">// 发送完再关; 缓冲里的值仍可接收</span></span>
+<span id="cb23-10"><a href="#cb23-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> v <span class="op">:=</span> <span class="kw">range</span> ch <span class="op">{</span> <span class="co">// 按 FIFO 把缓冲收干, 遇 close 停止</span></span>
+<span id="cb23-11"><a href="#cb23-11" aria-hidden="true" tabindex="-1"></a>        fmt<span class="op">.</span>Println<span class="op">(</span>v<span class="op">)</span> <span class="co">// 依次打印 1、2</span></span>
+<span id="cb23-12"><a href="#cb23-12" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb23-13"><a href="#cb23-13" aria-hidden="true" tabindex="-1"></a>    v<span class="op">,</span> ok <span class="op">:=</span> <span class="op">&lt;-</span>ch      <span class="co">// 已关闭且已收干 → 零值, ok=false</span></span>
+<span id="cb23-14"><a href="#cb23-14" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>v<span class="op">,</span> ok<span class="op">)</span> <span class="co">// 0 false</span></span>
+<span id="cb23-15"><a href="#cb23-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <h2 id="五三者对照小结">五、三者对照小结</h2>
 <table>
 <colgroup>

@@ -297,6 +297,39 @@ class="sourceCode go"><code class="sourceCode go"><span id="cb11-1"><a href="#cb
 <span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="bu">copy</span><span class="op">(</span>dst<span class="op">,</span> src<span class="op">)</span>   <span class="co">// element-by-element copy, returns the number copied min(len(dst),len(src))</span></span></code></pre></div>
 <p><code>copy</code> is <code>memmove</code> underneath and allows the
 source and destination to overlap.</p>
+<h3 id="the-whole-story-in-one-runnable-program">The whole story in one
+runnable program</h3>
+<p>In-place aliasing, three-index capping, and decoupling after a
+reallocation—all in one program:</p>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>    a <span class="op">:=</span> <span class="op">[]</span><span class="dt">int</span><span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">,</span> <span class="dv">4</span><span class="op">,</span> <span class="dv">5</span><span class="op">}</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>    s <span class="op">:=</span> a<span class="op">[</span><span class="dv">0</span><span class="op">:</span><span class="dv">2</span><span class="op">]</span>                 <span class="co">// len=2 cap=5, shares a&#39;s underlying array</span></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="bu">len</span><span class="op">(</span>s<span class="op">),</span> <span class="bu">cap</span><span class="op">(</span>s<span class="op">))</span> <span class="co">// 2 5</span></span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>    s <span class="op">=</span> <span class="bu">append</span><span class="op">(</span>s<span class="op">,</span> <span class="dv">99</span><span class="op">)</span>           <span class="co">// cap is enough → writes a[2] in place</span></span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>a<span class="op">)</span>              <span class="co">// [1 2 99 4 5]  ← a was modified through s</span></span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a>    b <span class="op">:=</span> <span class="op">[]</span><span class="dt">int</span><span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">,</span> <span class="dv">4</span><span class="op">,</span> <span class="dv">5</span><span class="op">}</span></span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a>    t <span class="op">:=</span> b<span class="op">[</span><span class="dv">0</span><span class="op">:</span><span class="dv">2</span><span class="op">:</span><span class="dv">2</span><span class="op">]</span>               <span class="co">// three-index slice: len=2 cap=2</span></span>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="bu">len</span><span class="op">(</span>t<span class="op">),</span> <span class="bu">cap</span><span class="op">(</span>t<span class="op">))</span> <span class="co">// 2 2</span></span>
+<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a>    t <span class="op">=</span> <span class="bu">append</span><span class="op">(</span>t<span class="op">,</span> <span class="dv">99</span><span class="op">)</span>           <span class="co">// cap full → new array, b untouched</span></span>
+<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>b<span class="op">)</span>              <span class="co">// [1 2 3 4 5]</span></span>
+<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>t<span class="op">)</span>              <span class="co">// [1 2 99]</span></span>
+<span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-19"><a href="#cb12-19" aria-hidden="true" tabindex="-1"></a>    c <span class="op">:=</span> <span class="op">[]</span><span class="dt">int</span><span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">}</span></span>
+<span id="cb12-20"><a href="#cb12-20" aria-hidden="true" tabindex="-1"></a>    d <span class="op">:=</span> c<span class="op">[</span><span class="dv">0</span><span class="op">:</span><span class="dv">1</span><span class="op">]</span>                 <span class="co">// len=1 cap=3, still shares c</span></span>
+<span id="cb12-21"><a href="#cb12-21" aria-hidden="true" tabindex="-1"></a>    d <span class="op">=</span> <span class="bu">append</span><span class="op">(</span>d<span class="op">,</span> <span class="dv">20</span><span class="op">)</span>           <span class="co">// cap enough → writes c[1]</span></span>
+<span id="cb12-22"><a href="#cb12-22" aria-hidden="true" tabindex="-1"></a>    d <span class="op">=</span> <span class="bu">append</span><span class="op">(</span>d<span class="op">,</span> <span class="dv">30</span><span class="op">)</span>           <span class="co">// cap enough → writes c[2]</span></span>
+<span id="cb12-23"><a href="#cb12-23" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>c<span class="op">)</span>              <span class="co">// [1 20 30]  ← still coupled</span></span>
+<span id="cb12-24"><a href="#cb12-24" aria-hidden="true" tabindex="-1"></a>    d <span class="op">=</span> <span class="bu">append</span><span class="op">(</span>d<span class="op">,</span> <span class="dv">40</span><span class="op">)</span>           <span class="co">// len==cap → reallocate, now decoupled from c</span></span>
+<span id="cb12-25"><a href="#cb12-25" aria-hidden="true" tabindex="-1"></a>    d<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="dv">999</span></span>
+<span id="cb12-26"><a href="#cb12-26" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>c<span class="op">)</span>              <span class="co">// [1 20 30]       ← c no longer affected</span></span>
+<span id="cb12-27"><a href="#cb12-27" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>d<span class="op">)</span>              <span class="co">// [999 20 30 40]</span></span>
+<span id="cb12-28"><a href="#cb12-28" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <h2 id="iii.-map-a-hash-table">III. map: a hash table</h2>
 <blockquote>
 <p><strong>Version note</strong>: The
@@ -318,25 +351,25 @@ implementation.</p>
 (<code>runtime/map.go</code>, Go ≤ 1.23)—note that <strong>a map
 variable is itself a pointer</strong> (one word), which is one
 difference from a slice header.</p>
-<div class="sourceCode" id="cb12"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> hmap <span class="kw">struct</span> <span class="op">{</span></span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>    count     <span class="dt">int</span>    <span class="co">// number of elements, len(m) reads this directly O(1)</span></span>
-<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>    flags     <span class="dt">uint8</span></span>
-<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>    B         <span class="dt">uint8</span>  <span class="co">// number of buckets = 2^B</span></span>
-<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>    noverflow <span class="dt">uint16</span></span>
-<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>    hash0     <span class="dt">uint32</span> <span class="co">// hash seed (random per map, to defend against hash-flooding attacks)</span></span>
-<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>    buckets   unsafe<span class="op">.</span>Pointer <span class="co">// points to the array of 2^B bmap buckets</span></span>
-<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>    oldbuckets unsafe<span class="op">.</span>Pointer <span class="co">// the old bucket array during growth</span></span>
-<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>    nevacuate <span class="dt">uintptr</span></span>
-<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>    extra     <span class="op">*</span>mapextra</span>
-<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> hmap <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>    count     <span class="dt">int</span>    <span class="co">// number of elements, len(m) reads this directly O(1)</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    flags     <span class="dt">uint8</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>    B         <span class="dt">uint8</span>  <span class="co">// number of buckets = 2^B</span></span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>    noverflow <span class="dt">uint16</span></span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>    hash0     <span class="dt">uint32</span> <span class="co">// hash seed (random per map, to defend against hash-flooding attacks)</span></span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>    buckets   unsafe<span class="op">.</span>Pointer <span class="co">// points to the array of 2^B bmap buckets</span></span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>    oldbuckets unsafe<span class="op">.</span>Pointer <span class="co">// the old bucket array during growth</span></span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>    nevacuate <span class="dt">uintptr</span></span>
+<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a>    extra     <span class="op">*</span>mapextra</span>
+<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>Bucket <code>bmap</code>: each bucket has a fixed <strong>8
 slots</strong>.</p>
-<div class="sourceCode" id="cb13"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> bmap <span class="kw">struct</span> <span class="op">{</span></span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>    tophash <span class="op">[</span><span class="dv">8</span><span class="op">]</span><span class="dt">uint8</span> <span class="co">// the high 8 bits of each key&#39;s hash value (for fast comparison)</span></span>
-<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    <span class="co">// the compiler appends afterward: keys[8], values[8], overflow *bmap</span></span>
-<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> bmap <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>    tophash <span class="op">[</span><span class="dv">8</span><span class="op">]</span><span class="dt">uint8</span> <span class="co">// the high 8 bits of each key&#39;s hash value (for fast comparison)</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>    <span class="co">// the compiler appends afterward: keys[8], values[8], overflow *bmap</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>The memory layout is
 <code>8 tophash │ 8 keys │ 8 values │ overflow-bucket pointer</code>.
 Note that <strong>keys and values are stored contiguously in separate
@@ -387,28 +420,51 @@ hard constraints on maps (contrary to C/C++ intuition)</h3>
 starting slot. This is to prevent programs from depending on order
 (which would break when the implementation changes). To get order you
 must sort yourself:</p>
-<div class="sourceCode" id="cb15"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>keys <span class="op">:=</span> <span class="bu">make</span><span class="op">([]</span><span class="dt">string</span><span class="op">,</span> <span class="dv">0</span><span class="op">,</span> <span class="bu">len</span><span class="op">(</span>m<span class="op">))</span></span>
-<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> k <span class="op">:=</span> <span class="kw">range</span> m <span class="op">{</span></span>
-<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>    keys <span class="op">=</span> <span class="bu">append</span><span class="op">(</span>keys<span class="op">,</span> k<span class="op">)</span></span>
-<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>sort<span class="op">.</span>Strings<span class="op">(</span>keys<span class="op">)</span> <span class="co">// see Chapter 11</span></span>
-<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> _<span class="op">,</span> k <span class="op">:=</span> <span class="kw">range</span> keys <span class="op">{</span></span>
-<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>k<span class="op">,</span> m<span class="op">[</span>k<span class="op">])</span></span>
-<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb16"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>keys <span class="op">:=</span> <span class="bu">make</span><span class="op">([]</span><span class="dt">string</span><span class="op">,</span> <span class="dv">0</span><span class="op">,</span> <span class="bu">len</span><span class="op">(</span>m<span class="op">))</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> k <span class="op">:=</span> <span class="kw">range</span> m <span class="op">{</span></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>    keys <span class="op">=</span> <span class="bu">append</span><span class="op">(</span>keys<span class="op">,</span> k<span class="op">)</span></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>sort<span class="op">.</span>Strings<span class="op">(</span>keys<span class="op">)</span> <span class="co">// see Chapter 11</span></span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> _<span class="op">,</span> k <span class="op">:=</span> <span class="kw">range</span> keys <span class="op">{</span></span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>k<span class="op">,</span> m<span class="op">[</span>k<span class="op">])</span></span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p><strong>2. Elements are not addressable.</strong>
 <code>&amp;m[k]</code> is a compile error. Because growth relocates the
 value’s memory, the pointer would become invalid. So you cannot modify a
 struct field in place:</p>
-<div class="sourceCode" id="cb16"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>m <span class="op">:=</span> <span class="kw">map</span><span class="op">[</span><span class="dt">string</span><span class="op">]</span>Point<span class="op">{</span><span class="st">&quot;a&quot;</span><span class="op">:</span> <span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">}}</span></span>
-<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="co">// m[&quot;a&quot;].X = 10        // compile error: cannot assign to struct field</span></span>
-<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>p <span class="op">:=</span> m<span class="op">[</span><span class="st">&quot;a&quot;</span><span class="op">];</span> p<span class="op">.</span>X <span class="op">=</span> <span class="dv">10</span><span class="op">;</span> m<span class="op">[</span><span class="st">&quot;a&quot;</span><span class="op">]</span> <span class="op">=</span> p   <span class="co">// read out → modify → write back</span></span>
-<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a><span class="co">// or store a pointer: map[string]*Point, then m[&quot;a&quot;].X = 10 works</span></span></code></pre></div>
+<div class="sourceCode" id="cb17"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>m <span class="op">:=</span> <span class="kw">map</span><span class="op">[</span><span class="dt">string</span><span class="op">]</span>Point<span class="op">{</span><span class="st">&quot;a&quot;</span><span class="op">:</span> <span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">}}</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="co">// m[&quot;a&quot;].X = 10        // compile error: cannot assign to struct field</span></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>p <span class="op">:=</span> m<span class="op">[</span><span class="st">&quot;a&quot;</span><span class="op">];</span> p<span class="op">.</span>X <span class="op">=</span> <span class="dv">10</span><span class="op">;</span> m<span class="op">[</span><span class="st">&quot;a&quot;</span><span class="op">]</span> <span class="op">=</span> p   <span class="co">// read out → modify → write back</span></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a><span class="co">// or store a pointer: map[string]*Point, then m[&quot;a&quot;].X = 10 works</span></span></code></pre></div>
+<p>Runnable (the commented line would be a compile error):</p>
+<div class="sourceCode" id="cb18"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Point <span class="kw">struct</span><span class="op">{</span> X<span class="op">,</span> Y <span class="dt">int</span> <span class="op">}</span></span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a>    m <span class="op">:=</span> <span class="kw">map</span><span class="op">[</span><span class="dt">string</span><span class="op">]</span>Point<span class="op">{</span><span class="st">&quot;a&quot;</span><span class="op">:</span> <span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">}}</span></span>
+<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a>    <span class="co">// m[&quot;a&quot;].X = 10 // compile error: cannot assign to struct field m[&quot;a&quot;].X</span></span>
+<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a>    p <span class="op">:=</span> m<span class="op">[</span><span class="st">&quot;a&quot;</span><span class="op">]</span>         <span class="co">// read out</span></span>
+<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a>    p<span class="op">.</span>X <span class="op">=</span> <span class="dv">10</span>            <span class="co">// modify the copy</span></span>
+<span id="cb18-12"><a href="#cb18-12" aria-hidden="true" tabindex="-1"></a>    m<span class="op">[</span><span class="st">&quot;a&quot;</span><span class="op">]</span> <span class="op">=</span> p          <span class="co">// write back</span></span>
+<span id="cb18-13"><a href="#cb18-13" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>m<span class="op">[</span><span class="st">&quot;a&quot;</span><span class="op">])</span> <span class="co">// {10 2}</span></span>
+<span id="cb18-14"><a href="#cb18-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-15"><a href="#cb18-15" aria-hidden="true" tabindex="-1"></a>    pm <span class="op">:=</span> <span class="kw">map</span><span class="op">[</span><span class="dt">string</span><span class="op">]*</span>Point<span class="op">{</span><span class="st">&quot;a&quot;</span><span class="op">:</span> <span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">}}</span> <span class="co">// store pointers instead</span></span>
+<span id="cb18-16"><a href="#cb18-16" aria-hidden="true" tabindex="-1"></a>    pm<span class="op">[</span><span class="st">&quot;a&quot;</span><span class="op">].</span>X <span class="op">=</span> <span class="dv">10</span>                       <span class="co">// in-place works: the value is a pointer</span></span>
+<span id="cb18-17"><a href="#cb18-17" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(*</span>pm<span class="op">[</span><span class="st">&quot;a&quot;</span><span class="op">])</span>                <span class="co">// {10 2}</span></span>
+<span id="cb18-18"><a href="#cb18-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-19"><a href="#cb18-19" aria-hidden="true" tabindex="-1"></a>    v<span class="op">,</span> ok <span class="op">:=</span> m<span class="op">[</span><span class="st">&quot;missing&quot;</span><span class="op">]</span> <span class="co">// reading a missing key</span></span>
+<span id="cb18-20"><a href="#cb18-20" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>v<span class="op">,</span> ok<span class="op">)</span>    <span class="co">// {0 0} false</span></span>
+<span id="cb18-21"><a href="#cb18-21" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p><strong>3. Reading a missing key returns the zero value +
 ok.</strong> The comma-ok idiom:</p>
-<div class="sourceCode" id="cb17"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>v<span class="op">,</span> ok <span class="op">:=</span> m<span class="op">[</span>k<span class="op">]</span> <span class="co">// ok is false means it doesn&#39;t exist, v is the zero value</span></span></code></pre></div>
+<div class="sourceCode" id="cb19"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>v<span class="op">,</span> ok <span class="op">:=</span> m<span class="op">[</span>k<span class="op">]</span> <span class="co">// ok is false means it doesn&#39;t exist, v is the zero value</span></span></code></pre></div>
 <p><strong>4. Not concurrency-safe.</strong> A concurrent read-write
 (even one read and one write) is detected by the runtime and crashes
 directly with
@@ -425,19 +481,19 @@ buffer</h2>
 <p>The channel is Go’s core concurrency primitive, backed by
 <code>*hchan</code> (<code>runtime/chan.go</code>); a channel variable
 is also a pointer.</p>
-<div class="sourceCode" id="cb18"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> hchan <span class="kw">struct</span> <span class="op">{</span></span>
-<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>    qcount   <span class="dt">uint</span>           <span class="co">// current number of elements in the buffer</span></span>
-<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>    dataqsiz <span class="dt">uint</span>           <span class="co">// buffer capacity (the second argument to make)</span></span>
-<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>    buf      unsafe<span class="op">.</span>Pointer <span class="co">// points to the ring buffer array (when buffered)</span></span>
-<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>    elemsize <span class="dt">uint16</span></span>
-<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>    closed   <span class="dt">uint32</span></span>
-<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>    sendx    <span class="dt">uint</span>           <span class="co">// write index of the ring buffer</span></span>
-<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a>    recvx    <span class="dt">uint</span>           <span class="co">// read index of the ring buffer</span></span>
-<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a>    recvq    waitq          <span class="co">// queue of goroutines waiting to receive</span></span>
-<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a>    sendq    waitq          <span class="co">// queue of goroutines waiting to send</span></span>
-<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a>    lock     mutex          <span class="co">// protects all the fields above</span></span>
-<span id="cb18-12"><a href="#cb18-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb20"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> hchan <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>    qcount   <span class="dt">uint</span>           <span class="co">// current number of elements in the buffer</span></span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>    dataqsiz <span class="dt">uint</span>           <span class="co">// buffer capacity (the second argument to make)</span></span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>    buf      unsafe<span class="op">.</span>Pointer <span class="co">// points to the ring buffer array (when buffered)</span></span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>    elemsize <span class="dt">uint16</span></span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>    closed   <span class="dt">uint32</span></span>
+<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a>    sendx    <span class="dt">uint</span>           <span class="co">// write index of the ring buffer</span></span>
+<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a>    recvx    <span class="dt">uint</span>           <span class="co">// read index of the ring buffer</span></span>
+<span id="cb20-9"><a href="#cb20-9" aria-hidden="true" tabindex="-1"></a>    recvq    waitq          <span class="co">// queue of goroutines waiting to receive</span></span>
+<span id="cb20-10"><a href="#cb20-10" aria-hidden="true" tabindex="-1"></a>    sendq    waitq          <span class="co">// queue of goroutines waiting to send</span></span>
+<span id="cb20-11"><a href="#cb20-11" aria-hidden="true" tabindex="-1"></a>    lock     mutex          <span class="co">// protects all the fields above</span></span>
+<span id="cb20-12"><a href="#cb20-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <pre><code>buffered channel  make(chan int, 4):
         ┌─────────────────────────────┐
 buf ──▶ │  slot0 slot1 slot2 slot3    │  ring buffer
@@ -492,10 +548,10 @@ OS thread.</p>
 receiver in recvq, the data <strong>skips the buffer and is copied
 directly to that receiver</strong> and wakes it, saving one copy.</p>
 <h3 id="close-and-nil">close and nil</h3>
-<div class="sourceCode" id="cb20"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="bu">close</span><span class="op">(</span>ch<span class="op">)</span>          <span class="co">// close; sending afterward panics; receiving returns the zero value immediately</span></span>
-<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>v<span class="op">,</span> ok <span class="op">:=</span> <span class="op">&lt;-</span>ch      <span class="co">// ok==false means the channel is closed and the buffer is empty</span></span>
-<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> v <span class="op">:=</span> <span class="kw">range</span> ch  <span class="co">// keep receiving until the channel is closed</span></span></code></pre></div>
+<div class="sourceCode" id="cb22"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="bu">close</span><span class="op">(</span>ch<span class="op">)</span>          <span class="co">// close; sending afterward panics; receiving returns the zero value immediately</span></span>
+<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a>v<span class="op">,</span> ok <span class="op">:=</span> <span class="op">&lt;-</span>ch      <span class="co">// ok==false means the channel is closed and the buffer is empty</span></span>
+<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> v <span class="op">:=</span> <span class="kw">range</span> ch  <span class="co">// keep receiving until the channel is closed</span></span></code></pre></div>
 <p>Sending to or receiving from a nil channel <strong>blocks
 forever</strong> (commonly used to dynamically “turn off a branch” in a
 <code>select</code>).</p>
@@ -504,6 +560,24 @@ semantics): <code>ch &lt;- x</code> copies <code>x</code> into the
 buffer, <code>&lt;-ch</code> copies it out. If the element is a large
 struct, the whole block is copied; passing a pointer copies the pointer
 (in which case mind the concurrency safety of the shared data).</p>
+<h3 id="buffered-sendreceive-close-and-range-runnable">Buffered
+send/receive, close, and range (runnable)</h3>
+<div class="sourceCode" id="cb23"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb23-4"><a href="#cb23-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-5"><a href="#cb23-5" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb23-6"><a href="#cb23-6" aria-hidden="true" tabindex="-1"></a>    ch <span class="op">:=</span> <span class="bu">make</span><span class="op">(</span><span class="kw">chan</span> <span class="dt">int</span><span class="op">,</span> <span class="dv">2</span><span class="op">)</span></span>
+<span id="cb23-7"><a href="#cb23-7" aria-hidden="true" tabindex="-1"></a>    ch <span class="op">&lt;-</span> <span class="dv">1</span></span>
+<span id="cb23-8"><a href="#cb23-8" aria-hidden="true" tabindex="-1"></a>    ch <span class="op">&lt;-</span> <span class="dv">2</span></span>
+<span id="cb23-9"><a href="#cb23-9" aria-hidden="true" tabindex="-1"></a>    <span class="bu">close</span><span class="op">(</span>ch<span class="op">)</span>           <span class="co">// close after sending; buffered values remain receivable</span></span>
+<span id="cb23-10"><a href="#cb23-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> v <span class="op">:=</span> <span class="kw">range</span> ch <span class="op">{</span> <span class="co">// drains the buffer in FIFO order, then stops at close</span></span>
+<span id="cb23-11"><a href="#cb23-11" aria-hidden="true" tabindex="-1"></a>        fmt<span class="op">.</span>Println<span class="op">(</span>v<span class="op">)</span> <span class="co">// prints 1, then 2</span></span>
+<span id="cb23-12"><a href="#cb23-12" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb23-13"><a href="#cb23-13" aria-hidden="true" tabindex="-1"></a>    v<span class="op">,</span> ok <span class="op">:=</span> <span class="op">&lt;-</span>ch      <span class="co">// closed and drained → zero value, ok=false</span></span>
+<span id="cb23-14"><a href="#cb23-14" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>v<span class="op">,</span> ok<span class="op">)</span> <span class="co">// 0 false</span></span>
+<span id="cb23-15"><a href="#cb23-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <h2 id="v.-a-comparison-of-the-three">V. A comparison of the three</h2>
 <table>
 <colgroup>

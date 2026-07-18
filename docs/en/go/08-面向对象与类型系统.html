@@ -244,20 +244,49 @@ call back into <code>Car</code>’s overriding version—fundamentally
 different from C++ virtual functions where “a derived-class override
 gets called by the base class.” For that kind of callback you need
 interfaces.</p>
+<h3 id="runnable-promotion-shadowing-and-static-forwarding">Runnable:
+promotion, shadowing, and static forwarding</h3>
+<div class="sourceCode" id="cb6"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Engine <span class="kw">struct</span><span class="op">{</span> Power <span class="dt">int</span> <span class="op">}</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>e Engine<span class="op">)</span> Start<span class="op">()</span> <span class="op">{</span> fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;engine start&quot;</span><span class="op">,</span> e<span class="op">.</span>Power<span class="op">)</span> <span class="op">}</span></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>e Engine<span class="op">)</span> Boot<span class="op">()</span>  <span class="op">{</span> e<span class="op">.</span>Start<span class="op">()</span> <span class="op">}</span> <span class="co">// always calls Engine.Start</span></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Car <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>    Engine        <span class="co">// embedded (anonymous field)</span></span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>    Brand <span class="dt">string</span></span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>c Car<span class="op">)</span> Start<span class="op">()</span> <span class="op">{</span> fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;car start&quot;</span><span class="op">,</span> c<span class="op">.</span>Brand<span class="op">)</span> <span class="op">}</span> <span class="co">// shadows Engine.Start</span></span>
+<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a>    c <span class="op">:=</span> Car<span class="op">{</span>Engine<span class="op">{</span><span class="dv">100</span><span class="op">},</span> <span class="st">&quot;Toyota&quot;</span><span class="op">}</span></span>
+<span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a>    c<span class="op">.</span>Start<span class="op">()</span>            <span class="co">// car start Toyota   (outer shadows the promoted method)</span></span>
+<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a>    c<span class="op">.</span>Engine<span class="op">.</span>Start<span class="op">()</span>     <span class="co">// engine start 100   (explicit path to the inner one)</span></span>
+<span id="cb6-21"><a href="#cb6-21" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>c<span class="op">.</span>Power<span class="op">)</span> <span class="co">// 100                (field promotion)</span></span>
+<span id="cb6-22"><a href="#cb6-22" aria-hidden="true" tabindex="-1"></a>    c<span class="op">.</span>Boot<span class="op">()</span>             <span class="co">// engine start 100   (static forwarding: NOT &quot;car start&quot;)</span></span>
+<span id="cb6-23"><a href="#cb6-23" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>The last line is the crux: <code>Boot</code> belongs to
+<code>Engine</code> and calls <code>Engine.Start</code> directly—it does
+<strong>not</strong> dispatch to <code>Car.Start</code>. That is static
+forwarding, the opposite of a C++ virtual call.</p>
 <h2 id="iii.-interfaces-implicitly-implemented-structural-types">III.
 Interfaces: implicitly implemented structural types</h2>
 <p>An interface defines a set of method signatures. <strong>As long as a
 type implements all of the interface’s methods, it automatically
 satisfies that interface—no <code>implements</code>, no explicit
 declaration needed.</strong></p>
-<div class="sourceCode" id="cb6"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Stringer <span class="kw">interface</span> <span class="op">{</span></span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>    String<span class="op">()</span> <span class="dt">string</span></span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Celsius <span class="dt">float64</span></span>
-<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>c Celsius<span class="op">)</span> String<span class="op">()</span> <span class="dt">string</span> <span class="op">{</span> <span class="cf">return</span> fmt<span class="op">.</span>Sprintf<span class="op">(</span><span class="st">&quot;%.1f°C&quot;</span><span class="op">,</span> c<span class="op">)</span> <span class="op">}</span></span>
-<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> s Stringer <span class="op">=</span> Celsius<span class="op">(</span><span class="fl">37.5</span><span class="op">)</span>  <span class="co">// automatically satisfied, no need to declare &quot;Celsius implements Stringer&quot;</span></span></code></pre></div>
+<div class="sourceCode" id="cb7"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Stringer <span class="kw">interface</span> <span class="op">{</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    String<span class="op">()</span> <span class="dt">string</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Celsius <span class="dt">float64</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>c Celsius<span class="op">)</span> String<span class="op">()</span> <span class="dt">string</span> <span class="op">{</span> <span class="cf">return</span> fmt<span class="op">.</span>Sprintf<span class="op">(</span><span class="st">&quot;%.1f°C&quot;</span><span class="op">,</span> c<span class="op">)</span> <span class="op">}</span></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> s Stringer <span class="op">=</span> Celsius<span class="op">(</span><span class="fl">37.5</span><span class="op">)</span>  <span class="co">// automatically satisfied, no need to declare &quot;Celsius implements Stringer&quot;</span></span></code></pre></div>
 <p>This is called <strong>structural typing</strong> / a static version
 of duck typing. The benefits: an interface can be defined “after the
 fact” for a type you cannot modify (even a standard-library type); it
@@ -271,24 +300,25 @@ an interface value: two words</h3>
 kinds:</p>
 <p><strong><code>iface</code>—a non-empty interface (an interface with
 methods)</strong>:</p>
-<div class="sourceCode" id="cb7"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> iface <span class="kw">struct</span> <span class="op">{</span></span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    tab  <span class="op">*</span>itab          <span class="co">// type info + method table (equivalent to a vtable)</span></span>
-<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    data unsafe<span class="op">.</span>Pointer  <span class="co">// points to the actual data</span></span>
-<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb8"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> iface <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>    tab  <span class="op">*</span>itab          <span class="co">// type info + method table (equivalent to a vtable)</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    data unsafe<span class="op">.</span>Pointer  <span class="co">// points to the actual data</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p><strong><code>eface</code>—the empty interface <code>any</code>
 (i.e. <code>interface{}</code>)</strong>:</p>
-<div class="sourceCode" id="cb8"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> eface <span class="kw">struct</span> <span class="op">{</span></span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>    _type <span class="op">*</span>_type         <span class="co">// dynamic type info</span></span>
-<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    data  unsafe<span class="op">.</span>Pointer  <span class="co">// points to the actual data</span></span>
-<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb9"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> eface <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>    _type <span class="op">*</span>_type         <span class="co">// dynamic type info</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>    data  unsafe<span class="op">.</span>Pointer  <span class="co">// points to the actual data</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p><code>itab</code> is the key: it pairs an “interface type” with a
 “concrete type” and caches the method address table:</p>
-<div class="sourceCode" id="cb9"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> itab <span class="kw">struct</span> <span class="op">{</span></span>
-<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>    inter <span class="op">*</span>interfacetype <span class="co">// interface type</span></span>
-<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>    _type <span class="op">*</span>_type         <span class="co">// concrete type</span></span>
-<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>    hash  <span class="dt">uint32</span></span>
-<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>    fun   <span class="op">[</span><span class="dv">1</span><span class="op">]</span><span class="dt">uintptr</span>     <span class="co">// method address array (variable-length), equivalent to a vtable</span></span>
-<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> itab <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>    inter <span class="op">*</span>interfacetype <span class="co">// interface type</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>    _type <span class="op">*</span>_type         <span class="co">// concrete type</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>    hash  <span class="dt">uint32</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>    fun   <span class="op">[</span><span class="dv">1</span><span class="op">]</span><span class="dt">uintptr</span>     <span class="co">// method address array (variable-length), equivalent to a vtable</span></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <pre><code>var s Stringer = Celsius(37.5)
 
 s (interface value, 16 bytes):    itab (one per (interface, type) combination, globally cached):
@@ -321,18 +351,18 @@ nil-interface trap (a must-know for interviews)</h3>
 <code>tab</code> (or <code>_type</code>) and <code>data</code>, are
 nil</strong>. If the interface holds a “non-empty type but nil value”
 pointer, the interface itself is <strong>not equal to nil</strong>:</p>
-<div class="sourceCode" id="cb11"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> doErr<span class="op">()</span> <span class="dt">error</span> <span class="op">{</span></span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> p <span class="op">*</span>MyError <span class="op">=</span> <span class="ot">nil</span>   <span class="co">// a nil pointer of a concrete type</span></span>
-<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> p               <span class="co">// boxed into the error interface: tab=*MyError, data=nil</span></span>
-<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
-<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>    err <span class="op">:=</span> doErr<span class="op">()</span></span>
-<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> err <span class="op">!=</span> <span class="ot">nil</span> <span class="op">{</span>        <span class="co">// surprisingly true!!</span></span>
-<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a>        fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;non-nil:&quot;</span><span class="op">,</span> err <span class="op">==</span> <span class="ot">nil</span><span class="op">)</span> <span class="co">// non-nil: false</span></span>
-<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> doErr<span class="op">()</span> <span class="dt">error</span> <span class="op">{</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> p <span class="op">*</span>MyError <span class="op">=</span> <span class="ot">nil</span>   <span class="co">// a nil pointer of a concrete type</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> p               <span class="co">// boxed into the error interface: tab=*MyError, data=nil</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>    err <span class="op">:=</span> doErr<span class="op">()</span></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> err <span class="op">!=</span> <span class="ot">nil</span> <span class="op">{</span>        <span class="co">// surprisingly true!!</span></span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>        fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;non-nil:&quot;</span><span class="op">,</span> err <span class="op">==</span> <span class="ot">nil</span><span class="op">)</span> <span class="co">// non-nil: false</span></span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>Because the returned interface value is
 <code>{tab: *MyError, data: nil}</code>, and <code>tab</code> is
 non-nil, <code>err != nil</code>. This is one of the most common bugs
@@ -341,29 +371,50 @@ return a genuine nil (<code>return nil</code>), or don’t return a nil
 pointer of a concrete type.</strong> (<a
 href="09-错误处理与资源管理.html">Chapter 09 on error revisits
 this</a>)</p>
+<p>Runnable:</p>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> MyError <span class="kw">struct</span><span class="op">{}</span></span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>e <span class="op">*</span>MyError<span class="op">)</span> Error<span class="op">()</span> <span class="dt">string</span> <span class="op">{</span> <span class="cf">return</span> <span class="st">&quot;boom&quot;</span> <span class="op">}</span></span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> doErr<span class="op">()</span> <span class="dt">error</span> <span class="op">{</span></span>
+<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> p <span class="op">*</span>MyError <span class="op">=</span> <span class="ot">nil</span> <span class="co">// a typed nil pointer</span></span>
+<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> p             <span class="co">// boxed into error as {type:*MyError, data:nil}</span></span>
+<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-14"><a href="#cb13-14" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> returnsNil<span class="op">()</span> <span class="dt">error</span> <span class="op">{</span> <span class="cf">return</span> <span class="ot">nil</span> <span class="op">}</span> <span class="co">// a genuine nil interface</span></span>
+<span id="cb13-15"><a href="#cb13-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-16"><a href="#cb13-16" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb13-17"><a href="#cb13-17" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>doErr<span class="op">()</span> <span class="op">==</span> <span class="ot">nil</span><span class="op">)</span>      <span class="co">// false  ← the trap: interface holds a non-nil type</span></span>
+<span id="cb13-18"><a href="#cb13-18" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>returnsNil<span class="op">()</span> <span class="op">==</span> <span class="ot">nil</span><span class="op">)</span> <span class="co">// true</span></span>
+<span id="cb13-19"><a href="#cb13-19" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <h3 id="type-assertions-and-type-switch">Type assertions and type
 switch</h3>
 <p>Retrieving the concrete type from an interface:</p>
-<div class="sourceCode" id="cb12"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> i <span class="dt">any</span> <span class="op">=</span> <span class="st">&quot;hello&quot;</span></span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>s <span class="op">:=</span> i<span class="op">.(</span><span class="dt">string</span><span class="op">)</span>         <span class="co">// assertion, panics on failure</span></span>
-<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>s<span class="op">,</span> ok <span class="op">:=</span> i<span class="op">.(</span><span class="dt">string</span><span class="op">)</span>     <span class="co">// comma-ok form, ok=false on failure, no panic</span></span></code></pre></div>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> i <span class="dt">any</span> <span class="op">=</span> <span class="st">&quot;hello&quot;</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>s <span class="op">:=</span> i<span class="op">.(</span><span class="dt">string</span><span class="op">)</span>         <span class="co">// assertion, panics on failure</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>s<span class="op">,</span> ok <span class="op">:=</span> i<span class="op">.(</span><span class="dt">string</span><span class="op">)</span>     <span class="co">// comma-ok form, ok=false on failure, no panic</span></span></code></pre></div>
 <p>At the low level: compare the interface’s
 <code>_type</code>/<code>itab</code> against the target type; if they
 match, return <code>data</code> (dereferencing/copying as
 necessary).</p>
 <p>A type switch dispatches on the dynamic type:</p>
-<div class="sourceCode" id="cb13"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="cf">switch</span> v <span class="op">:=</span> i<span class="op">.(</span><span class="kw">type</span><span class="op">)</span> <span class="op">{</span></span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="cf">case</span> <span class="dt">int</span><span class="op">:</span></span>
-<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;int&quot;</span><span class="op">,</span> v<span class="op">)</span>     <span class="co">// v is an int</span></span>
-<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a><span class="cf">case</span> <span class="dt">string</span><span class="op">:</span></span>
-<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;string&quot;</span><span class="op">,</span> v<span class="op">)</span>  <span class="co">// v is a string</span></span>
-<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a><span class="cf">case</span> fmt<span class="op">.</span>Stringer<span class="op">:</span></span>
-<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>v<span class="op">.</span>String<span class="op">())</span>   <span class="co">// can also match an interface</span></span>
-<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a><span class="cf">default</span><span class="op">:</span></span>
-<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;other&quot;</span><span class="op">)</span></span>
-<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb15"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="cf">switch</span> v <span class="op">:=</span> i<span class="op">.(</span><span class="kw">type</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="cf">case</span> <span class="dt">int</span><span class="op">:</span></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;int&quot;</span><span class="op">,</span> v<span class="op">)</span>     <span class="co">// v is an int</span></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a><span class="cf">case</span> <span class="dt">string</span><span class="op">:</span></span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;string&quot;</span><span class="op">,</span> v<span class="op">)</span>  <span class="co">// v is a string</span></span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a><span class="cf">case</span> fmt<span class="op">.</span>Stringer<span class="op">:</span></span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>v<span class="op">.</span>String<span class="op">())</span>   <span class="co">// can also match an interface</span></span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a><span class="cf">default</span><span class="op">:</span></span>
+<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;other&quot;</span><span class="op">)</span></span>
+<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <h2
 id="iv.-method-sets-can-a-value-or-a-pointer-satisfy-an-interface">IV.
 Method sets: can a value or a pointer satisfy an interface?</h2>
@@ -396,26 +447,26 @@ Because with a <code>*T</code> you can automatically dereference to a
 value, but with a <code>T</code> you cannot necessarily obtain a stable
 address (e.g. a map element or a temporary value) to call a pointer
 method.</p>
-<div class="sourceCode" id="cb14"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Speaker <span class="kw">interface</span><span class="op">{</span> Speak<span class="op">()</span> <span class="op">}</span></span>
-<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Dog <span class="kw">struct</span><span class="op">{}</span></span>
-<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>d <span class="op">*</span>Dog<span class="op">)</span> Speak<span class="op">()</span> <span class="op">{}</span>      <span class="co">// pointer receiver</span></span>
-<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> s Speaker <span class="op">=</span> <span class="op">&amp;</span>Dog<span class="op">{}</span>        <span class="co">// OK</span></span>
-<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a><span class="co">// var s Speaker = Dog{}      // compile error: Dog does not implement Speaker (Speak is on *Dog)</span></span></code></pre></div>
+<div class="sourceCode" id="cb16"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Speaker <span class="kw">interface</span><span class="op">{</span> Speak<span class="op">()</span> <span class="op">}</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Dog <span class="kw">struct</span><span class="op">{}</span></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>d <span class="op">*</span>Dog<span class="op">)</span> Speak<span class="op">()</span> <span class="op">{}</span>      <span class="co">// pointer receiver</span></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> s Speaker <span class="op">=</span> <span class="op">&amp;</span>Dog<span class="op">{}</span>        <span class="co">// OK</span></span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a><span class="co">// var s Speaker = Dog{}      // compile error: Dog does not implement Speaker (Speak is on *Dog)</span></span></code></pre></div>
 <p>Practical advice: <strong>use all value receivers or all pointer
 receivers, don’t mix</strong>. If you need to modify state, the struct
 is large, or you want <code>*T</code> to satisfy an interface, use a
 pointer receiver.</p>
 <h3 id="method-values-vs-method-expressions">Method values vs method
 expressions</h3>
-<div class="sourceCode" id="cb15"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>d <span class="op">:=</span> Dog<span class="op">{}</span></span>
-<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>f <span class="op">:=</span> d<span class="op">.</span>Speak            <span class="co">// method value: binds the receiver d, type func()</span></span>
-<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>f<span class="op">()</span>                     <span class="co">// equivalent to d.Speak()</span></span>
-<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>g <span class="op">:=</span> <span class="op">(*</span>Dog<span class="op">).</span>Speak       <span class="co">// method expression: the receiver becomes an explicit first parameter</span></span>
-<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>g<span class="op">(&amp;</span>d<span class="op">)</span>                   <span class="co">// equivalent to d.Speak()</span></span></code></pre></div>
+<div class="sourceCode" id="cb17"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>d <span class="op">:=</span> Dog<span class="op">{}</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>f <span class="op">:=</span> d<span class="op">.</span>Speak            <span class="co">// method value: binds the receiver d, type func()</span></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>f<span class="op">()</span>                     <span class="co">// equivalent to d.Speak()</span></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>g <span class="op">:=</span> <span class="op">(*</span>Dog<span class="op">).</span>Speak       <span class="co">// method expression: the receiver becomes an explicit first parameter</span></span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a>g<span class="op">(&amp;</span>d<span class="op">)</span>                   <span class="co">// equivalent to d.Speak()</span></span></code></pre></div>
 <p>A method value captures the receiver (which may cause it to escape to
 the heap, like a closure); a method expression merely treats the method
 as an ordinary function, with the receiver passed explicitly.</p>
@@ -424,27 +475,53 @@ as an ordinary function, with the receiver passed explicitly.</p>
 <p>Go long lacked generics; 1.18 introduced type parameters. Syntax:
 declare type parameters in square brackets, paired with a
 <strong>constraint</strong>.</p>
-<div class="sourceCode" id="cb16"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="co">// constraint: an interface listing the allowed set of types</span></span>
-<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Number <span class="kw">interface</span> <span class="op">{</span></span>
-<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>    <span class="op">~</span><span class="dt">int</span> <span class="op">|</span> <span class="op">~</span><span class="dt">int64</span> <span class="op">|</span> <span class="op">~</span><span class="dt">float64</span>   <span class="co">// ~T means &quot;all types whose underlying type is T&quot;</span></span>
-<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> Sum<span class="op">[</span>T Number<span class="op">](</span>xs <span class="op">[]</span>T<span class="op">)</span> T <span class="op">{</span></span>
-<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> total T</span>
-<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _<span class="op">,</span> x <span class="op">:=</span> <span class="kw">range</span> xs <span class="op">{</span></span>
-<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a>        total <span class="op">+=</span> x</span>
-<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> total</span>
-<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-14"><a href="#cb16-14" aria-hidden="true" tabindex="-1"></a>Sum<span class="op">([]</span><span class="dt">int</span><span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">})</span>        <span class="co">// the type argument int is inferred automatically</span></span>
-<span id="cb16-15"><a href="#cb16-15" aria-hidden="true" tabindex="-1"></a>Sum<span class="op">([]</span><span class="dt">float64</span><span class="op">{</span><span class="fl">1.5</span><span class="op">,</span> <span class="fl">2.5</span><span class="op">})</span></span></code></pre></div>
+<div class="sourceCode" id="cb18"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="co">// constraint: an interface listing the allowed set of types</span></span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Number <span class="kw">interface</span> <span class="op">{</span></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>    <span class="op">~</span><span class="dt">int</span> <span class="op">|</span> <span class="op">~</span><span class="dt">int64</span> <span class="op">|</span> <span class="op">~</span><span class="dt">float64</span>   <span class="co">// ~T means &quot;all types whose underlying type is T&quot;</span></span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> Sum<span class="op">[</span>T Number<span class="op">](</span>xs <span class="op">[]</span>T<span class="op">)</span> T <span class="op">{</span></span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> total T</span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _<span class="op">,</span> x <span class="op">:=</span> <span class="kw">range</span> xs <span class="op">{</span></span>
+<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a>        total <span class="op">+=</span> x</span>
+<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> total</span>
+<span id="cb18-12"><a href="#cb18-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb18-13"><a href="#cb18-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-14"><a href="#cb18-14" aria-hidden="true" tabindex="-1"></a>Sum<span class="op">([]</span><span class="dt">int</span><span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">})</span>        <span class="co">// the type argument int is inferred automatically</span></span>
+<span id="cb18-15"><a href="#cb18-15" aria-hidden="true" tabindex="-1"></a>Sum<span class="op">([]</span><span class="dt">float64</span><span class="op">{</span><span class="fl">1.5</span><span class="op">,</span> <span class="fl">2.5</span><span class="op">})</span></span></code></pre></div>
+<p>Runnable, showing why <code>~</code> matters (it admits named types
+whose underlying type matches):</p>
+<div class="sourceCode" id="cb19"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Number <span class="kw">interface</span> <span class="op">{</span></span>
+<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">~</span><span class="dt">int</span> <span class="op">|</span> <span class="op">~</span><span class="dt">int64</span> <span class="op">|</span> <span class="op">~</span><span class="dt">float64</span></span>
+<span id="cb19-7"><a href="#cb19-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb19-8"><a href="#cb19-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-9"><a href="#cb19-9" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> Sum<span class="op">[</span>T Number<span class="op">](</span>xs <span class="op">[]</span>T<span class="op">)</span> T <span class="op">{</span></span>
+<span id="cb19-10"><a href="#cb19-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> total T</span>
+<span id="cb19-11"><a href="#cb19-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _<span class="op">,</span> x <span class="op">:=</span> <span class="kw">range</span> xs <span class="op">{</span></span>
+<span id="cb19-12"><a href="#cb19-12" aria-hidden="true" tabindex="-1"></a>        total <span class="op">+=</span> x</span>
+<span id="cb19-13"><a href="#cb19-13" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb19-14"><a href="#cb19-14" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> total</span>
+<span id="cb19-15"><a href="#cb19-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb19-16"><a href="#cb19-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-17"><a href="#cb19-17" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Celsius <span class="dt">float64</span> <span class="co">// underlying type is float64, so ~float64 admits it</span></span>
+<span id="cb19-18"><a href="#cb19-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-19"><a href="#cb19-19" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb19-20"><a href="#cb19-20" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>Sum<span class="op">([]</span><span class="dt">int</span><span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">}))</span>      <span class="co">// 6   (T inferred as int)</span></span>
+<span id="cb19-21"><a href="#cb19-21" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>Sum<span class="op">([]</span><span class="dt">float64</span><span class="op">{</span><span class="fl">1.5</span><span class="op">,</span> <span class="fl">2.5</span><span class="op">}))</span> <span class="co">// 4</span></span>
+<span id="cb19-22"><a href="#cb19-22" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>Sum<span class="op">([]</span>Celsius<span class="op">{</span><span class="fl">1.5</span><span class="op">,</span> <span class="fl">2.5</span><span class="op">}))</span> <span class="co">// 4   (~float64 admits the named type Celsius)</span></span>
+<span id="cb19-23"><a href="#cb19-23" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p><code>comparable</code> is a built-in constraint (types usable with
 <code>==</code>/<code>!=</code>), commonly used for map-key-like
 generics:</p>
-<div class="sourceCode" id="cb17"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> Keys<span class="op">[</span>K <span class="dt">comparable</span><span class="op">,</span> V <span class="dt">any</span><span class="op">](</span>m <span class="kw">map</span><span class="op">[</span>K<span class="op">]</span>V<span class="op">)</span> <span class="op">[]</span>K <span class="op">{</span> <span class="co">/* ... */</span> <span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb20"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> Keys<span class="op">[</span>K <span class="dt">comparable</span><span class="op">,</span> V <span class="dt">any</span><span class="op">](</span>m <span class="kw">map</span><span class="op">[</span>K<span class="op">]</span>V<span class="op">)</span> <span class="op">[]</span>K <span class="op">{</span> <span class="co">/* ... */</span> <span class="op">}</span></span></code></pre></div>
 <p>The essence of a constraint: it is simply an interface, which can
 list methods (requiring the implementation of a method) as well as
 <strong>a set of types</strong> (<code>| ~T</code>).</p>

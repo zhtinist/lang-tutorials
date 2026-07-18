@@ -486,6 +486,27 @@ latest value until call time, wrap the logic in a closure (a closure
 captures the variable, see Fact 4):</p>
 <div class="sourceCode" id="cb22"><pre
 class="sourceCode go"><code class="sourceCode go"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="cf">defer</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span> fmt<span class="op">.</span>Println<span class="op">(</span>i<span class="op">)</span> <span class="op">}()</span> <span class="co">// reads i at call time, outputs 100</span></span></code></pre></div>
+<p>Putting LIFO and “evaluated at registration” together, a defer inside
+a loop is the most vivid demonstration:</p>
+<div class="sourceCode" id="cb23"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb23-4"><a href="#cb23-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-5"><a href="#cb23-5" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb23-6"><a href="#cb23-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> i <span class="op">:=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">3</span><span class="op">;</span> i<span class="op">++</span> <span class="op">{</span></span>
+<span id="cb23-7"><a href="#cb23-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">defer</span> fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;defer:&quot;</span><span class="op">,</span> i<span class="op">)</span> <span class="co">// each iteration copies the current i into the record</span></span>
+<span id="cb23-8"><a href="#cb23-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb23-9"><a href="#cb23-9" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;function body&quot;</span><span class="op">)</span></span>
+<span id="cb23-10"><a href="#cb23-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb23-11"><a href="#cb23-11" aria-hidden="true" tabindex="-1"></a><span class="co">// output:</span></span>
+<span id="cb23-12"><a href="#cb23-12" aria-hidden="true" tabindex="-1"></a><span class="co">// function body</span></span>
+<span id="cb23-13"><a href="#cb23-13" aria-hidden="true" tabindex="-1"></a><span class="co">// defer: 2</span></span>
+<span id="cb23-14"><a href="#cb23-14" aria-hidden="true" tabindex="-1"></a><span class="co">// defer: 1</span></span>
+<span id="cb23-15"><a href="#cb23-15" aria-hidden="true" tabindex="-1"></a><span class="co">// defer: 0</span></span></code></pre></div>
+<p>Each of the three defers remembers the <code>i</code> at its moment
+of registration (0, 1, 2), and on return they run in LIFO reverse
+order—so it prints 2, 1, 0.</p>
 <h3 id="fact-3-interaction-with-named-return-values-return">Fact 3:
 interaction with named return values / return</h3>
 <p><code>return x</code> is <strong>two steps</strong> at the low level:
@@ -493,14 +514,14 @@ first it writes the return value into the return slot, then it runs the
 defers, then it actually returns. If the function uses <strong>named
 return values</strong>, a defer can modify this return slot in the
 second step and thereby change the final returned value:</p>
-<div class="sourceCode" id="cb23"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> inc<span class="op">()</span> <span class="op">(</span>result <span class="dt">int</span><span class="op">)</span> <span class="op">{</span> <span class="co">// named return value result</span></span>
-<span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">defer</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span></span>
-<span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a>        result<span class="op">++</span> <span class="co">// defer modifies the return slot, changing the final return value</span></span>
-<span id="cb23-4"><a href="#cb23-4" aria-hidden="true" tabindex="-1"></a>    <span class="op">}()</span></span>
-<span id="cb23-5"><a href="#cb23-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="dv">10</span> <span class="co">// first sets result to 10, then runs the defer, making result 11</span></span>
-<span id="cb23-6"><a href="#cb23-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb23-7"><a href="#cb23-7" aria-hidden="true" tabindex="-1"></a><span class="co">// inc() returns 11</span></span></code></pre></div>
+<div class="sourceCode" id="cb24"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> inc<span class="op">()</span> <span class="op">(</span>result <span class="dt">int</span><span class="op">)</span> <span class="op">{</span> <span class="co">// named return value result</span></span>
+<span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">defer</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a>        result<span class="op">++</span> <span class="co">// defer modifies the return slot, changing the final return value</span></span>
+<span id="cb24-4"><a href="#cb24-4" aria-hidden="true" tabindex="-1"></a>    <span class="op">}()</span></span>
+<span id="cb24-5"><a href="#cb24-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="dv">10</span> <span class="co">// first sets result to 10, then runs the defer, making result 11</span></span>
+<span id="cb24-6"><a href="#cb24-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb24-7"><a href="#cb24-7" aria-hidden="true" tabindex="-1"></a><span class="co">// inc() returns 11</span></span></code></pre></div>
 <p>Contrast this with anonymous return values: with
 <code>return 10</code> the value is already copied to a temporary return
 location, so changing a local variable inside the defer cannot affect
@@ -513,26 +534,26 @@ trap</h3>
 not to the <strong>end of a block/loop</strong>. Defers inside a loop
 accumulate and all run when the function ends, which may exhaust
 resources:</p>
-<div class="sourceCode" id="cb24"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a><span class="co">// bad example: 1000 file handles stay open until the function ends</span></span>
-<span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> bad<span class="op">(</span>files <span class="op">[]</span><span class="dt">string</span><span class="op">)</span> <span class="op">{</span></span>
-<span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _<span class="op">,</span> name <span class="op">:=</span> <span class="kw">range</span> files <span class="op">{</span></span>
-<span id="cb24-4"><a href="#cb24-4" aria-hidden="true" tabindex="-1"></a>        f<span class="op">,</span> _ <span class="op">:=</span> os<span class="op">.</span>Open<span class="op">(</span>name<span class="op">)</span></span>
-<span id="cb24-5"><a href="#cb24-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">defer</span> f<span class="op">.</span>Close<span class="op">()</span> <span class="co">// all pile up, none closed during the loop!</span></span>
-<span id="cb24-6"><a href="#cb24-6" aria-hidden="true" tabindex="-1"></a>        <span class="co">// ...</span></span>
-<span id="cb24-7"><a href="#cb24-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb24-8"><a href="#cb24-8" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> <span class="co">// only here do all 1000 get closed at once</span></span>
-<span id="cb24-9"><a href="#cb24-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb24-10"><a href="#cb24-10" aria-hidden="true" tabindex="-1"></a><span class="co">// good example: extract the loop body into a function, so defer fires when that function returns</span></span>
-<span id="cb24-11"><a href="#cb24-11" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> good<span class="op">(</span>files <span class="op">[]</span><span class="dt">string</span><span class="op">)</span> <span class="op">{</span></span>
-<span id="cb24-12"><a href="#cb24-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _<span class="op">,</span> name <span class="op">:=</span> <span class="kw">range</span> files <span class="op">{</span></span>
-<span id="cb24-13"><a href="#cb24-13" aria-hidden="true" tabindex="-1"></a>        <span class="kw">func</span><span class="op">()</span> <span class="op">{</span></span>
-<span id="cb24-14"><a href="#cb24-14" aria-hidden="true" tabindex="-1"></a>            f<span class="op">,</span> _ <span class="op">:=</span> os<span class="op">.</span>Open<span class="op">(</span>name<span class="op">)</span></span>
-<span id="cb24-15"><a href="#cb24-15" aria-hidden="true" tabindex="-1"></a>            <span class="cf">defer</span> f<span class="op">.</span>Close<span class="op">()</span> <span class="co">// closed at the end of each iteration</span></span>
-<span id="cb24-16"><a href="#cb24-16" aria-hidden="true" tabindex="-1"></a>            <span class="co">// ...</span></span>
-<span id="cb24-17"><a href="#cb24-17" aria-hidden="true" tabindex="-1"></a>        <span class="op">}()</span></span>
-<span id="cb24-18"><a href="#cb24-18" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb24-19"><a href="#cb24-19" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb25"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a><span class="co">// bad example: 1000 file handles stay open until the function ends</span></span>
+<span id="cb25-2"><a href="#cb25-2" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> bad<span class="op">(</span>files <span class="op">[]</span><span class="dt">string</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb25-3"><a href="#cb25-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _<span class="op">,</span> name <span class="op">:=</span> <span class="kw">range</span> files <span class="op">{</span></span>
+<span id="cb25-4"><a href="#cb25-4" aria-hidden="true" tabindex="-1"></a>        f<span class="op">,</span> _ <span class="op">:=</span> os<span class="op">.</span>Open<span class="op">(</span>name<span class="op">)</span></span>
+<span id="cb25-5"><a href="#cb25-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">defer</span> f<span class="op">.</span>Close<span class="op">()</span> <span class="co">// all pile up, none closed during the loop!</span></span>
+<span id="cb25-6"><a href="#cb25-6" aria-hidden="true" tabindex="-1"></a>        <span class="co">// ...</span></span>
+<span id="cb25-7"><a href="#cb25-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb25-8"><a href="#cb25-8" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> <span class="co">// only here do all 1000 get closed at once</span></span>
+<span id="cb25-9"><a href="#cb25-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb25-10"><a href="#cb25-10" aria-hidden="true" tabindex="-1"></a><span class="co">// good example: extract the loop body into a function, so defer fires when that function returns</span></span>
+<span id="cb25-11"><a href="#cb25-11" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> good<span class="op">(</span>files <span class="op">[]</span><span class="dt">string</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb25-12"><a href="#cb25-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _<span class="op">,</span> name <span class="op">:=</span> <span class="kw">range</span> files <span class="op">{</span></span>
+<span id="cb25-13"><a href="#cb25-13" aria-hidden="true" tabindex="-1"></a>        <span class="kw">func</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb25-14"><a href="#cb25-14" aria-hidden="true" tabindex="-1"></a>            f<span class="op">,</span> _ <span class="op">:=</span> os<span class="op">.</span>Open<span class="op">(</span>name<span class="op">)</span></span>
+<span id="cb25-15"><a href="#cb25-15" aria-hidden="true" tabindex="-1"></a>            <span class="cf">defer</span> f<span class="op">.</span>Close<span class="op">()</span> <span class="co">// closed at the end of each iteration</span></span>
+<span id="cb25-16"><a href="#cb25-16" aria-hidden="true" tabindex="-1"></a>            <span class="co">// ...</span></span>
+<span id="cb25-17"><a href="#cb25-17" aria-hidden="true" tabindex="-1"></a>        <span class="op">}()</span></span>
+<span id="cb25-18"><a href="#cb25-18" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb25-19"><a href="#cb25-19" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <h3 id="defer-with-panicrecover">defer with panic/recover</h3>
 <p><code>defer</code> is also the only opportunity to catch a
 <code>panic</code>: only by calling <code>recover()</code> inside a

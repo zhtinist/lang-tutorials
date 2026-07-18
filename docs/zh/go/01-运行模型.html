@@ -268,6 +268,34 @@ P (processor)  ── 逻辑处理器/调度上下文,数量默认 = GOMAXPROCS(
 href="10-并发模型.html">第 10 章「并发模型」</a>。相比之下,C
 里开一个线程要几 MB 栈 + 内核调度开销,开几千个就吃力;Go 开几十万
 goroutine 稀松平常。</p>
+<p>这一点可以直接用 <code>runtime</code> 包看到:把 P 的数量固定为 2,再开
+1000 个 goroutine,它们全都复用在这 2 个逻辑处理器上:</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="op">(</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;runtime&quot;</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a><span class="op">)</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>    runtime<span class="op">.</span>GOMAXPROCS<span class="op">(</span><span class="dv">2</span><span class="op">)</span>              <span class="co">// 把逻辑处理器 P 固定为 2(结果确定)</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>runtime<span class="op">.</span>GOMAXPROCS<span class="op">(</span><span class="dv">0</span><span class="op">))</span> <span class="co">// 2   (传 0 = 只查询,不修改)</span></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>runtime<span class="op">.</span>NumGoroutine<span class="op">())</span> <span class="co">// 1   (目前只有 main 一个 goroutine)</span></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>    ch <span class="op">:=</span> <span class="bu">make</span><span class="op">(</span><span class="kw">chan</span> <span class="kw">struct</span><span class="op">{})</span></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> i <span class="op">:=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">1000</span><span class="op">;</span> i<span class="op">++</span> <span class="op">{</span></span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>        <span class="cf">go</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span> <span class="op">&lt;-</span>ch <span class="op">}()</span> <span class="co">// 1000 个 goroutine,全部阻塞在 ch 上等待</span></span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> runtime<span class="op">.</span>NumGoroutine<span class="op">()</span> <span class="op">&lt;</span> <span class="dv">1001</span> <span class="op">{</span> <span class="co">// 等它们全部被创建出来</span></span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>        runtime<span class="op">.</span>Gosched<span class="op">()</span></span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>runtime<span class="op">.</span>NumGoroutine<span class="op">())</span> <span class="co">// 1001 (main + 1000),仅跑在 2 个 OS 线程上</span></span>
+<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a>    <span class="bu">close</span><span class="op">(</span>ch<span class="op">)</span> <span class="co">// 一次性放行</span></span>
+<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>1001 个 goroutine 挤在 2 个 P 上安然共存——换成 C 的 1:1 线程,开 1000
+个线程光栈就要好几 GB。这就是 M:N 调度的直观体现。</p>
 <h3 id="垃圾回收器gc">2. 垃圾回收器(GC)</h3>
 <p>C 里你自己
 <code>malloc</code>/<code>free</code>,悬垂指针和内存泄漏全靠自律。Go
@@ -308,20 +336,20 @@ export data),而<strong>不需要</strong>递归展开整棵依赖树的源码�
 开销”换来的,还有语言表达力上的取舍(早期没泛型等)。</p>
 <h2 id="五常用命令go-run-build-mod">五、常用命令:<code>go run</code> /
 <code>build</code> / <code>mod</code></h2>
-<div class="sourceCode" id="cb6"><pre
-class="sourceCode bash"><code class="sourceCode bash"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> run main.go        <span class="co"># 编译到临时目录并立即运行(不留下二进制),用于快速试验</span></span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> build ./...        <span class="co"># 编译当前模块所有包,产出可执行文件(有 main 包时)</span></span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> install ./cmd/foo  <span class="co"># 编译并把二进制装到 $GOBIN(默认 ~/go/bin)</span></span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> test ./...         <span class="co"># 编译并运行测试</span></span>
-<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> vet ./...          <span class="co"># 静态检查可疑代码</span></span></code></pre></div>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> run main.go        <span class="co"># 编译到临时目录并立即运行(不留下二进制),用于快速试验</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> build ./...        <span class="co"># 编译当前模块所有包,产出可执行文件(有 main 包时)</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> install ./cmd/foo  <span class="co"># 编译并把二进制装到 $GOBIN(默认 ~/go/bin)</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> test ./...         <span class="co"># 编译并运行测试</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> vet ./...          <span class="co"># 静态检查可疑代码</span></span></code></pre></div>
 <p>注意 <code>go run</code>
 <strong>并非解释执行</strong>——它真的先编译成原生码再跑,只是把二进制放临时目录、跑完删掉。它给你的是”脚本般的体验”,不是”脚本的执行方式”。</p>
 <h3 id="go-modules依赖管理">go modules:依赖管理</h3>
 <p>Go 用 <strong>modules</strong> 管理依赖(取代了老的 GOPATH 模式):</p>
-<div class="sourceCode" id="cb7"><pre
-class="sourceCode bash"><code class="sourceCode bash"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> mod init example.com/myapp   <span class="co"># 生成 go.mod,声明模块路径</span></span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> get github.com/foo/bar@v1.2.3 <span class="co"># 添加/升级依赖,写入 go.mod 和 go.sum</span></span>
-<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> mod tidy                      <span class="co"># 增删依赖使之与源码 import 一致</span></span></code></pre></div>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> mod init example.com/myapp   <span class="co"># 生成 go.mod,声明模块路径</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> get github.com/foo/bar@v1.2.3 <span class="co"># 添加/升级依赖,写入 go.mod 和 go.sum</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> mod tidy                      <span class="co"># 增删依赖使之与源码 import 一致</span></span></code></pre></div>
 <ul>
 <li><code>go.mod</code>:声明模块路径、Go 版本、依赖及其版本。</li>
 <li><code>go.sum</code>:记录依赖的哈希校验和,保证可重现构建(类似锁文件)。</li>
@@ -333,17 +361,17 @@ id="六交叉编译改两个环境变量而已">六、交叉编译:改两个环�
 <p>C 的交叉编译是出了名的折磨:你得有目标平台的交叉工具链(交叉
 gcc)、目标平台的 libc、sysroot……Go 因为默认不依赖
 libc、且工具链自带所有目标平台的运行时,交叉编译只是设两个环境变量:</p>
-<div class="sourceCode" id="cb8"><pre
-class="sourceCode bash"><code class="sourceCode bash"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 在 macOS/arm64 上,为 Linux/amd64 构建:</span></span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="va">GOOS</span><span class="op">=</span>linux <span class="va">GOARCH</span><span class="op">=</span>amd64 <span class="ex">go</span> build <span class="at">-o</span> hello-linux-amd64</span>
-<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="co"># 为 Windows 构建:</span></span>
-<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a><span class="va">GOOS</span><span class="op">=</span>windows <span class="va">GOARCH</span><span class="op">=</span>amd64 <span class="ex">go</span> build <span class="at">-o</span> hello.exe</span>
-<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a><span class="co"># 为树莓派 (Linux/arm64) 构建:</span></span>
-<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a><span class="va">GOOS</span><span class="op">=</span>linux <span class="va">GOARCH</span><span class="op">=</span>arm64 <span class="ex">go</span> build <span class="at">-o</span> hello-pi</span>
-<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> tool dist list   <span class="co"># 列出所有支持的 GOOS/GOARCH 组合</span></span></code></pre></div>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 在 macOS/arm64 上,为 Linux/amd64 构建:</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="va">GOOS</span><span class="op">=</span>linux <span class="va">GOARCH</span><span class="op">=</span>amd64 <span class="ex">go</span> build <span class="at">-o</span> hello-linux-amd64</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="co"># 为 Windows 构建:</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a><span class="va">GOOS</span><span class="op">=</span>windows <span class="va">GOARCH</span><span class="op">=</span>amd64 <span class="ex">go</span> build <span class="at">-o</span> hello.exe</span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a><span class="co"># 为树莓派 (Linux/arm64) 构建:</span></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a><span class="va">GOOS</span><span class="op">=</span>linux <span class="va">GOARCH</span><span class="op">=</span>arm64 <span class="ex">go</span> build <span class="at">-o</span> hello-pi</span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> tool dist list   <span class="co"># 列出所有支持的 GOOS/GOARCH 组合</span></span></code></pre></div>
 <ul>
 <li><code>GOOS</code>:目标操作系统(<code>linux</code>/<code>darwin</code>/<code>windows</code>/<code>freebsd</code>…)。</li>
 <li><code>GOARCH</code>:目标 CPU
