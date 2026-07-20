@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="zh-CN" xml:lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.10" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>手写哈希表 · Hash Table Implementation</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../../assets/style.css" />
+</head>
+<body>
+<div class="topbar"><div class="wrap"><a class="home" href="../index.html"><span class="logo">📚</span><span class="brand">面向 C/C++ 程序员的其他语言教程</span></a>
+<a href="../python/index.html">Python</a>
+<a href="../java/index.html">Java</a>
+<a href="../go/index.html">Go</a>
+<a href="../algo/index.html" style="color:var(--accent-dark);font-weight:700">算法笔记</a>
+<a class="topnav-lang" href="#" onclick="switchLang();return false;" title="切换语言:中文 / English">🌐 <span class="lp on">中文</span><span class="sep">/</span><span class="lp">EN</span></a></div></div><script>function switchLang(){var p=location.pathname,en=p.indexOf('/en/')>-1,n=en?p.replace('/en/','/zh/'):p.replace('/zh/','/en/');try{localStorage.setItem('lang',en?'zh':'en')}catch(e){}location.href=n;}</script>
+<div class="wrap">
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#手写哈希表-hash-table-implementation"
+id="toc-手写哈希表-hash-table-implementation">手写哈希表 · Hash Table
+Implementation</a>
+<ul>
+<li><a href="#一哈希函数" id="toc-一哈希函数">一、哈希函数</a></li>
+<li><a href="#二拉链法-separate-chaining"
+id="toc-二拉链法-separate-chaining">二、拉链法 (Separate
+Chaining)</a></li>
+<li><a href="#三线性探查法-linear-probing-open-addressing"
+id="toc-三线性探查法-linear-probing-open-addressing">三、线性探查法
+(Linear Probing / Open Addressing)</a></li>
+<li><a href="#四两种冲突解决对比"
+id="toc-四两种冲突解决对比">四、两种冲突解决对比</a></li>
+<li><a href="#五哈希表的扩展结构"
+id="toc-五哈希表的扩展结构">五、哈希表的扩展结构</a></li>
+<li><a href="#六哈希表复杂度"
+id="toc-六哈希表复杂度">六、哈希表复杂度</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1 id="手写哈希表-hash-table-implementation">手写哈希表 · Hash Table
+Implementation</h1>
+<blockquote>
+<p>哈希表 = 数组 + 哈希函数 + 冲突解决。核心：O(1) 的增删查。
+两种冲突解决：<strong>拉链法</strong> (Chaining) 和
+<strong>线性探查法</strong> (Linear Probing)。</p>
+</blockquote>
+<hr />
+<h2 id="一哈希函数">一、哈希函数</h2>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> hash_func(key, capacity: <span class="bu">int</span>) <span class="op">-&gt;</span> <span class="bu">int</span>:</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">&quot;&quot;&quot;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co">    把 key 映射到 [0, capacity-1]。</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="co">    Python 的 hash() 内置了好的哈希算法，</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="co">    这里展示基本思路。</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="co">    &quot;&quot;&quot;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="bu">isinstance</span>(key, <span class="bu">int</span>):</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> key <span class="op">%</span> capacity</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="bu">isinstance</span>(key, <span class="bu">str</span>):</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>        h <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> ch <span class="kw">in</span> key:</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>            h <span class="op">=</span> (h <span class="op">*</span> <span class="dv">31</span> <span class="op">+</span> <span class="bu">ord</span>(ch)) <span class="op">%</span> capacity</span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> h</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="bu">hash</span>(key) <span class="op">%</span> capacity</span></code></pre></div>
+<p><strong>好的哈希函数</strong>：计算快、分布均匀、相同 key 产生相同
+hash。</p>
+<hr />
+<h2 id="二拉链法-separate-chaining">二、拉链法 (Separate Chaining)</h2>
+<blockquote>
+<p>每个桶是一个链表。冲突的元素追加到链表后面。 Java HashMap, Python
+dict (CPython 3.6+ 更复杂但原理相通)。</p>
+</blockquote>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> typing <span class="im">import</span> TypeVar, Generic</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>K <span class="op">=</span> TypeVar(<span class="st">&quot;K&quot;</span>)</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>V <span class="op">=</span> TypeVar(<span class="st">&quot;V&quot;</span>)</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> ChainHashNode(Generic[K, V]):</span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, key: K, val: V, <span class="bu">next</span>: <span class="st">&quot;ChainHashNode[K, V] | None&quot;</span> <span class="op">=</span> <span class="va">None</span>):</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.key <span class="op">=</span> key</span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.val <span class="op">=</span> val</span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.<span class="bu">next</span> <span class="op">=</span> <span class="bu">next</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> ChainingHashMap(Generic[K, V]):</span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    <span class="co">&quot;&quot;&quot;拉链法哈希表。&quot;&quot;&quot;</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>    LOAD_FACTOR <span class="op">=</span> <span class="fl">0.75</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, capacity: <span class="bu">int</span> <span class="op">=</span> <span class="dv">16</span>) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>._capacity <span class="op">=</span> capacity</span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>._size <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>._table: <span class="bu">list</span>[ChainHashNode[K, V] <span class="op">|</span> <span class="va">None</span>] <span class="op">=</span> [<span class="va">None</span>] <span class="op">*</span> capacity</span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> _hash(<span class="va">self</span>, key: K) <span class="op">-&gt;</span> <span class="bu">int</span>:</span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="bu">hash</span>(key) <span class="op">%</span> <span class="va">self</span>._capacity</span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> put(<span class="va">self</span>, key: K, val: V) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
+<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a>        idx <span class="op">=</span> <span class="va">self</span>._hash(key)</span>
+<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a>        node <span class="op">=</span> <span class="va">self</span>._table[idx]</span>
+<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-31"><a href="#cb2-31" aria-hidden="true" tabindex="-1"></a>        <span class="co"># 查找 key 是否已存在</span></span>
+<span id="cb2-32"><a href="#cb2-32" aria-hidden="true" tabindex="-1"></a>        <span class="cf">while</span> node:</span>
+<span id="cb2-33"><a href="#cb2-33" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> node.key <span class="op">==</span> key:</span>
+<span id="cb2-34"><a href="#cb2-34" aria-hidden="true" tabindex="-1"></a>                node.val <span class="op">=</span> val</span>
+<span id="cb2-35"><a href="#cb2-35" aria-hidden="true" tabindex="-1"></a>                <span class="cf">return</span></span>
+<span id="cb2-36"><a href="#cb2-36" aria-hidden="true" tabindex="-1"></a>            node <span class="op">=</span> node.<span class="bu">next</span></span>
+<span id="cb2-37"><a href="#cb2-37" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-38"><a href="#cb2-38" aria-hidden="true" tabindex="-1"></a>        <span class="co"># 不存在，头插法插入新节点</span></span>
+<span id="cb2-39"><a href="#cb2-39" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>._table[idx] <span class="op">=</span> ChainHashNode(key, val, <span class="va">self</span>._table[idx])</span>
+<span id="cb2-40"><a href="#cb2-40" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>._size <span class="op">+=</span> <span class="dv">1</span></span>
+<span id="cb2-41"><a href="#cb2-41" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-42"><a href="#cb2-42" aria-hidden="true" tabindex="-1"></a>        <span class="co"># 扩容</span></span>
+<span id="cb2-43"><a href="#cb2-43" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="va">self</span>._size <span class="op">&gt;=</span> <span class="va">self</span>._capacity <span class="op">*</span> <span class="va">self</span>.LOAD_FACTOR:</span>
+<span id="cb2-44"><a href="#cb2-44" aria-hidden="true" tabindex="-1"></a>            <span class="va">self</span>._resize(<span class="va">self</span>._capacity <span class="op">*</span> <span class="dv">2</span>)</span>
+<span id="cb2-45"><a href="#cb2-45" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-46"><a href="#cb2-46" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> get(<span class="va">self</span>, key: K) <span class="op">-&gt;</span> V <span class="op">|</span> <span class="va">None</span>:</span>
+<span id="cb2-47"><a href="#cb2-47" aria-hidden="true" tabindex="-1"></a>        idx <span class="op">=</span> <span class="va">self</span>._hash(key)</span>
+<span id="cb2-48"><a href="#cb2-48" aria-hidden="true" tabindex="-1"></a>        node <span class="op">=</span> <span class="va">self</span>._table[idx]</span>
+<span id="cb2-49"><a href="#cb2-49" aria-hidden="true" tabindex="-1"></a>        <span class="cf">while</span> node:</span>
+<span id="cb2-50"><a href="#cb2-50" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> node.key <span class="op">==</span> key:</span>
+<span id="cb2-51"><a href="#cb2-51" aria-hidden="true" tabindex="-1"></a>                <span class="cf">return</span> node.val</span>
+<span id="cb2-52"><a href="#cb2-52" aria-hidden="true" tabindex="-1"></a>            node <span class="op">=</span> node.<span class="bu">next</span></span>
+<span id="cb2-53"><a href="#cb2-53" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="va">None</span></span>
+<span id="cb2-54"><a href="#cb2-54" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-55"><a href="#cb2-55" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> remove(<span class="va">self</span>, key: K) <span class="op">-&gt;</span> <span class="bu">bool</span>:</span>
+<span id="cb2-56"><a href="#cb2-56" aria-hidden="true" tabindex="-1"></a>        idx <span class="op">=</span> <span class="va">self</span>._hash(key)</span>
+<span id="cb2-57"><a href="#cb2-57" aria-hidden="true" tabindex="-1"></a>        node <span class="op">=</span> <span class="va">self</span>._table[idx]</span>
+<span id="cb2-58"><a href="#cb2-58" aria-hidden="true" tabindex="-1"></a>        prev <span class="op">=</span> <span class="va">None</span></span>
+<span id="cb2-59"><a href="#cb2-59" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-60"><a href="#cb2-60" aria-hidden="true" tabindex="-1"></a>        <span class="cf">while</span> node:</span>
+<span id="cb2-61"><a href="#cb2-61" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> node.key <span class="op">==</span> key:</span>
+<span id="cb2-62"><a href="#cb2-62" aria-hidden="true" tabindex="-1"></a>                <span class="cf">if</span> prev:</span>
+<span id="cb2-63"><a href="#cb2-63" aria-hidden="true" tabindex="-1"></a>                    prev.<span class="bu">next</span> <span class="op">=</span> node.<span class="bu">next</span></span>
+<span id="cb2-64"><a href="#cb2-64" aria-hidden="true" tabindex="-1"></a>                <span class="cf">else</span>:</span>
+<span id="cb2-65"><a href="#cb2-65" aria-hidden="true" tabindex="-1"></a>                    <span class="va">self</span>._table[idx] <span class="op">=</span> node.<span class="bu">next</span></span>
+<span id="cb2-66"><a href="#cb2-66" aria-hidden="true" tabindex="-1"></a>                <span class="va">self</span>._size <span class="op">-=</span> <span class="dv">1</span></span>
+<span id="cb2-67"><a href="#cb2-67" aria-hidden="true" tabindex="-1"></a>                <span class="cf">return</span> <span class="va">True</span></span>
+<span id="cb2-68"><a href="#cb2-68" aria-hidden="true" tabindex="-1"></a>            prev <span class="op">=</span> node</span>
+<span id="cb2-69"><a href="#cb2-69" aria-hidden="true" tabindex="-1"></a>            node <span class="op">=</span> node.<span class="bu">next</span></span>
+<span id="cb2-70"><a href="#cb2-70" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-71"><a href="#cb2-71" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="va">False</span></span>
+<span id="cb2-72"><a href="#cb2-72" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-73"><a href="#cb2-73" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> _resize(<span class="va">self</span>, new_capacity: <span class="bu">int</span>) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
+<span id="cb2-74"><a href="#cb2-74" aria-hidden="true" tabindex="-1"></a>        <span class="co">&quot;&quot;&quot;扩容：重新哈希所有元素。&quot;&quot;&quot;</span></span>
+<span id="cb2-75"><a href="#cb2-75" aria-hidden="true" tabindex="-1"></a>        old_table <span class="op">=</span> <span class="va">self</span>._table</span>
+<span id="cb2-76"><a href="#cb2-76" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>._capacity <span class="op">=</span> new_capacity</span>
+<span id="cb2-77"><a href="#cb2-77" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>._size <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb2-78"><a href="#cb2-78" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>._table <span class="op">=</span> [<span class="va">None</span>] <span class="op">*</span> new_capacity</span>
+<span id="cb2-79"><a href="#cb2-79" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-80"><a href="#cb2-80" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> head <span class="kw">in</span> old_table:</span>
+<span id="cb2-81"><a href="#cb2-81" aria-hidden="true" tabindex="-1"></a>            node <span class="op">=</span> head</span>
+<span id="cb2-82"><a href="#cb2-82" aria-hidden="true" tabindex="-1"></a>            <span class="cf">while</span> node:</span>
+<span id="cb2-83"><a href="#cb2-83" aria-hidden="true" tabindex="-1"></a>                <span class="va">self</span>.put(node.key, node.val)  <span class="co"># 重新哈希</span></span>
+<span id="cb2-84"><a href="#cb2-84" aria-hidden="true" tabindex="-1"></a>                node <span class="op">=</span> node.<span class="bu">next</span></span>
+<span id="cb2-85"><a href="#cb2-85" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-86"><a href="#cb2-86" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__len__</span>(<span class="va">self</span>) <span class="op">-&gt;</span> <span class="bu">int</span>:</span>
+<span id="cb2-87"><a href="#cb2-87" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="va">self</span>._size</span>
+<span id="cb2-88"><a href="#cb2-88" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-89"><a href="#cb2-89" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__contains__</span>(<span class="va">self</span>, key: K) <span class="op">-&gt;</span> <span class="bu">bool</span>:</span>
+<span id="cb2-90"><a href="#cb2-90" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="va">self</span>.get(key) <span class="kw">is</span> <span class="kw">not</span> <span class="va">None</span></span></code></pre></div>
+<hr />
+<h2 id="三线性探查法-linear-probing-open-addressing">三、线性探查法
+(Linear Probing / Open Addressing)</h2>
+<blockquote>
+<p>所有元素存在数组里。冲突时往后找空位。没有链表，更省内存。 Python 的
+dict 在 3.6 之前用这个方法（3.6+ 改用更紧凑的布局）。</p>
+</blockquote>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> LinearProbingHashMap(Generic[K, V]):</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">&quot;&quot;&quot;线性探查法哈希表（开放寻址）。&quot;&quot;&quot;</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    LOAD_FACTOR <span class="op">=</span> <span class="fl">0.5</span>  <span class="co"># 开放寻址需要更低的负载因子</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="co"># 哨兵</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    _EMPTY <span class="op">=</span> <span class="bu">object</span>()</span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    _DELETED <span class="op">=</span> <span class="bu">object</span>()</span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, capacity: <span class="bu">int</span> <span class="op">=</span> <span class="dv">16</span>) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>._capacity <span class="op">=</span> capacity</span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>._size <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>._keys: <span class="bu">list</span>[<span class="bu">object</span>] <span class="op">=</span> [<span class="va">self</span>._EMPTY] <span class="op">*</span> capacity</span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>._vals: <span class="bu">list</span>[V <span class="op">|</span> <span class="va">None</span>] <span class="op">=</span> [<span class="va">None</span>] <span class="op">*</span> capacity</span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> _hash(<span class="va">self</span>, key: K) <span class="op">-&gt;</span> <span class="bu">int</span>:</span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="bu">hash</span>(key) <span class="op">%</span> <span class="va">self</span>._capacity</span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> put(<span class="va">self</span>, key: K, val: V) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="va">self</span>._size <span class="op">&gt;=</span> <span class="va">self</span>._capacity <span class="op">*</span> <span class="va">self</span>.LOAD_FACTOR:</span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>            <span class="va">self</span>._resize(<span class="va">self</span>._capacity <span class="op">*</span> <span class="dv">2</span>)</span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>        idx <span class="op">=</span> <span class="va">self</span>._hash(key)</span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>        <span class="co"># 线性探查：往后找空位或 key</span></span>
+<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a>        <span class="cf">while</span> <span class="va">True</span>:</span>
+<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a>            k <span class="op">=</span> <span class="va">self</span>._keys[idx]</span>
+<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> k <span class="kw">is</span> <span class="va">self</span>._EMPTY <span class="kw">or</span> k <span class="kw">is</span> <span class="va">self</span>._DELETED:</span>
+<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a>                <span class="co"># 找到了空位</span></span>
+<span id="cb3-30"><a href="#cb3-30" aria-hidden="true" tabindex="-1"></a>                <span class="va">self</span>._keys[idx] <span class="op">=</span> key</span>
+<span id="cb3-31"><a href="#cb3-31" aria-hidden="true" tabindex="-1"></a>                <span class="va">self</span>._vals[idx] <span class="op">=</span> val</span>
+<span id="cb3-32"><a href="#cb3-32" aria-hidden="true" tabindex="-1"></a>                <span class="va">self</span>._size <span class="op">+=</span> <span class="dv">1</span></span>
+<span id="cb3-33"><a href="#cb3-33" aria-hidden="true" tabindex="-1"></a>                <span class="cf">return</span></span>
+<span id="cb3-34"><a href="#cb3-34" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> k <span class="op">==</span> key:</span>
+<span id="cb3-35"><a href="#cb3-35" aria-hidden="true" tabindex="-1"></a>                <span class="co"># key 已存在，更新</span></span>
+<span id="cb3-36"><a href="#cb3-36" aria-hidden="true" tabindex="-1"></a>                <span class="va">self</span>._vals[idx] <span class="op">=</span> val</span>
+<span id="cb3-37"><a href="#cb3-37" aria-hidden="true" tabindex="-1"></a>                <span class="cf">return</span></span>
+<span id="cb3-38"><a href="#cb3-38" aria-hidden="true" tabindex="-1"></a>            idx <span class="op">=</span> (idx <span class="op">+</span> <span class="dv">1</span>) <span class="op">%</span> <span class="va">self</span>._capacity  <span class="co"># 线性探查</span></span>
+<span id="cb3-39"><a href="#cb3-39" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-40"><a href="#cb3-40" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> get(<span class="va">self</span>, key: K) <span class="op">-&gt;</span> V <span class="op">|</span> <span class="va">None</span>:</span>
+<span id="cb3-41"><a href="#cb3-41" aria-hidden="true" tabindex="-1"></a>        idx <span class="op">=</span> <span class="va">self</span>._hash(key)</span>
+<span id="cb3-42"><a href="#cb3-42" aria-hidden="true" tabindex="-1"></a>        <span class="cf">while</span> <span class="va">True</span>:</span>
+<span id="cb3-43"><a href="#cb3-43" aria-hidden="true" tabindex="-1"></a>            k <span class="op">=</span> <span class="va">self</span>._keys[idx]</span>
+<span id="cb3-44"><a href="#cb3-44" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> k <span class="kw">is</span> <span class="va">self</span>._EMPTY:</span>
+<span id="cb3-45"><a href="#cb3-45" aria-hidden="true" tabindex="-1"></a>                <span class="cf">return</span> <span class="va">None</span>  <span class="co"># 遇到空位说明 key 不存在</span></span>
+<span id="cb3-46"><a href="#cb3-46" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> k <span class="op">==</span> key:</span>
+<span id="cb3-47"><a href="#cb3-47" aria-hidden="true" tabindex="-1"></a>                <span class="cf">return</span> <span class="va">self</span>._vals[idx]</span>
+<span id="cb3-48"><a href="#cb3-48" aria-hidden="true" tabindex="-1"></a>            idx <span class="op">=</span> (idx <span class="op">+</span> <span class="dv">1</span>) <span class="op">%</span> <span class="va">self</span>._capacity</span>
+<span id="cb3-49"><a href="#cb3-49" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-50"><a href="#cb3-50" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> remove(<span class="va">self</span>, key: K) <span class="op">-&gt;</span> <span class="bu">bool</span>:</span>
+<span id="cb3-51"><a href="#cb3-51" aria-hidden="true" tabindex="-1"></a>        idx <span class="op">=</span> <span class="va">self</span>._hash(key)</span>
+<span id="cb3-52"><a href="#cb3-52" aria-hidden="true" tabindex="-1"></a>        <span class="cf">while</span> <span class="va">True</span>:</span>
+<span id="cb3-53"><a href="#cb3-53" aria-hidden="true" tabindex="-1"></a>            k <span class="op">=</span> <span class="va">self</span>._keys[idx]</span>
+<span id="cb3-54"><a href="#cb3-54" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> k <span class="kw">is</span> <span class="va">self</span>._EMPTY:</span>
+<span id="cb3-55"><a href="#cb3-55" aria-hidden="true" tabindex="-1"></a>                <span class="cf">return</span> <span class="va">False</span></span>
+<span id="cb3-56"><a href="#cb3-56" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> k <span class="op">==</span> key:</span>
+<span id="cb3-57"><a href="#cb3-57" aria-hidden="true" tabindex="-1"></a>                <span class="va">self</span>._keys[idx] <span class="op">=</span> <span class="va">self</span>._DELETED  <span class="co"># 用 DELETED 墓碑标记</span></span>
+<span id="cb3-58"><a href="#cb3-58" aria-hidden="true" tabindex="-1"></a>                <span class="va">self</span>._vals[idx] <span class="op">=</span> <span class="va">None</span></span>
+<span id="cb3-59"><a href="#cb3-59" aria-hidden="true" tabindex="-1"></a>                <span class="va">self</span>._size <span class="op">-=</span> <span class="dv">1</span></span>
+<span id="cb3-60"><a href="#cb3-60" aria-hidden="true" tabindex="-1"></a>                <span class="cf">return</span> <span class="va">True</span></span>
+<span id="cb3-61"><a href="#cb3-61" aria-hidden="true" tabindex="-1"></a>            idx <span class="op">=</span> (idx <span class="op">+</span> <span class="dv">1</span>) <span class="op">%</span> <span class="va">self</span>._capacity</span>
+<span id="cb3-62"><a href="#cb3-62" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-63"><a href="#cb3-63" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> _resize(<span class="va">self</span>, new_capacity: <span class="bu">int</span>) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
+<span id="cb3-64"><a href="#cb3-64" aria-hidden="true" tabindex="-1"></a>        old_keys <span class="op">=</span> <span class="va">self</span>._keys</span>
+<span id="cb3-65"><a href="#cb3-65" aria-hidden="true" tabindex="-1"></a>        old_vals <span class="op">=</span> <span class="va">self</span>._vals</span>
+<span id="cb3-66"><a href="#cb3-66" aria-hidden="true" tabindex="-1"></a>        old_cap <span class="op">=</span> <span class="va">self</span>._capacity</span>
+<span id="cb3-67"><a href="#cb3-67" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-68"><a href="#cb3-68" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>._capacity <span class="op">=</span> new_capacity</span>
+<span id="cb3-69"><a href="#cb3-69" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>._size <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb3-70"><a href="#cb3-70" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>._keys <span class="op">=</span> [<span class="va">self</span>._EMPTY] <span class="op">*</span> new_capacity</span>
+<span id="cb3-71"><a href="#cb3-71" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>._vals <span class="op">=</span> [<span class="va">None</span>] <span class="op">*</span> new_capacity</span>
+<span id="cb3-72"><a href="#cb3-72" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-73"><a href="#cb3-73" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(old_cap):</span>
+<span id="cb3-74"><a href="#cb3-74" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> old_keys[i] <span class="kw">not</span> <span class="kw">in</span> (<span class="va">self</span>._EMPTY, <span class="va">self</span>._DELETED):</span>
+<span id="cb3-75"><a href="#cb3-75" aria-hidden="true" tabindex="-1"></a>                <span class="va">self</span>.put(old_keys[i], old_vals[i])  <span class="co"># type: ignore</span></span>
+<span id="cb3-76"><a href="#cb3-76" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-77"><a href="#cb3-77" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__len__</span>(<span class="va">self</span>) <span class="op">-&gt;</span> <span class="bu">int</span>:</span>
+<span id="cb3-78"><a href="#cb3-78" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="va">self</span>._size</span></code></pre></div>
+<blockquote>
+<p><strong>墓碑 (Tombstone)</strong>：删除元素时不直接置空，用 DELETED
+标记。否则查找链会断裂。
+插入时遇到墓碑可以复用，但查找时遇到墓碑需要继续往后找。</p>
+</blockquote>
+<hr />
+<h2 id="四两种冲突解决对比">四、两种冲突解决对比</h2>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th style="text-align: center;">拉链法 (Chaining)</th>
+<th style="text-align: center;">线性探查 (Open Addressing)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>数据存储</td>
+<td style="text-align: center;">桶数组 + 链表</td>
+<td style="text-align: center;">全部在数组里</td>
+</tr>
+<tr>
+<td>内存</td>
+<td style="text-align: center;">多占链表节点空间</td>
+<td style="text-align: center;">更紧凑</td>
+</tr>
+<tr>
+<td>缓存友好</td>
+<td style="text-align: center;">差（链表不连续）</td>
+<td style="text-align: center;">好（连续数组）</td>
+</tr>
+<tr>
+<td>负载因子</td>
+<td style="text-align: center;">可以 &gt;1</td>
+<td style="text-align: center;">必须 &lt;1（通常 0.5-0.7）</td>
+</tr>
+<tr>
+<td>删除</td>
+<td style="text-align: center;">简单</td>
+<td style="text-align: center;">需要墓碑</td>
+</tr>
+<tr>
+<td>实现</td>
+<td style="text-align: center;">Java HashMap, Go map</td>
+<td style="text-align: center;">Python dict (早期)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="五哈希表的扩展结构">五、哈希表的扩展结构</h2>
+<table>
+<thead>
+<tr>
+<th>结构</th>
+<th>特点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>LinkedHashMap</td>
+<td>哈希表 + 双向链表，保持插入顺序。Python: OrderedDict</td>
+</tr>
+<tr>
+<td>ArrayHashMap</td>
+<td>每个桶用动态数组存冲突元素。当冲突多时比链表更快</td>
+</tr>
+<tr>
+<td>布隆过滤器</td>
+<td>概率型结构，快速判断 key 是否”可能存在”。省空间但会误判</td>
+</tr>
+</tbody>
+</table>
+<h3 id="布隆过滤器-bloom-filter-原理">布隆过滤器 (Bloom Filter)
+原理</h3>
+<pre><code>核心：k 个哈希函数 + 一个位数组。
+插入：对 key 计算 k 个哈希值，把对应位都置为 1。
+查询：如果 k 个位全是 1 → &quot;可能存在&quot;（有误判）。
+      如果任一为 0 → &quot;一定不存在&quot;（无误判）。
+
+适合：缓存穿透防护、垃圾邮件过滤。</code></pre>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> BloomFilter:</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, size: <span class="bu">int</span>, hash_count: <span class="bu">int</span>):</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>._bits <span class="op">=</span> [<span class="dv">0</span>] <span class="op">*</span> size</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>._hash_count <span class="op">=</span> hash_count</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>._size <span class="op">=</span> size</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> _hashes(<span class="va">self</span>, key: <span class="bu">str</span>) <span class="op">-&gt;</span> <span class="bu">list</span>[<span class="bu">int</span>]:</span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>        h <span class="op">=</span> <span class="bu">hash</span>(key)</span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> [(h <span class="op">+</span> i <span class="op">*</span> <span class="bn">0x9E3779B9</span>) <span class="op">%</span> <span class="va">self</span>._size <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="va">self</span>._hash_count)]</span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> add(<span class="va">self</span>, key: <span class="bu">str</span>) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> idx <span class="kw">in</span> <span class="va">self</span>._hashes(key):</span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>            <span class="va">self</span>._bits[idx] <span class="op">=</span> <span class="dv">1</span></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> might_contain(<span class="va">self</span>, key: <span class="bu">str</span>) <span class="op">-&gt;</span> <span class="bu">bool</span>:</span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="bu">all</span>(<span class="va">self</span>._bits[idx] <span class="cf">for</span> idx <span class="kw">in</span> <span class="va">self</span>._hashes(key))</span></code></pre></div>
+<hr />
+<h2 id="六哈希表复杂度">六、哈希表复杂度</h2>
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th style="text-align: center;">平均情况</th>
+<th style="text-align: center;">最坏情况</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>插入</td>
+<td style="text-align: center;">O(1)</td>
+<td style="text-align: center;">O(n)</td>
+</tr>
+<tr>
+<td>查找</td>
+<td style="text-align: center;">O(1)</td>
+<td style="text-align: center;">O(n)</td>
+</tr>
+<tr>
+<td>删除</td>
+<td style="text-align: center;">O(1)</td>
+<td style="text-align: center;">O(n)</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>最坏情况发生在所有 key 哈希冲突到同一个桶。好的哈希函数 +
+低负载因子可以避免。</p>
+</blockquote>
+<hr />
+<p><a href="index.html">← 返回索引</a></p>
+</div>
+</body>
+</html>

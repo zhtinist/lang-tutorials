@@ -16,6 +16,8 @@ FROM = "markdown+raw_html-yaml_metadata_block-simple_tables-multiline_tables"
 TUTS = [("python-tutorial", "python", "Python"),
         ("java-tutorial",   "java",   "Java"),
         ("go-tutorial",     "go",     "Go")]
+# 仅中文、无英文版的独立板块(不参与 zh/en 双语镜像)
+ZH_ONLY = [("algo-notes", "algo", "算法笔记")]
 LANGS = ["zh", "en"]
 
 TOGGLE_JS = ("function switchLang(){var p=location.pathname,en=p.indexOf('/en/')>-1,"
@@ -49,6 +51,10 @@ def navbar(lang, sub_active, lang_root):
     for _, sub, disp in TUTS:
         cls = ' style="color:var(--accent-dark);font-weight:700"' if sub == sub_active else ""
         parts.append(f'<a href="{lang_root}/{sub}/index.html"{cls}>{disp}</a>')
+    if lang == "zh":
+        for _, sub, disp in ZH_ONLY:
+            cls = ' style="color:var(--accent-dark);font-weight:700"' if sub == sub_active else ""
+            parts.append(f'<a href="{lang_root}/{sub}/index.html"{cls}>{disp}</a>')
     parts.append(f'<a class="topnav-lang" href="#" onclick="switchLang();return false;" '
                  f'title="切换语言:中文 / English">🌐 {lang_pair(lang)}</a>')
     return ('<div class="topbar"><div class="wrap">' + "\n".join(parts) + '</div></div>'
@@ -102,6 +108,11 @@ def home_html(lang):
          f'<p>{("从底层实现视角讲 " + disp + ":内存模型、对象布局、并发、标准库,处处与 C/C++ 对照。") if lang=="zh" else ("Understand " + disp + " from the implementation up: memory model, object layout, concurrency, and the standard library — always contrasted with C/C++.")}</p></a>')
         for _, sub, disp in TUTS)
     if lang == "zh":
+        cards += "\n".join(
+            f'<a class="card" href="{sub}/index.html"><h3>{disp}</h3>'
+            f'<p>数据结构手写实现、核心刷题框架、经典数据结构、暴力搜索、动态规划与其他算法技巧。</p></a>'
+            for _, sub, disp in ZH_ONLY)
+    if lang == "zh":
         lead = ("假设你已精通 C/C++——指针、栈/堆、值传递与引用、手动内存管理。<br>"
                 "这三套教程不重复基础语法,而是讲清 <b>每个操作在底层到底发生了什么</b>,并处处与 C/C++ 对照。")
         why_h = "为什么是这三门"
@@ -122,6 +133,8 @@ def home_html(lang):
                   'Author / maintainer: HTZHU 〈<a href="mailto:zhu.h4@northeastern.edu">zhu.h4@northeastern.edu</a>〉. '
                   'Source on <a href="https://github.com/zhtinist/lang-tutorials">GitHub</a>.')
     nav_items = "".join(f'<a href="{sub}/index.html">{disp}</a>' for _, sub, disp in TUTS)
+    if lang == "zh":
+        nav_items += "".join(f'<a href="{sub}/index.html">{disp}</a>' for _, sub, disp in ZH_ONLY)
     nav_items += (f'<a class="topnav-lang" href="#" onclick="switchLang();return false;" '
                   f'title="切换语言:中文 / English">🌐 {lang_pair(lang)}</a>')
     return f"""<!doctype html><html lang="{'zh-CN' if lang=='zh' else 'en'}"><head><meta charset="utf-8">
@@ -150,6 +163,14 @@ def main():
                     build_page(os.path.join(ROOT, src_for(src, lang), fn),
                                os.path.join(outdir, fn[:-3] + ".html"), lang, sub)
             print(f"  {lang}/{sub}: {len([f for f in os.listdir(outdir) if f.endswith('.html')])} 页")
+        if lang == "zh":
+            for src, sub, _ in ZH_ONLY:
+                outdir = os.path.join(DOCS, lang, sub); os.makedirs(outdir, exist_ok=True)
+                for fn in sorted(os.listdir(os.path.join(ROOT, src))):
+                    if fn.endswith(".md"):
+                        build_page(os.path.join(ROOT, src, fn),
+                                   os.path.join(outdir, fn[:-3] + ".html"), lang, sub)
+                print(f"  {lang}/{sub}: {len([f for f in os.listdir(outdir) if f.endswith('.html')])} 页")
         with open(os.path.join(DOCS, lang, "index.html"), "w", encoding="utf-8") as f:
             f.write(home_html(lang))
         print(f"  {lang}/ 首页完成")
