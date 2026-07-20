@@ -5,6 +5,8 @@
 
 📖 **在线阅读(GitHub Pages)**:https://zhtinist.github.io/lang-tutorials/
 
+> 国内访问 GitHub Pages 有时不稳定。本仓库在 [Gitee](https://gitee.com/zhu-haotian666/lang-tutorials) 也有一份**源码镜像**方便国内查看/克隆,但 Gitee Pages 服务已停摆,镜像里看到的是代码文件而非渲染好的网页;真正的在线站点仍以上面的 GitHub Pages 链接为准。
+
 ## 内容
 
 | 教程 | 入口 | 侧重 |
