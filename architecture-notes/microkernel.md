@@ -1,0 +1,154 @@
+# 微核架构 · Microkernel Architecture
+
+> 微核（又称**插件架构**）：内核尽量小，主要功能以**插件**形式挂载——易扩展、可定制、可渐进交付。
+
+---
+
+## 一、概念
+
+微核架构（microkernel architecture）把系统分成：
+
+1. **内核 (Core / Microkernel)**：系统运行的最小能力——插件注册、生命周期、通信机制、通用服务  
+2. **插件 (Plug-in)**：可独立开发、加载、卸载的功能单元；彼此应尽量**少依赖**
+
+与操作系统微核类比有帮助，但软件产品中的「微核」更常指 **IDE、浏览器、规则引擎、电商促销引擎** 这类插件化产品架构，而非字面 OS。
+
+---
+
+## 二、结构
+
+```
+                 ┌──────────────────────────┐
+                 │        Plug-in A         │
+                 └────────────┬─────────────┘
+┌──────────────┐             │
+│  Plug-in B   │◄────────────┤
+└──────┬───────┘             │
+       │         ┌───────────▼───────────┐
+       └────────►│   Microkernel / Core  │
+                 │  registry · lifecycle │
+                 │  messaging · services │
+                 └───────────▲───────────┘
+                             │
+                 ┌───────────┴───────────┐
+                 │        Plug-in C      │
+                 └───────────────────────┘
+```
+
+### 2.1 内核职责（典型）
+
+| 能力 | 说明 |
+|------|------|
+| 插件注册表 | 发现、版本、依赖声明 |
+| 生命周期 | load / start / stop / unload |
+| 扩展点 | 稳定接口，供插件实现 |
+| 通信 | 插件↔内核；尽量避免插件↔插件硬耦合 |
+| 通用服务 | 配置、日志、安全、资源加载 |
+
+### 2.2 Python 示意：扩展点 + 插件
+
+```python
+from abc import ABC, abstractmethod
+from typing import Callable
+
+
+class PaymentPlugin(ABC):
+    """扩展点：支付方式插件。"""
+
+    @abstractmethod
+    def name(self) -> str: ...
+
+    @abstractmethod
+    def charge(self, amount: float) -> str: ...
+
+
+class PluginRegistry:
+    def __init__(self) -> None:
+        self._payments: dict[str, PaymentPlugin] = {}
+
+    def register(self, plugin: PaymentPlugin) -> None:
+        self._payments[plugin.name()] = plugin
+
+    def charge(self, method: str, amount: float) -> str:
+        plugin = self._payments[method]
+        return plugin.charge(amount)
+
+
+class AlipayPlugin(PaymentPlugin):
+    def name(self) -> str:
+        return "alipay"
+
+    def charge(self, amount: float) -> str:
+        return f"alipay:{amount}"
+
+
+# 内核侧只依赖扩展点，不依赖具体插件实现
+core = PluginRegistry()
+core.register(AlipayPlugin())
+```
+
+---
+
+## 三、经典例子
+
+| 系统 | 内核大致是 | 插件大致是 |
+|------|------------|------------|
+| IDE（VS Code / IntelliJ） | 编辑器内核、扩展宿主 | 语言支持、主题、调试器 |
+| 浏览器 | 渲染/网络/安全内核 | 扩展、协议处理器 |
+| 规则/工作流引擎 | 引擎调度与 API | 规则包、连接器 |
+| 电商促销 | 计价内核 | 满减、券、会员价策略 |
+| Eclipse 早期插件生态 | OSGi/平台 | 各类开发工具插件 |
+
+共同模式：**稳定内核 + 高频变化的能力外置**。
+
+---
+
+## 四、优点
+
+1. **功能延伸性 (extensibility) 好**：新能力 ≈ 新插件  
+2. **隔离好**：插件可独立加载/卸载，利于部署与灰度  
+3. **可定制性强**：同一内核，不同插件组合适配不同客户  
+4. **可渐进开发**：先交付内核 + 少量插件，再迭代加功能  
+
+---
+
+## 五、缺点
+
+1. **可扩展性 (scalability) 往往一般**：内核常是单一单元，不易天然做成大规模分布式（除非内核本身再拆）  
+注意：这里「扩展性」指水平扩容；与「功能延伸性」是两个词——阮文亦区分 extensibility vs scalability。  
+2. **开发难度更高**：要设计插件契约、登记机制、版本兼容、沙箱与权限  
+3. **插件间通信若失控**：会退化成「插件蜘蛛网」，失去微核优势  
+
+---
+
+## 六、何时使用
+
+| 适合 | 不太适合 |
+|------|----------|
+| 产品需要多版本/多租户功能组合 | 业务固定、几乎不扩展 |
+| 第三方或客户要写扩展 | 团队无力维护稳定扩展 API |
+| 核心稳定、周边多变 | 需要内核本身大规模水平扩展 |
+| 工具链、平台型产品 | 简单 CRUD 后台（分层即可） |
+
+**设计要点**：扩展点要少而稳；插件无状态更佳；禁止插件随意依赖另一插件的内部——应通过内核事件或显式 API。
+
+---
+
+## 七、与其他模式
+
+| 对比 | 关系 |
+|------|------|
+| vs 分层 | 分层按技术角色切；微核按「核心 vs 可插拔能力」切 |
+| vs 微服务 | 微核常同进程插件；微服务是独立部署进程。也可「每个插件日后升格为服务」 |
+| vs 事件驱动 | 内核内常用事件通知插件；二者可组合 |
+
+---
+
+## 八、口诀
+
+> **内核要小插件独立，扩展定制两相宜；**  
+> **登记契约先定稳，插件互依要克制。**
+
+---
+
+[← 返回索引](index.md)

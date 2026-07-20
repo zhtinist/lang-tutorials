@@ -17,7 +17,9 @@ TUTS = [("python-tutorial", "python", "Python"),
         ("java-tutorial",   "java",   "Java"),
         ("go-tutorial",     "go",     "Go")]
 # 仅中文、无英文版的独立板块(不参与 zh/en 双语镜像)
-ZH_ONLY = [("algo-notes", "algo", "算法笔记")]
+ZH_ONLY = [("algo-notes", "algo", "算法笔记"),
+           ("architecture-notes", "architecture", "架构设计"),
+           ("ood-lld-notes", "oodlld", "OOD/LLD")]
 LANGS = ["zh", "en"]
 
 TOGGLE_JS = ("function switchLang(){var p=location.pathname,en=p.indexOf('/en/')>-1,"
@@ -107,11 +109,16 @@ def home_html(lang):
         (f'<a class="card" href="{sub}/index.html"><h3>{disp}</h3>'
          f'<p>{("从底层实现视角讲 " + disp + ":内存模型、对象布局、并发、标准库,处处与 C/C++ 对照。") if lang=="zh" else ("Understand " + disp + " from the implementation up: memory model, object layout, concurrency, and the standard library — always contrasted with C/C++.")}</p></a>')
         for _, sub, disp in TUTS)
+    ZH_ONLY_DESC = {
+        "algo-notes": "数据结构手写实现、核心刷题框架、经典数据结构、暴力搜索、动态规划与其他算法技巧。",
+        "architecture-notes": "五种经典架构模式、RESTful、整洁架构、DDD,学会选型而非背名词。",
+        "ood-lld-notes": "OOP 基础、SOLID 原则、UML 类图、三大类设计模式、LLD 面试框架与经典案例。",
+    }
     if lang == "zh":
         cards += "\n".join(
             f'<a class="card" href="{sub}/index.html"><h3>{disp}</h3>'
-            f'<p>数据结构手写实现、核心刷题框架、经典数据结构、暴力搜索、动态规划与其他算法技巧。</p></a>'
-            for _, sub, disp in ZH_ONLY)
+            f'<p>{ZH_ONLY_DESC.get(src, "")}</p></a>'
+            for src, sub, disp in ZH_ONLY)
     if lang == "zh":
         lead = ("假设你已精通 C/C++——指针、栈/堆、值传递与引用、手动内存管理。<br>"
                 "这三套教程不重复基础语法,而是讲清 <b>每个操作在底层到底发生了什么</b>,并处处与 C/C++ 对照。")
@@ -120,7 +127,7 @@ def home_html(lang):
                "<li><b>Java</b>——基本类型 vs 引用类型、对象头与逃逸分析、JMM 与虚拟线程、GC 演进。</li>"
                "<li><b>Go</b>——一切皆值拷贝、slice/map/channel 的表头结构、逃逸分析、GMP 调度、Swiss Tables。</li>")
         credit = ('本教程内容在创作过程中借助了 <b>Claude</b> 与 <b>Cursor</b> 辅助撰写与校对。'
-                  '作者 / 维护者:HTZHU〈<a href="mailto:zhu.h4@northeastern.edu">zhu.h4@northeastern.edu</a>〉。'
+                  '作者 / 维护者:HTZHU。'
                   '源码见 <a href="https://github.com/zhtinist/lang-tutorials">GitHub 仓库</a>。')
     else:
         lead = ("Assuming you already know C/C++ — pointers, stack/heap, pass-by-value vs. reference, manual memory management.<br>"
@@ -130,7 +137,7 @@ def home_html(lang):
                "<li><b>Java</b> — primitives vs. references, object headers and escape analysis, the JMM and virtual threads, GC evolution.</li>"
                "<li><b>Go</b> — everything is a value copy, the header structs behind slice/map/channel, escape analysis, the GMP scheduler, Swiss Tables.</li>")
         credit = ('This content was written and proofread with the help of <b>Claude</b> and <b>Cursor</b>. '
-                  'Author / maintainer: HTZHU 〈<a href="mailto:zhu.h4@northeastern.edu">zhu.h4@northeastern.edu</a>〉. '
+                  'Author / maintainer: HTZHU. '
                   'Source on <a href="https://github.com/zhtinist/lang-tutorials">GitHub</a>.')
     nav_items = "".join(f'<a href="{sub}/index.html">{disp}</a>' for _, sub, disp in TUTS)
     if lang == "zh":

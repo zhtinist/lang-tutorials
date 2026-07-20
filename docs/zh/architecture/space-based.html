@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="zh-CN" xml:lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.10" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>基于空间的架构 · Space-Based Architecture</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="stylesheet" href="../../assets/style.css" />
+</head>
+<body>
+<div class="topbar"><div class="wrap"><a class="home" href="../index.html"><span class="logo">📚</span><span class="brand">面向 C/C++ 程序员的其他语言教程</span></a>
+<a href="../python/index.html">Python</a>
+<a href="../java/index.html">Java</a>
+<a href="../go/index.html">Go</a>
+<a href="../algo/index.html">算法笔记</a>
+<a href="../architecture/index.html" style="color:var(--accent-dark);font-weight:700">架构设计</a>
+<a href="../oodlld/index.html">OOD/LLD</a>
+<a class="topnav-lang" href="#" onclick="switchLang();return false;" title="切换语言:中文 / English">🌐 <span class="lp on">中文</span><span class="sep">/</span><span class="lp">EN</span></a></div></div><script>function switchLang(){var p=location.pathname,en=p.indexOf('/en/')>-1,n=en?p.replace('/en/','/zh/'):p.replace('/zh/','/en/');try{localStorage.setItem('lang',en?'zh':'en')}catch(e){}location.href=n;}</script>
+<div class="wrap">
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#基于空间的架构-space-based-architecture"
+id="toc-基于空间的架构-space-based-architecture">基于空间的架构 ·
+Space-Based Architecture</a>
+<ul>
+<li><a href="#一概念与要解决的问题"
+id="toc-一概念与要解决的问题">一、概念与要解决的问题</a></li>
+<li><a href="#二两大组成部分"
+id="toc-二两大组成部分">二、两大组成部分</a></li>
+<li><a href="#三虚拟中间件的四个组件"
+id="toc-三虚拟中间件的四个组件">三、虚拟中间件的四个组件</a></li>
+<li><a href="#四数据与一致性直觉"
+id="toc-四数据与一致性直觉">四、数据与一致性直觉</a></li>
+<li><a href="#五优点" id="toc-五优点">五、优点</a></li>
+<li><a href="#六缺点" id="toc-六缺点">六、缺点</a></li>
+<li><a href="#七何时使用" id="toc-七何时使用">七、何时使用</a></li>
+<li><a href="#八与其他模式对比一眼"
+id="toc-八与其他模式对比一眼">八、与其他模式对比（一眼）</a></li>
+<li><a href="#九口诀" id="toc-九口诀">九、口诀</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1 id="基于空间的架构-space-based-architecture">基于空间的架构 ·
+Space-Based Architecture</h1>
+<blockquote>
+<p>这种模式有时也称<strong>云架构 (cloud
+architecture)</strong>：通过去掉<strong>中央数据库瓶颈</strong>，用可复制的内存处理单元实现极致水平扩展。即
+<strong>Space-Based Architecture</strong>。</p>
+</blockquote>
+<hr />
+<h2 id="一概念与要解决的问题">一、概念与要解决的问题</h2>
+<p>高并发网站常见瓶颈不在 Web
+层，而在<strong>中央共享数据库</strong>：连接打满、锁竞争、磁盘
+I/O。</p>
+<p>基于空间的架构思路：</p>
+<ol type="1">
+<li>不把每次请求都打到中央库<br />
+</li>
+<li>把业务处理封装为可复制的<strong>处理单元 (Processing
+Unit)</strong><br />
+</li>
+<li>数据尽量驻留在单元内存中，并在单元间<strong>复制/同步</strong><br />
+</li>
+<li>访问量升则启新单元，降则关单元——弹性伸缩</li>
+</ol>
+<p>名称里的「空间 (space)」来自分布式共享内存 / tuple space
+传统：多个节点共享一个逻辑数据空间。阮文用「云架构」强调其<strong>云上弹性伸缩</strong>气质；本教程两种叫法并用，结构对齐
+Richards。</p>
+<hr />
+<h2 id="二两大组成部分">二、两大组成部分</h2>
+<pre><code>                 Client Requests
+                        │
+                        ▼
+            ┌───────────────────────┐
+            │ Virtualized Middleware│
+            │  messaging / data /   │
+            │  processing / deploy  │
+            └───────────┬───────────┘
+                        │
+        ┌───────────────┼───────────────┐
+        ▼               ▼               ▼
+   ┌─────────┐    ┌─────────┐    ┌─────────┐
+   │   PU    │    │   PU    │    │   PU    │
+   │ logic + │    │ logic + │    │ logic + │
+   │  memory │    │  memory │    │  memory │
+   └─────────┘    └─────────┘    └─────────┘
+        │               │               │
+        └───────────────┴───────────────┘
+                        │ 异步持久化（常见）
+                        ▼
+                 Durable Store</code></pre>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>部分</th>
+<th>职责</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>处理单元 Processing Unit</td>
+<td>业务逻辑 + 该单元所需的内存数据</td>
+</tr>
+<tr>
+<td>虚拟中间件 Virtualized Middleware</td>
+<td>通信、Session、数据复制、分布式协调、单元部署</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="三虚拟中间件的四个组件">三、虚拟中间件的四个组件</h2>
+<p>对齐阮文 / Richards 四分法：</p>
+<h3 id="messaging-grid消息中间件">3.1 Messaging Grid（消息中间件）</h3>
+<p>管理用户请求与
+session；请求进入后决定交给<strong>哪一个处理单元</strong>。</p>
+<h3 id="data-grid数据中间件">3.2 Data Grid（数据中间件）</h3>
+<p>把数据复制到各处理单元，做<strong>数据同步</strong>，使相关单元看到一致（或可接受一致级别）的内存视图。</p>
+<h3 id="processing-grid处理中间件可选">3.3 Processing
+Grid（处理中间件，可选）</h3>
+<p>当一次请求需要<strong>多种类型</strong>处理单元协作时，负责协调编排。</p>
+<h3 id="deployment-manager部署管理">3.4 Deployment
+Manager（部署管理）</h3>
+<p>启动/关闭处理单元；监控负载与响应时间——负载升则扩，降则缩。</p>
+<pre><code>Request ─► Messaging Grid ─► PU
+                │
+                ├── Data Grid（内存数据复制）
+                ├── Processing Grid（跨 PU 协调，可选）
+                └── Deployment Manager（弹性伸缩）</code></pre>
+<hr />
+<h2 id="四数据与一致性直觉">四、数据与一致性直觉</h2>
+<table>
+<thead>
+<tr>
+<th>策略</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>内存为主</td>
+<td>读路径不打中央库，延迟低</td>
+</tr>
+<tr>
+<td>复制</td>
+<td>多 PU 持有数据副本，扩展读/算力</td>
+</tr>
+<tr>
+<td>异步持久化</td>
+<td>常在后台写入磁盘/库，防崩溃丢数</td>
+</tr>
+<tr>
+<td>一致性权衡</td>
+<td>强一致复制成本高；常接受有限过期或冲突解决</td>
+</tr>
+</tbody>
+</table>
+<p>实现上会用到分布式缓存、数据网格产品、或自研复制协议——<strong>复杂度与成本显著高于普通分层单体</strong>。</p>
+<hr />
+<h2 id="五优点">五、优点</h2>
+<ol type="1">
+<li><strong>高负载下扩展性极好</strong>——消除中央库这一最大瓶颈（在适用模型内）<br />
+</li>
+<li><strong>动态部署</strong>：按负载增减处理单元<br />
+</li>
+<li>适合「大量并发用户、工作集可放进内存网格」的在线系统</li>
+</ol>
+<hr />
+<h2 id="六缺点">六、缺点</h2>
+<ol type="1">
+<li><strong>实现复杂、成本高</strong>（中间件 + 复制 + 运维）<br />
+</li>
+<li><strong>主要适合网站类 /
+会话型在线应用</strong>；不适合「超大吞吐、必须以大型集中式数据库为事实来源」的分析与重事务场景（阮文亦指出）<br />
+</li>
+<li><strong>测试困难</strong>：涉及分布式状态、复制延迟、故障注入</li>
+</ol>
+<hr />
+<h2 id="七何时使用">七、何时使用</h2>
+<table>
+<thead>
+<tr>
+<th>适合</th>
+<th>不太适合</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>突发高并发、读多、工作集可控</td>
+<td>海量冷数据必须频繁扫盘</td>
+</tr>
+<tr>
+<td>可接受最终一致或精细冲突处理</td>
+<td>简单业务、团队小、无运维预算</td>
+</tr>
+<tr>
+<td>已有或愿意引入数据网格能力</td>
+<td>强依赖复杂多表事务且难拆</td>
+</tr>
+</tbody>
+</table>
+<p><strong>现实对照</strong>：许多互联网系统用「无状态应用 + 分布式缓存
++ 分库分表 +
+异步」逼近类似目标，而不一定完整实现教科书式四组件中间件；但<strong>去掉同步路径上的中央瓶颈</strong>这一思想是相通的。</p>
+<hr />
+<h2 id="八与其他模式对比一眼">八、与其他模式对比（一眼）</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>分层</th>
+<th>微服务</th>
+<th>基于空间</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>扩容焦点</td>
+<td>常整层/整应用</td>
+<td>按服务</td>
+<td>按处理单元 + 内存数据</td>
+</tr>
+<tr>
+<td>数据</td>
+<td>中央库常见</td>
+<td>每服务库</td>
+<td>内存网格 + 后台持久化</td>
+</tr>
+<tr>
+<td>复杂度</td>
+<td>低</td>
+<td>中高</td>
+<td>高</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="九口诀">九、口诀</h2>
+<blockquote>
+<p><strong>中央库是瓶颈，内存单元来分摊；</strong><br />
+<strong>消息数据部署管，复杂昂贵换高扩。</strong></p>
+</blockquote>
+<hr />
+<p><a href="index.html">← 返回索引</a></p>
+</div>
+</body>
+</html>
