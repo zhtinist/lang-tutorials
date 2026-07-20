@@ -91,18 +91,6 @@ def build_page(md_path, out_path, lang, sub_active):
     open(out_path, "w", encoding="utf-8").write(doc)
 
 
-def badges():
-    repo = "zhtinist/lang-tutorials"
-    def b(kind, label, path):
-        return (f'<a href="https://github.com/{repo}/{path}">'
-                f'<img alt="{label}" src="https://img.shields.io/github/{kind}/{repo}'
-                f'?style=flat-square&logo=github&label={label}"></a>')
-    return ('<p style="text-align:center;margin:8px 0 0">'
-            + b("stars", "Stars", "stargazers")
-            + b("watchers", "Watchers", "watchers")
-            + b("forks", "Forks", "network/members") + '</p>')
-
-
 def home_html(lang):
     T = HOME_TITLE[lang]
     cards = "\n".join(
@@ -122,20 +110,12 @@ def home_html(lang):
     if lang == "zh":
         lead = ("假设你已精通 C/C++——指针、栈/堆、值传递与引用、手动内存管理。<br>"
                 "这三套教程不重复基础语法,而是讲清 <b>每个操作在底层到底发生了什么</b>,并处处与 C/C++ 对照。")
-        why_h = "为什么是这三门"
-        why = ("<li><b>Python</b>——一切皆堆上对象、名字即引用、引用计数 + GC、GIL 与 free-threading。</li>"
-               "<li><b>Java</b>——基本类型 vs 引用类型、对象头与逃逸分析、JMM 与虚拟线程、GC 演进。</li>"
-               "<li><b>Go</b>——一切皆值拷贝、slice/map/channel 的表头结构、逃逸分析、GMP 调度、Swiss Tables。</li>")
         credit = ('本教程内容在创作过程中借助了 <b>Claude</b> 与 <b>Cursor</b> 辅助撰写与校对。'
                   '作者 / 维护者:HTZHU。'
                   '源码见 <a href="https://github.com/zhtinist/lang-tutorials">GitHub 仓库</a>。')
     else:
         lead = ("Assuming you already know C/C++ — pointers, stack/heap, pass-by-value vs. reference, manual memory management.<br>"
                 "These three tutorials skip the basic syntax and instead explain <b>what actually happens under the hood for every operation</b>, always contrasted with C/C++.")
-        why_h = "Why these three"
-        why = ("<li><b>Python</b> — everything is a heap object, names are references, reference counting + GC, the GIL and free-threading.</li>"
-               "<li><b>Java</b> — primitives vs. references, object headers and escape analysis, the JMM and virtual threads, GC evolution.</li>"
-               "<li><b>Go</b> — everything is a value copy, the header structs behind slice/map/channel, escape analysis, the GMP scheduler, Swiss Tables.</li>")
         credit = ('This content was written and proofread with the help of <b>Claude</b> and <b>Cursor</b>. '
                   'Author / maintainer: HTZHU. '
                   'Source on <a href="https://github.com/zhtinist/lang-tutorials">GitHub</a>.')
@@ -151,9 +131,8 @@ def home_html(lang):
 <div class="topbar"><div class="wrap"><a class="home" href="index.html"><span class="logo">📚</span><span class="brand">{T}</span></a>{nav_items}</div></div>
 {toggle_html(lang)}
 <div class="wrap">
-<div class="hero"><h1>{T}</h1><p>{lead}</p>{badges()}</div>
+<div class="hero"><h1>{T}</h1><p>{lead}</p></div>
 <div class="cards">{cards}</div>
-<h2>{why_h}</h2><ul>{why}</ul>
 <p class="note">{credit}</p>
 </div></body></html>"""
 
