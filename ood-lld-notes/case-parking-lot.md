@@ -75,6 +75,8 @@
 - **策略**：Lot 持有 `FeeStrategy`（OCP）
 - 车型用继承演示多态；也可用 `VehicleType` 枚举避免浅继承——面试说清权衡
 
+如果不把计费公式抽成 `FeeStrategy`，而是把 `if vehicle.vtype == VehicleType.CAR: fee = hours * 5` 这类判断直接写死在 `ParkingLot.leave()` 内部，以后想加"会员日票价"或者"节假日双倍收费"，就必须回去改这个已经在生产环境跑着、被 `park`/`leave` 两条主路径共用的核心方法，一旦改错还可能连累原本工作正常的小时计费逻辑。`FeeStrategy` 把公式抽出去后，新增计费规则只是新增一个类，`ParkingLot` 本身不用动。
+
 ---
 
 ## 四、代码骨架

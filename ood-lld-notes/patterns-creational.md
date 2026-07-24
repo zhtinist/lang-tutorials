@@ -31,6 +31,25 @@
 - 进程内共享的配置、指标收集器
 - 面试里常被追问：**线程安全、测试污染、是否真需要**
 
+### 不用单例会怎样
+
+```python
+class AppConfigBad:
+    def __init__(self) -> None:
+        self.debug = False
+
+
+# 模块 A 里
+config_a = AppConfigBad()
+config_a.debug = True
+
+# 模块 B 里（以为在用同一份配置）
+config_b = AppConfigBad()
+print(config_b.debug)  # False —— 明明模块 A 已经打开了 debug，模块 B 完全不知道
+```
+
+每个模块各自 `new` 一份"配置对象"，看起来都叫全局配置，实际互不相通：A 模块打开了调试开关，B 模块读到的还是默认值，两边各活在自己的世界里。日志器、连接池同理——如果每次要用都新建一个连接池对象，连接不会被复用，反而失去了"池"的意义，还可能因为连接数暴涨超出数据库的最大连接数限制。
+
 ### 结构
 
 ```
@@ -102,6 +121,31 @@ class AppConfig:
 
 - 一堆 `if typ == "a": return A()` 散落业务代码
 - 产品类型会扩展（OCP）
+
+### 不用工厂方法会怎样
+
+```python
+class LoginDialogBad:
+    def render(self) -> str:
+        # 每个 Dialog 都要自己知道该 new 哪个具体 Button
+        btn = PrimaryButton()
+        return f"Dialog({btn.render()})"
+
+
+class AboutDialogBad:
+    def render(self) -> str:
+        btn = LinkButton()
+        return f"Dialog({btn.render()})"
+
+
+class SettingsDialogBad:
+    def render(self) -> str:
+        # 从上面两个类复制粘贴过来的逻辑
+        btn = PrimaryButton()
+        return f"Dialog({btn.render()})"
+```
+
+三个 Dialog 各自决定用哪个具体 Button 类，创建逻辑散落、复制在每个类里。现在要新增一种 `IconButton` 按钮风格，得把这几处创建逻辑一处处找出来改；改 `SettingsDialogBad` 时如果漏改、或者复制粘贴时选错了按钮类，界面上出现的按钮风格就会跟另外两个页面不一致——而且这类错误编译期不会报错，只有运行起来点开那个具体页面才会被发现。
 
 ### 结构
 
@@ -220,6 +264,25 @@ class Truck(Vehicle):
 - 「成套」产品：深色主题按钮+输入框、Windows 风格全家桶
 - 换一族实现，而不是换单个产品
 
+### 不用抽象工厂会怎样
+
+```python
+def render_ui_bad(is_mac: bool) -> str:
+    if is_mac:
+        btn = MacButton()
+    else:
+        btn = WinButton()
+
+    # 这里应该跟上面用一样的平台判断，但维护时手滑写反了条件
+    if is_mac:
+        cb = WinCheckbox()
+    else:
+        cb = MacCheckbox()
+    return f"{btn.paint()}+{cb.paint()}"
+```
+
+按钮和复选框各自判断一次"是不是 Mac"，如果这段逻辑在代码里出现多处（比如一次渲染主界面、一次渲染设置弹窗），每一处的判断条件都要人工保持同步。上面这段代码里复选框那部分的条件被写反了，于是出现了"Mac 按钮 + Windows 复选框"这种混搭的诡异界面。用 Abstract Factory 后，`WinFactory`/`MacFactory` 保证一次拿到的按钮和复选框永远出自同一套风格，不会被拆开单独改坏。
+
 ### 结构
 
 ```
@@ -331,6 +394,40 @@ def render_ui(factory: GUIFactory) -> str:
 - 构造函数 8+ 参数，还有很多可选
 - 需要「流式」可读配置（URL、SQL、HTTP 请求）
 
+### 不用 Builder 会怎样
+
+```python
+class HttpRequestBad:
+    def __init__(
+        self,
+        method: str,
+        url: str,
+        content_type: str,
+        auth_token: str,
+        timeout: int,
+        retry: bool,
+        body: str | None,
+    ) -> None:
+        self.method = method
+        self.url = url
+        self.content_type = content_type
+        self.auth_token = auth_token
+        self.timeout = timeout
+        self.retry = retry
+        self.body = body
+
+
+# 调用处：7 个位置参数，谁能一眼看出第 5、6 个分别是什么？
+req = HttpRequestBad(
+    "POST", "https://api.example.com/pay", "application/json",
+    "tok_abc", True, 30, '{"amount":10}',
+)
+# 这一行其实传错了：timeout 和 retry 的位置被写反了
+# req.timeout 变成了 True，req.retry 变成了 30 —— 类型都能凑合塞进去，不会报错
+```
+
+构造函数参数一多，调用方全靠位置传参，一旦相邻两个参数的类型"看起来兼容"（这里 `bool` 和 `int` 恰好都能被对方的位置接受），传反了 Python 也不会报错，只会在后面用到 `timeout`/`retry` 的地方悄悄算出错误结果。Builder 用链式的 `.method(...).url(...)` 把每个参数和它的名字绑在一起，传错的概率大幅下降，新增一个可选配置也只需要加一个方法，不用改已有调用方的参数顺序。
+
 ### Python 代码（流式 Builder）
 
 ```python
@@ -411,6 +508,30 @@ req = (
 
 - 对象创建成本高（游戏单位、文档模板）
 - 需要「基于当前状态复制一份再改」
+
+### 不用 Prototype 会怎样
+
+```python
+import copy
+
+
+class DocumentBad:
+    def __init__(self, title: str, paragraphs: list[str], meta: dict[str, str]) -> None:
+        self.title = title
+        self.paragraphs = paragraphs
+        self.meta = meta
+
+
+template = DocumentBad("周报模板", ["本周完成：", "风险："], {"owner": "team"})
+
+# 手动"复制"：忘了对 list/dict 做深拷贝，直接把引用传了过去
+report = DocumentBad(template.title, template.paragraphs, template.meta)
+report.paragraphs.append("下周计划：")
+
+print(template.paragraphs)  # ['本周完成：', '风险：', '下周计划：'] —— 模板也被改了！
+```
+
+手动挑字段拼一个"新"对象时，只复制了 `list`/`dict` 的引用而不是内容，改 `report.paragraphs` 会连带改到 `template.paragraphs`——模板被污染了，后面所有基于这份模板再复制的报告都带着上一份的痕迹，而且这个 bug 只有在真正检查模板内容时才会暴露。这是浅拷贝的经典坑。`Document.clone()` 用 `copy.deepcopy` 保证嵌套结构也各自独立一份，改副本不会影响原型。
 
 ### Python 代码
 

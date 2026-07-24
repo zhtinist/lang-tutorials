@@ -99,8 +99,7 @@
 <a href="../go/index.html">Go</a>
 <a href="../algo/index.html">算法笔记</a>
 <a href="../architecture/index.html" style="color:var(--accent-dark);font-weight:700">架构设计</a>
-<a href="../oodlld/index.html">OOD/LLD</a>
-<a class="topnav-lang" href="#" onclick="switchLang();return false;" title="切换语言:中文 / English">🌐 <span class="lp on">中文</span><span class="sep">/</span><span class="lp">EN</span></a></div></div><script>function switchLang(){var p=location.pathname,en=p.indexOf('/en/')>-1,n=en?p.replace('/en/','/zh/'):p.replace('/zh/','/en/');try{localStorage.setItem('lang',en?'zh':'en')}catch(e){}location.href=n;}</script>
+<a href="../oodlld/index.html">OOD/LLD</a></div></div>
 <div class="wrap">
 <nav id="TOC" role="doc-toc">
 <ul>
@@ -229,6 +228,16 @@ class="sourceCode python"><code class="sourceCode python"><span id="cb2-1"><a hr
 <span id="cb2-35"><a href="#cb2-35" aria-hidden="true" tabindex="-1"></a><span class="co"># 内核侧只依赖扩展点，不依赖具体插件实现</span></span>
 <span id="cb2-36"><a href="#cb2-36" aria-hidden="true" tabindex="-1"></a>core <span class="op">=</span> PluginRegistry()</span>
 <span id="cb2-37"><a href="#cb2-37" aria-hidden="true" tabindex="-1"></a>core.register(AlipayPlugin())</span></code></pre></div>
+<p>这段代码对应的场景：<code>PluginRegistry</code>
+就是内核里的「插件注册表」，<code>PaymentPlugin</code>
+是内核定义好的扩展点（稳定接口），<code>AlipayPlugin</code>
+是某个团队后来才写的具体插件。内核代码从头到尾只写了
+<code>PaymentPlugin</code>，从没写过 <code>AlipayPlugin</code>
+或任何具体支付方式的名字——这样明天要新增「微信支付插件」，只需要新写一个实现
+<code>PaymentPlugin</code>
+接口的类并注册进去，内核代码一行都不用改，也不需要重新发布。反过来，如果内核代码里出现了
+<code>if method == "alipay": ...</code>
+这种针对具体支付方式的分支判断，那新增一种支付方式就必须回来改内核——这就退化成了普通分层架构，而不再是微核。</p>
 <hr />
 <h2 id="三经典例子">三、经典例子</h2>
 <table>
@@ -298,6 +307,7 @@ extensibility vs scalability。<br />
 </li>
 <li><strong>插件间通信若失控</strong>：会退化成「插件蜘蛛网」，失去微核优势</li>
 </ol>
+<p>以电商促销引擎为例：「满减插件」「优惠券插件」「会员价插件」本该各自独立、互不知情，由内核按顺序依次调用、叠加结果。但如果「优惠券插件」为了判断某张券能不能用，直接读取了「会员价插件」内部计算出的中间价格变量，而不是通过内核提供的标准接口——那么以后想单独升级会员价插件的内部实现，就必须连带确认优惠券插件会不会被改坏。插件之间这种私下互相打探的依赖越积越多，最终新增一个促销规则前得把所有插件的内部代码通读一遍，「即插即用」的初衷也就名存实亡了。</p>
 <hr />
 <h2 id="六何时使用">六、何时使用</h2>
 <table>

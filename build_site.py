@@ -20,7 +20,7 @@ TUTS = [("python-tutorial", "python", "Python"),
 ZH_ONLY = [("algo-notes", "algo", "算法笔记"),
            ("architecture-notes", "architecture", "架构设计"),
            ("ood-lld-notes", "oodlld", "OOD/LLD")]
-LANGS = ["zh", "en"]
+LANGS = ["zh"]  # 英文版暂停维护,先隐藏入口(源文件保留在 *-tutorial-en/,以后需要时改回 ["zh", "en"] 即可)
 
 TOGGLE_JS = ("function switchLang(){var p=location.pathname,en=p.indexOf('/en/')>-1,"
              "n=en?p.replace('/en/','/zh/'):p.replace('/zh/','/en/');"
@@ -57,10 +57,8 @@ def navbar(lang, sub_active, lang_root):
         for _, sub, disp in ZH_ONLY:
             cls = ' style="color:var(--accent-dark);font-weight:700"' if sub == sub_active else ""
             parts.append(f'<a href="{lang_root}/{sub}/index.html"{cls}>{disp}</a>')
-    parts.append(f'<a class="topnav-lang" href="#" onclick="switchLang();return false;" '
-                 f'title="切换语言:中文 / English">🌐 {lang_pair(lang)}</a>')
     return ('<div class="topbar"><div class="wrap">' + "\n".join(parts) + '</div></div>'
-            + toggle_html(lang) + '\n<div class="wrap">')
+            + '\n<div class="wrap">')
 
 
 def first_h1(text):
@@ -122,14 +120,11 @@ def home_html(lang):
     nav_items = "".join(f'<a href="{sub}/index.html">{disp}</a>' for _, sub, disp in TUTS)
     if lang == "zh":
         nav_items += "".join(f'<a href="{sub}/index.html">{disp}</a>' for _, sub, disp in ZH_ONLY)
-    nav_items += (f'<a class="topnav-lang" href="#" onclick="switchLang();return false;" '
-                  f'title="切换语言:中文 / English">🌐 {lang_pair(lang)}</a>')
     return f"""<!doctype html><html lang="{'zh-CN' if lang=='zh' else 'en'}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{T}</title>
 <link rel="stylesheet" href="../assets/style.css"></head><body>
 <div class="topbar"><div class="wrap"><a class="home" href="index.html"><span class="logo">📚</span><span class="brand">{T}</span></a>{nav_items}</div></div>
-{toggle_html(lang)}
 <div class="wrap">
 <div class="hero"><h1>{T}</h1><p>{lead}</p></div>
 <div class="cards">{cards}</div>
@@ -160,12 +155,10 @@ def main():
         with open(os.path.join(DOCS, lang, "index.html"), "w", encoding="utf-8") as f:
             f.write(home_html(lang))
         print(f"  {lang}/ 首页完成")
-    # 根入口:按记忆偏好跳转
+    # 根入口:英文版暂停维护,直接跳转中文版
     root = ('<!doctype html><meta charset="utf-8"><title>lang-tutorials</title>'
-            '<script>var l="zh";try{l=localStorage.getItem("lang")||"zh"}catch(e){}'
-            'location.replace(l==="en"?"en/index.html":"zh/index.html");</script>'
-            '<p style="font-family:sans-serif">Redirecting… '
-            '<a href="zh/index.html">中文</a> / <a href="en/index.html">English</a></p>')
+            '<script>location.replace("zh/index.html");</script>'
+            '<p style="font-family:sans-serif">Redirecting… <a href="zh/index.html">中文</a></p>')
     open(os.path.join(DOCS, "index.html"), "w", encoding="utf-8").write(root)
     open(os.path.join(DOCS, ".nojekyll"), "w").close()
     print("  根入口 + .nojekyll 完成")

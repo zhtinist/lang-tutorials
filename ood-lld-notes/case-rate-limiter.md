@@ -45,6 +45,8 @@ RateLimitStrategy <<interface>>
  SlidingWindowStrategy
 ```
 
+如果不把限流算法抽成 `RateLimitStrategy`，`RateLimiter.allow` 内部就要直接写令牌桶的"补充令牌/扣减令牌"逻辑；想从令牌桶切换到滑动窗口做 A/B 测试对比效果时，必须直接修改这个正在生产环境处理真实流量的核心类，一旦改出并发 bug 会直接影响所有 API 的限流判断。抽成 `RateLimitStrategy` 后，切换算法只是把 `TokenBucketStrategy` 换成 `SlidingWindowStrategy` 这一行的事，`RateLimiter` 本身完全不用碰。
+
 ---
 
 ## 四、算法要点

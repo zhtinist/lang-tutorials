@@ -99,18 +99,13 @@
 <a href="../go/index.html" style="color:var(--accent-dark);font-weight:700">Go</a>
 <a href="../algo/index.html">算法笔记</a>
 <a href="../architecture/index.html">架构设计</a>
-<a href="../oodlld/index.html">OOD/LLD</a>
-<a class="topnav-lang" href="#" onclick="switchLang();return false;" title="切换语言:中文 / English">🌐 <span class="lp on">中文</span><span class="sep">/</span><span class="lp">EN</span></a></div></div><script>function switchLang(){var p=location.pathname,en=p.indexOf('/en/')>-1,n=en?p.replace('/en/','/zh/'):p.replace('/zh/','/en/');try{localStorage.setItem('lang',en?'zh':'en')}catch(e){}location.href=n;}</script>
+<a href="../oodlld/index.html">OOD/LLD</a></div></div>
 <div class="wrap">
 <nav id="TOC" role="doc-toc">
 <ul>
 <li><a href="#类型系统结构体接口方法集"
 id="toc-类型系统结构体接口方法集">类型系统:结构体、接口、方法集</a>
 <ul>
-<li><a href="#先会用struct方法嵌入接口速览"
-id="toc-先会用struct方法嵌入接口速览">先会用:struct、方法、嵌入、接口速览</a></li>
-<li><a href="#开始深入从怎么定义到底层怎么表示"
-id="toc-开始深入从怎么定义到底层怎么表示">开始深入:从”怎么定义”到”底层怎么表示”</a></li>
 <li><a href="#一方法带接收者的函数"
 id="toc-一方法带接收者的函数">一、方法:带接收者的函数</a></li>
 <li><a href="#二组合嵌入embedding与方法提升"
@@ -130,84 +125,31 @@ id="toc-五泛型go-1.18类型参数与约束">五、泛型(Go
 <p>Go 没有 <code>class</code>,没有继承,没有构造/析构函数,没有
 <code>virtual</code>
 关键字,没有访问修饰符(<code>public</code>/<code>private</code>
-靠标识符首字母大小写)。但它用 <strong>struct + 方法 + 组合 +
-接口</strong>
-组合出了一套更简单、也更”结构化”的类型系统。<strong>本章每一部分都先讲「怎么定义、怎么用」——不需要任何底层知识就能看懂;再讲「底层与
-C 对比」——看它在内存里到底长什么样。</strong> 对 C++
+靠标识符首字母大小写)。它用 <strong>struct + 方法 + 组合 + 接口</strong>
+组合出一套更简单、也更”结构化”的类型系统。每一层都有明确、可预测的底层表示——没有隐藏的虚表指针、没有隐藏的
+<code>this</code>。对 C++
 程序员来说,最需要重新校准的两点是:<strong>继承换成组合</strong>,<strong>接口是隐式实现的</strong>。</p>
-<h2
-id="先会用struct方法嵌入接口速览">先会用:struct、方法、嵌入、接口速览</h2>
-<p>不涉及任何底层原理,先看这几样东西怎么定义、怎么用:</p>
-<div class="sourceCode" id="cb1"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="st">&quot;fmt&quot;</span></span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="co">// 定义一个结构体: 描述一个&quot;点&quot;</span></span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Point <span class="kw">struct</span> <span class="op">{</span></span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    X<span class="op">,</span> Y <span class="dt">int</span></span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="co">// 给 Point 定义一个方法(带接收者的函数)</span></span>
-<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>p Point<span class="op">)</span> String<span class="op">()</span> <span class="dt">string</span> <span class="op">{</span></span>
-<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> fmt<span class="op">.</span>Sprintf<span class="op">(</span><span class="st">&quot;(%d, %d)&quot;</span><span class="op">,</span> p<span class="op">.</span>X<span class="op">,</span> p<span class="op">.</span>Y<span class="op">)</span></span>
-<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="co">// 定义一个接口: 只要求有 String() 方法</span></span>
-<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Stringer <span class="kw">interface</span> <span class="op">{</span></span>
-<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    String<span class="op">()</span> <span class="dt">string</span></span>
-<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
-<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>    p <span class="op">:=</span> Point<span class="op">{</span>X<span class="op">:</span> <span class="dv">1</span><span class="op">,</span> Y<span class="op">:</span> <span class="dv">2</span><span class="op">}</span>   <span class="co">// 创建并初始化</span></span>
-<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>p<span class="op">.</span>X<span class="op">,</span> p<span class="op">.</span>Y<span class="op">)</span>   <span class="co">// 1 2  —— 访问字段</span></span>
-<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>p<span class="op">.</span>String<span class="op">())</span> <span class="co">// (1, 2)  —— 调用方法</span></span>
-<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Point 自动满足 Stringer 接口(不需要声明 implements)</span></span>
-<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> s Stringer <span class="op">=</span> p</span>
-<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>s<span class="op">.</span>String<span class="op">())</span> <span class="co">// (1, 2)</span></span>
-<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
-<p>简单总结:</p>
-<ul>
-<li><code>type Point struct { X, Y int }</code>
-定义结构体,<code>Point{X: 1, Y: 2}</code> 或 <code>Point{1, 2}</code>
-创建实例,<code>.</code> 访问字段。</li>
-<li><code>func (p Point) String() string { ... }</code>
-给类型定义方法,括号里的 <code>p Point</code>
-叫<strong>接收者(receiver)</strong>。</li>
-<li><code>type Stringer interface { String() string }</code>
-定义接口,只要一个类型实现了接口里列出的所有方法,它就”自动”满足这个接口,不需要像
-Java/C++ 那样显式声明 <code>implements</code>。</li>
-</ul>
-<p>这些够你开始写面向对象风格的 Go
-代码了。下面进入”底层”——看方法调用的本质、组合的内存布局、接口值的两个字怎么构成、以及泛型编译成什么样的代码。</p>
-<h2
-id="开始深入从怎么定义到底层怎么表示">开始深入:从”怎么定义”到”底层怎么表示”</h2>
-<p>从这一节起讲底层。Go
-的类型系统看起来简单,但每一层都有明确、可预测的底层表示——没有隐藏的虚表指针、没有隐藏的
-<code>this</code>。搞清这些表示,你就能预测方法调用的开销、组合和接口的内存布局、以及为什么某些类型不能赋给某个接口变量。</p>
 <h2 id="一方法带接收者的函数">一、方法:带接收者的函数</h2>
-<h3 id="怎么用">怎么用</h3>
 <p>方法就是第一个参数(接收者
 receiver)写在前面的普通函数。分两种:值接收者(拷贝一份操作)和指针接收者(能就地修改)。</p>
-<div class="sourceCode" id="cb2"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Point <span class="kw">struct</span><span class="op">{</span> X<span class="op">,</span> Y <span class="dt">int</span> <span class="op">}</span></span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>p Point<span class="op">)</span> Add<span class="op">(</span>q Point<span class="op">)</span> Point <span class="op">{</span>   <span class="co">// 值接收者: p 是 Point 的拷贝</span></span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> Point<span class="op">{</span>p<span class="op">.</span>X <span class="op">+</span> q<span class="op">.</span>X<span class="op">,</span> p<span class="op">.</span>Y <span class="op">+</span> q<span class="op">.</span>Y<span class="op">}</span></span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>p <span class="op">*</span>Point<span class="op">)</span> Scale<span class="op">(</span>f <span class="dt">int</span><span class="op">)</span> <span class="op">{</span>        <span class="co">// 指针接收者: 能就地修改</span></span>
-<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    p<span class="op">.</span>X <span class="op">*=</span> f</span>
-<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    p<span class="op">.</span>Y <span class="op">*=</span> f</span>
-<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>p1 <span class="op">:=</span> Point<span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">}</span></span>
-<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>p2 <span class="op">:=</span> Point<span class="op">{</span><span class="dv">3</span><span class="op">,</span> <span class="dv">4</span><span class="op">}</span></span>
-<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>sum <span class="op">:=</span> p1<span class="op">.</span>Add<span class="op">(</span>p2<span class="op">)</span>  <span class="co">// {4 6}</span></span>
-<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>p1<span class="op">.</span>Scale<span class="op">(</span><span class="dv">10</span><span class="op">)</span>       <span class="co">// p1 变成 {10 20}, Scale 就地修改了它</span></span></code></pre></div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Point <span class="kw">struct</span><span class="op">{</span> X<span class="op">,</span> Y <span class="dt">int</span> <span class="op">}</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>p Point<span class="op">)</span> Add<span class="op">(</span>q Point<span class="op">)</span> Point <span class="op">{</span>   <span class="co">// 值接收者: p 是 Point 的拷贝</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> Point<span class="op">{</span>p<span class="op">.</span>X <span class="op">+</span> q<span class="op">.</span>X<span class="op">,</span> p<span class="op">.</span>Y <span class="op">+</span> q<span class="op">.</span>Y<span class="op">}</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>p <span class="op">*</span>Point<span class="op">)</span> Scale<span class="op">(</span>f <span class="dt">int</span><span class="op">)</span> <span class="op">{</span>        <span class="co">// 指针接收者: 能就地修改</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    p<span class="op">.</span>X <span class="op">*=</span> f</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    p<span class="op">.</span>Y <span class="op">*=</span> f</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>p1 <span class="op">:=</span> Point<span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">}</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>p2 <span class="op">:=</span> Point<span class="op">{</span><span class="dv">3</span><span class="op">,</span> <span class="dv">4</span><span class="op">}</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>sum <span class="op">:=</span> p1<span class="op">.</span>Add<span class="op">(</span>p2<span class="op">)</span>  <span class="co">// {4 6}</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>p1<span class="op">.</span>Scale<span class="op">(</span><span class="dv">10</span><span class="op">)</span>       <span class="co">// p1 变成 {10 20}, Scale 就地修改了它</span></span></code></pre></div>
 <p>方法可以定义在任何<strong>本包内定义的具名类型</strong>上,不限于
 struct:</p>
-<div class="sourceCode" id="cb3"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Celsius <span class="dt">float64</span></span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>c Celsius<span class="op">)</span> String<span class="op">()</span> <span class="dt">string</span> <span class="op">{</span> <span class="cf">return</span> fmt<span class="op">.</span>Sprintf<span class="op">(</span><span class="st">&quot;%.1f°C&quot;</span><span class="op">,</span> c<span class="op">)</span> <span class="op">}</span></span></code></pre></div>
-<h3 id="底层与-c-对比">底层与 C 对比</h3>
+<div class="sourceCode" id="cb2"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Celsius <span class="dt">float64</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>c Celsius<span class="op">)</span> String<span class="op">()</span> <span class="dt">string</span> <span class="op">{</span> <span class="cf">return</span> fmt<span class="op">.</span>Sprintf<span class="op">(</span><span class="st">&quot;%.1f°C&quot;</span><span class="op">,</span> c<span class="op">)</span> <span class="op">}</span></span></code></pre></div>
 <p>底层没有魔法:<code>p.Add(q)</code> 等价于
 <code>Point.Add(p, q)</code>,receiver 就是普通传参——值接收者拷贝整个
 <code>Point</code>,指针接收者拷贝一个指针。没有 C++ 那种隐藏的
@@ -215,23 +157,30 @@ struct:</p>
 href="06-函数与调用栈.html">回顾第06章值接收者 vs 指针接收者</a>)</p>
 <h2
 id="二组合嵌入embedding与方法提升">二、组合:嵌入(embedding)与方法提升</h2>
-<h3 id="怎么用-1">怎么用</h3>
 <p>Go 不用继承复用,用<strong>嵌入</strong>:在 struct
 里放一个匿名字段(只写类型不写字段名)。嵌入类型的方法和字段会被”提升”到外层,看起来像是外层自己的:</p>
-<div class="sourceCode" id="cb4"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Engine <span class="kw">struct</span><span class="op">{</span> Power <span class="dt">int</span> <span class="op">}</span></span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>e Engine<span class="op">)</span> Start<span class="op">()</span> <span class="op">{</span> fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;engine start&quot;</span><span class="op">,</span> e<span class="op">.</span>Power<span class="op">)</span> <span class="op">}</span></span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Car <span class="kw">struct</span> <span class="op">{</span></span>
-<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    Engine       <span class="co">// 嵌入(匿名字段), 不是继承!</span></span>
-<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    Brand <span class="dt">string</span></span>
-<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>c <span class="op">:=</span> Car<span class="op">{</span>Engine<span class="op">{</span><span class="dv">100</span><span class="op">},</span> <span class="st">&quot;Toyota&quot;</span><span class="op">}</span></span>
-<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>c<span class="op">.</span>Start<span class="op">()</span>             <span class="co">// 方法提升: 等价于 c.Engine.Start()</span></span>
-<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Println<span class="op">(</span>c<span class="op">.</span>Power<span class="op">)</span>  <span class="co">// 字段提升: 等价于 c.Engine.Power</span></span></code></pre></div>
-<h3 id="底层与-c-对比-1">底层与 C 对比</h3>
-<p><strong>内存布局:嵌入就是把 <code>Engine</code> 整个作为
-<code>Car</code> 的一个字段内联进去</strong>,和普通字段没区别:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Engine <span class="kw">struct</span><span class="op">{</span> Power <span class="dt">int</span> <span class="op">}</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>e Engine<span class="op">)</span> Start<span class="op">()</span> <span class="op">{</span> fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;engine start&quot;</span><span class="op">,</span> e<span class="op">.</span>Power<span class="op">)</span> <span class="op">}</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Car <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    Engine       <span class="co">// 嵌入(匿名字段), 不是继承!</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    Brand <span class="dt">string</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>c <span class="op">:=</span> Car<span class="op">{</span>Engine<span class="op">{</span><span class="dv">100</span><span class="op">},</span> <span class="st">&quot;Toyota&quot;</span><span class="op">}</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>c<span class="op">.</span>Start<span class="op">()</span>             <span class="co">// 方法提升: 等价于 c.Engine.Start()</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Println<span class="op">(</span>c<span class="op">.</span>Power<span class="op">)</span>  <span class="co">// 字段提升: 等价于 c.Engine.Power</span></span></code></pre></div>
+<p><strong>为什么 Go 没有类和继承,只有 struct 组合 +
+interface</strong>。C++
+的经典继承体系鼓励把公共逻辑不断上提到基类,随着系统演化容易长出很深的继承树;深继承树是出了名的脆弱——子类的正确性隐含依赖基类此刻的实现细节(而不只是接口),基类为了”预留给子类扩展”经常把内部状态和方法设成
+<code>protected</code>,子类和基类因此在实现层面紧密耦合,这就是”脆弱基类问题(fragile
+base class
+problem)“:修改基类一个看似无关的实现细节,可能悄悄破坏所有子类的行为,而这种破坏往往编译期发现不了。软件工程界”组合优于继承(favor
+composition over
+inheritance)“的建议由来已久,但在允许继承的语言里,这始终只是一条约定俗成的最佳实践,遵守与否取决于团队自律。Go
+的做法更彻底:直接<strong>不提供实现继承</strong>,组合(嵌入)是唯一的代码复用机制。这不是功能缺失,而是刻意把”最佳实践”提升为”语言唯一支持的方式”——从语言设计层面杜绝了深继承树这一整类问题,代价是牺牲了继承体系里”一次定义、到处复用并可被子类覆盖任意层实现细节”的表达力。</p>
+<p>内存布局:嵌入就是把 <code>Engine</code> 整个作为 <code>Car</code>
+的一个字段内联进去,和普通字段没区别:</p>
 <pre><code>Car 在内存中:
 ┌──────────────┬───────────────┐
 │ Engine.Power │ Brand(string) │   Engine 的字段就地展开在 Car 里
@@ -239,7 +188,6 @@ id="二组合嵌入embedding与方法提升">二、组合:嵌入(embedding)与�
 <p>这不是 C++ 的继承(没有基类子对象的虚表指针、没有 is-a
 关系)。编译器只是做了”名字转发”:<code>c.Start()</code> 在编译期被改写成
 <code>c.Engine.Start()</code>。<strong>没有运行时开销,没有虚表</strong>。</p>
-<h3 id="与-c-继承的对照">与 C++ 继承的对照</h3>
 <table>
 <colgroup>
 <col style="width: 25%" />
@@ -282,81 +230,85 @@ id="二组合嵌入embedding与方法提升">二、组合:嵌入(embedding)与�
 </tbody>
 </table>
 <p>方法遮蔽(shadowing)示例:</p>
-<div class="sourceCode" id="cb6"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>c Car<span class="op">)</span> Start<span class="op">()</span> <span class="op">{</span> fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;car:&quot;</span><span class="op">,</span> c<span class="op">.</span>Brand<span class="op">);</span> c<span class="op">.</span>Engine<span class="op">.</span>Start<span class="op">()</span> <span class="op">}</span></span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="co">// 现在 c.Start() 调外层的; 想调内层显式写 c.Engine.Start()</span></span></code></pre></div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>c Car<span class="op">)</span> Start<span class="op">()</span> <span class="op">{</span> fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;car:&quot;</span><span class="op">,</span> c<span class="op">.</span>Brand<span class="op">);</span> c<span class="op">.</span>Engine<span class="op">.</span>Start<span class="op">()</span> <span class="op">}</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="co">// 现在 c.Start() 调外层的; 想调内层显式写 c.Engine.Start()</span></span></code></pre></div>
 <p>注意:嵌入是<strong>静态转发</strong>,不是虚派发。若
 <code>Engine.Start</code> 内部调用另一个方法,它调的还是
 <code>Engine</code> 自己的,<strong>不会</strong>回调到 <code>Car</code>
 覆盖的版本——这与 C++
 虚函数的”派生类覆盖被基类调用到”根本不同。需要那种回调,得用接口。</p>
-<h3
-id="可运行方法提升遮蔽与静态转发">可运行:方法提升、遮蔽与静态转发</h3>
-<div class="sourceCode" id="cb7"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="st">&quot;fmt&quot;</span></span>
-<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Engine <span class="kw">struct</span><span class="op">{</span> Power <span class="dt">int</span> <span class="op">}</span></span>
-<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>e Engine<span class="op">)</span> Start<span class="op">()</span> <span class="op">{</span> fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;engine start&quot;</span><span class="op">,</span> e<span class="op">.</span>Power<span class="op">)</span> <span class="op">}</span></span>
-<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>e Engine<span class="op">)</span> Boot<span class="op">()</span>  <span class="op">{</span> e<span class="op">.</span>Start<span class="op">()</span> <span class="op">}</span> <span class="co">// 永远调 Engine.Start</span></span>
-<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Car <span class="kw">struct</span> <span class="op">{</span></span>
-<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>    Engine        <span class="co">// 嵌入(匿名字段)</span></span>
-<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>    Brand <span class="dt">string</span></span>
-<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>c Car<span class="op">)</span> Start<span class="op">()</span> <span class="op">{</span> fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;car start&quot;</span><span class="op">,</span> c<span class="op">.</span>Brand<span class="op">)</span> <span class="op">}</span> <span class="co">// 遮蔽 Engine.Start</span></span>
-<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
-<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a>    c <span class="op">:=</span> Car<span class="op">{</span>Engine<span class="op">{</span><span class="dv">100</span><span class="op">},</span> <span class="st">&quot;Toyota&quot;</span><span class="op">}</span></span>
-<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a>    c<span class="op">.</span>Start<span class="op">()</span>            <span class="co">// car start Toyota   (外层遮蔽了提升来的方法)</span></span>
-<span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a>    c<span class="op">.</span>Engine<span class="op">.</span>Start<span class="op">()</span>     <span class="co">// engine start 100   (显式路径调内层)</span></span>
-<span id="cb7-21"><a href="#cb7-21" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>c<span class="op">.</span>Power<span class="op">)</span> <span class="co">// 100                (字段提升)</span></span>
-<span id="cb7-22"><a href="#cb7-22" aria-hidden="true" tabindex="-1"></a>    c<span class="op">.</span>Boot<span class="op">()</span>             <span class="co">// engine start 100   (静态转发: 不是 &quot;car start&quot;)</span></span>
-<span id="cb7-23"><a href="#cb7-23" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>可运行:方法提升、遮蔽与静态转发:</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Engine <span class="kw">struct</span><span class="op">{</span> Power <span class="dt">int</span> <span class="op">}</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>e Engine<span class="op">)</span> Start<span class="op">()</span> <span class="op">{</span> fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;engine start&quot;</span><span class="op">,</span> e<span class="op">.</span>Power<span class="op">)</span> <span class="op">}</span></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>e Engine<span class="op">)</span> Boot<span class="op">()</span>  <span class="op">{</span> e<span class="op">.</span>Start<span class="op">()</span> <span class="op">}</span> <span class="co">// 永远调 Engine.Start</span></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Car <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>    Engine        <span class="co">// 嵌入(匿名字段)</span></span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>    Brand <span class="dt">string</span></span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>c Car<span class="op">)</span> Start<span class="op">()</span> <span class="op">{</span> fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;car start&quot;</span><span class="op">,</span> c<span class="op">.</span>Brand<span class="op">)</span> <span class="op">}</span> <span class="co">// 遮蔽 Engine.Start</span></span>
+<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a>    c <span class="op">:=</span> Car<span class="op">{</span>Engine<span class="op">{</span><span class="dv">100</span><span class="op">},</span> <span class="st">&quot;Toyota&quot;</span><span class="op">}</span></span>
+<span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a>    c<span class="op">.</span>Start<span class="op">()</span>            <span class="co">// car start Toyota   (外层遮蔽了提升来的方法)</span></span>
+<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a>    c<span class="op">.</span>Engine<span class="op">.</span>Start<span class="op">()</span>     <span class="co">// engine start 100   (显式路径调内层)</span></span>
+<span id="cb6-21"><a href="#cb6-21" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>c<span class="op">.</span>Power<span class="op">)</span> <span class="co">// 100                (字段提升)</span></span>
+<span id="cb6-22"><a href="#cb6-22" aria-hidden="true" tabindex="-1"></a>    c<span class="op">.</span>Boot<span class="op">()</span>             <span class="co">// engine start 100   (静态转发: 不是 &quot;car start&quot;)</span></span>
+<span id="cb6-23"><a href="#cb6-23" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>最后一行是关键:<code>Boot</code> 是 <code>Engine</code> 的方法,直接调
 <code>Engine.Start</code>,<strong>不会</strong>派发到
 <code>Car.Start</code>。这就是静态转发,与 C++ 虚调用相反。</p>
 <h2 id="三接口隐式实现的结构化类型">三、接口:隐式实现的结构化类型</h2>
-<h3 id="怎么用-2">怎么用</h3>
 <p>接口定义一组方法签名。<strong>只要一个类型实现了接口的全部方法,它就自动满足该接口——不需要
 <code>implements</code>、不需要显式声明。</strong></p>
-<div class="sourceCode" id="cb8"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Stringer <span class="kw">interface</span> <span class="op">{</span></span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>    String<span class="op">()</span> <span class="dt">string</span></span>
-<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Celsius <span class="dt">float64</span></span>
-<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>c Celsius<span class="op">)</span> String<span class="op">()</span> <span class="dt">string</span> <span class="op">{</span> <span class="cf">return</span> fmt<span class="op">.</span>Sprintf<span class="op">(</span><span class="st">&quot;%.1f°C&quot;</span><span class="op">,</span> c<span class="op">)</span> <span class="op">}</span></span>
-<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> s Stringer <span class="op">=</span> Celsius<span class="op">(</span><span class="fl">37.5</span><span class="op">)</span>  <span class="co">// 自动满足, 无需声明&quot;Celsius implements Stringer&quot;</span></span></code></pre></div>
+<div class="sourceCode" id="cb7"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Stringer <span class="kw">interface</span> <span class="op">{</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    String<span class="op">()</span> <span class="dt">string</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Celsius <span class="dt">float64</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>c Celsius<span class="op">)</span> String<span class="op">()</span> <span class="dt">string</span> <span class="op">{</span> <span class="cf">return</span> fmt<span class="op">.</span>Sprintf<span class="op">(</span><span class="st">&quot;%.1f°C&quot;</span><span class="op">,</span> c<span class="op">)</span> <span class="op">}</span></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> s Stringer <span class="op">=</span> Celsius<span class="op">(</span><span class="fl">37.5</span><span class="op">)</span>  <span class="co">// 自动满足, 无需声明&quot;Celsius implements Stringer&quot;</span></span></code></pre></div>
 <p>这叫<strong>结构化类型(structural typing)</strong> /
-鸭子类型的静态版本。好处:接口可以为你无法修改的类型(甚至标准库类型)“事后”定义;解耦定义方和使用方。C++20
+鸭子类型的静态版本。<strong>为什么接口设计成隐式实现,而不像 Java/C++
+那样要求显式 <code>implements</code>/继承抽象基类</strong>。核心原因是
+Go
+的一条设计箴言:<strong>接口应当由使用方定义,而不是由实现方定义(interfaces
+should be defined by consumers, not
+producers)</strong>。在显式声明的模型里,一个类型要满足某个接口,必须在<strong>定义时</strong>就知道这个接口存在并声明遵从它——这意味着接口通常得由实现方所在的包(或它们共同的上游)预先定义好,新增一个接口视角往往需要回头修改实现方代码,或者干脆没法给不受你控制的类型(比如标准库或第三方库的类型)追加一个新接口。隐式实现打破了这种耦合:任何调用方都可以在自己的包里定义一个只包含它需要的那几个方法的接口,不必得到实现方的配合、不必修改实现方代码,只要具体类型”恰好”有这些方法,匹配就自动成立。结果是接口的定义权下放到了使用方,模块之间的依赖方向也随之简化——实现方的包完全不需要
+import
+定义接口的包,减少了包之间的耦合与循环依赖风险。代价是编译器不能在”定义一个类型”这一刻就告诉你它实现了哪些接口,匹配关系只有在真正需要赋值给接口变量时才被编译器检查,IDE/文档也更难一眼列出”这个类型实现了哪些接口”。</p>
+<p>好处还包括:接口可以为你无法修改的类型(甚至标准库类型)“事后”定义;解耦定义方和使用方。C++20
 的 concept 有点像,但接口是运行时多态(带 vtable),更接近 C++ 的抽象基类 +
 虚函数。</p>
-<h3 id="底层与-c-对比-2">底层与 C 对比</h3>
 <p>接口值的底层:两个字。接口值在内存里是<strong>两个机器字</strong>(<a
 href="04-数据类型.html">第04章已提过</a>)。分两种:</p>
 <p><strong><code>iface</code>——非空接口(带方法的接口)</strong>:</p>
-<div class="sourceCode" id="cb9"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> iface <span class="kw">struct</span> <span class="op">{</span></span>
-<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>    tab  <span class="op">*</span>itab          <span class="co">// 类型信息 + 方法表(相当于 vtable)</span></span>
-<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>    data unsafe<span class="op">.</span>Pointer  <span class="co">// 指向实际数据</span></span>
-<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb8"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> iface <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>    tab  <span class="op">*</span>itab          <span class="co">// 类型信息 + 方法表(相当于 vtable)</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    data unsafe<span class="op">.</span>Pointer  <span class="co">// 指向实际数据</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p><strong><code>eface</code>——空接口 <code>any</code>(即
 <code>interface{}</code>)</strong>:</p>
-<div class="sourceCode" id="cb10"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> eface <span class="kw">struct</span> <span class="op">{</span></span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>    _type <span class="op">*</span>_type         <span class="co">// 动态类型信息</span></span>
-<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>    data  unsafe<span class="op">.</span>Pointer  <span class="co">// 指向实际数据</span></span>
-<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb9"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> eface <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>    _type <span class="op">*</span>_type         <span class="co">// 动态类型信息</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>    data  unsafe<span class="op">.</span>Pointer  <span class="co">// 指向实际数据</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p><code>itab</code>
 是关键,它把”接口类型”和”具体类型”配对,并缓存了方法地址表:</p>
-<div class="sourceCode" id="cb11"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> itab <span class="kw">struct</span> <span class="op">{</span></span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>    inter <span class="op">*</span>interfacetype <span class="co">// 接口类型</span></span>
-<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>    _type <span class="op">*</span>_type         <span class="co">// 具体类型</span></span>
-<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>    hash  <span class="dt">uint32</span></span>
-<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>    fun   <span class="op">[</span><span class="dv">1</span><span class="op">]</span><span class="dt">uintptr</span>     <span class="co">// 方法地址数组(变长), 相当于 vtable</span></span>
-<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> itab <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>    inter <span class="op">*</span>interfacetype <span class="co">// 接口类型</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>    _type <span class="op">*</span>_type         <span class="co">// 具体类型</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>    hash  <span class="dt">uint32</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>    fun   <span class="op">[</span><span class="dv">1</span><span class="op">]</span><span class="dt">uintptr</span>     <span class="co">// 方法地址数组(变长), 相当于 vtable</span></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <pre><code>var s Stringer = Celsius(37.5)
 
 s(接口值, 16 字节):          itab(每个 (接口,类型) 组合一份, 全局缓存):
@@ -372,7 +324,12 @@ vptr,vtable 由类唯一确定;Go
 的方法表在<strong>接口值里</strong>(<code>itab</code>),同一个具体类型对不同接口有不同
 <code>itab</code>,<code>itab</code> 按需生成并全局缓存。调用
 <code>s.String()</code> = 查 <code>tab.fun[0]</code> 得地址 → 以
-<code>data</code> 为 receiver 调用,一次间接跳转,和虚调用开销相当。</p>
+<code>data</code> 为 receiver
+调用,一次间接跳转,和虚调用开销相当。这个差异也直接对应”隐式实现”这条设计:C++
+的 vtable 必须在类定义时就确定(因为 vptr 是对象自身布局的一部分),而 Go
+把”类型 T 满足接口
+I”这件事的方法表挪到接口值里按需生成,天然支持”事后”为已有类型配出一个满足某接口的
+<code>itab</code>,不需要改动类型定义本身。</p>
 <p><strong>装箱</strong>:把具体值塞进接口时,若值不是指针,通常要把它拷到堆上让
 <code>data</code> 指向(逃逸,见<a
 href="03-变量与内存模型.html">第03章</a>)。所以
@@ -384,69 +341,83 @@ href="03-变量与内存模型.html">第03章</a>)。所以
 <code>_type</code>)和 <code>data</code> 两个字都为
 nil</strong>。如果接口装了一个”类型非空但值为 nil
 的指针”,接口本身<strong>不等于 nil</strong>:</p>
-<div class="sourceCode" id="cb13"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> doErr<span class="op">()</span> <span class="dt">error</span> <span class="op">{</span></span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> p <span class="op">*</span>MyError <span class="op">=</span> <span class="ot">nil</span>   <span class="co">// 具体类型的 nil 指针</span></span>
-<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> p               <span class="co">// 装进 error 接口: tab=*MyError, data=nil</span></span>
-<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
-<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>    err <span class="op">:=</span> doErr<span class="op">()</span></span>
-<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> err <span class="op">!=</span> <span class="ot">nil</span> <span class="op">{</span>        <span class="co">// 竟然为 true!!</span></span>
-<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>        fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;非 nil:&quot;</span><span class="op">,</span> err <span class="op">==</span> <span class="ot">nil</span><span class="op">)</span> <span class="co">// 非 nil: false</span></span>
-<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
-<p>因为返回的接口值是
-<code>{tab: *MyError, data: nil}</code>,<code>tab</code> 非 nil,所以
-<code>err != nil</code>。这是新手最常见的 bug
-之一。<strong>规矩:函数返回 error 时,要么返回真正的
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> doErr<span class="op">()</span> <span class="dt">error</span> <span class="op">{</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> p <span class="op">*</span>MyError <span class="op">=</span> <span class="ot">nil</span>   <span class="co">// 具体类型的 nil 指针</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> p               <span class="co">// 装进 error 接口: tab=*MyError, data=nil</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>    err <span class="op">:=</span> doErr<span class="op">()</span></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> err <span class="op">!=</span> <span class="ot">nil</span> <span class="op">{</span>        <span class="co">// 竟然为 true!!</span></span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>        fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;非 nil:&quot;</span><span class="op">,</span> err <span class="op">==</span> <span class="ot">nil</span><span class="op">)</span> <span class="co">// 非 nil: false</span></span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p><strong>为什么会有这个坑,以及为什么这是双字表示的必然结果,而不是可以简单修掉的
+bug</strong>。接口值的”是否为 nil”这个判断,定义上只看
+<code>tab</code>/<code>_type</code> 这一个字,和 <code>data</code>
+那一个字里到底装的是什么值完全无关。这不是疏忽——它是”接口值是两个独立字段”这个表示方式本身带来的逻辑推论:<code>return p</code>
+这行代码把一个<strong>具体类型
+<code>*MyError</code></strong>(哪怕它的值是 nil)装进 <code>error</code>
+接口,装箱操作要做的是”记录下这是个 <code>*MyError</code>,数据指针恰好是
+nil”,而不是”把接口本身变成
+nil”——这是两件完全不同的事:前者是”类型确定、值恰好为空”,后者是”连类型信息都没有”。只要接口用”类型指针
++
+数据指针”这种显式的两字结构表示(而不是用一个单一的、类型无关的哨兵值表示”空”),这个区分就必然存在,也就必然会出现”具体类型的
+nil 指针 ≠ 接口的
+nil”这种情况。<strong>为什么要选这种双字表示而不是单字的”万能
+nil”</strong>:两字结构让接口的类型信息和数据分离存放,<code>itab</code>
+可以被同类型的多次装箱复用、方法调用只需一次间接跳转,调用路径不需要在运行时反复判断”这到底是不是个特殊的
+nil”;要是改用单字表示、用某个哨兵值统一表达”任何类型的
+nil”,接口调用和类型判断的实现都会变复杂,且无法在保持当前性能特征的前提下解决——所以这是”实现简单高效”和”少一个新手坑”之间的取舍,Go
+选择了前者,把这个坑变成需要记住的规矩,而不是运行时开销。<strong>规矩:函数返回
+error 时,要么返回真正的
 nil(<code>return nil</code>),不要返回一个具体类型的 nil
 指针。</strong>(<a href="09-错误处理与资源管理.html">第09章 error
 会再强调</a>)</p>
 <p>可运行:</p>
-<div class="sourceCode" id="cb14"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
-<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="st">&quot;fmt&quot;</span></span>
-<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> MyError <span class="kw">struct</span><span class="op">{}</span></span>
-<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>e <span class="op">*</span>MyError<span class="op">)</span> Error<span class="op">()</span> <span class="dt">string</span> <span class="op">{</span> <span class="cf">return</span> <span class="st">&quot;boom&quot;</span> <span class="op">}</span></span>
-<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> doErr<span class="op">()</span> <span class="dt">error</span> <span class="op">{</span></span>
-<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> p <span class="op">*</span>MyError <span class="op">=</span> <span class="ot">nil</span> <span class="co">// 具体类型的 nil 指针</span></span>
-<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> p             <span class="co">// 装进 error: {type:*MyError, data:nil}</span></span>
-<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-14"><a href="#cb14-14" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> returnsNil<span class="op">()</span> <span class="dt">error</span> <span class="op">{</span> <span class="cf">return</span> <span class="ot">nil</span> <span class="op">}</span> <span class="co">// 真正的 nil 接口</span></span>
-<span id="cb14-15"><a href="#cb14-15" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-16"><a href="#cb14-16" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
-<span id="cb14-17"><a href="#cb14-17" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>doErr<span class="op">()</span> <span class="op">==</span> <span class="ot">nil</span><span class="op">)</span>      <span class="co">// false  ← 坑: 接口装了非空类型</span></span>
-<span id="cb14-18"><a href="#cb14-18" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>returnsNil<span class="op">()</span> <span class="op">==</span> <span class="ot">nil</span><span class="op">)</span> <span class="co">// true</span></span>
-<span id="cb14-19"><a href="#cb14-19" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> MyError <span class="kw">struct</span><span class="op">{}</span></span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>e <span class="op">*</span>MyError<span class="op">)</span> Error<span class="op">()</span> <span class="dt">string</span> <span class="op">{</span> <span class="cf">return</span> <span class="st">&quot;boom&quot;</span> <span class="op">}</span></span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> doErr<span class="op">()</span> <span class="dt">error</span> <span class="op">{</span></span>
+<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> p <span class="op">*</span>MyError <span class="op">=</span> <span class="ot">nil</span> <span class="co">// 具体类型的 nil 指针</span></span>
+<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> p             <span class="co">// 装进 error: {type:*MyError, data:nil}</span></span>
+<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-14"><a href="#cb13-14" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> returnsNil<span class="op">()</span> <span class="dt">error</span> <span class="op">{</span> <span class="cf">return</span> <span class="ot">nil</span> <span class="op">}</span> <span class="co">// 真正的 nil 接口</span></span>
+<span id="cb13-15"><a href="#cb13-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-16"><a href="#cb13-16" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb13-17"><a href="#cb13-17" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>doErr<span class="op">()</span> <span class="op">==</span> <span class="ot">nil</span><span class="op">)</span>      <span class="co">// false  ← 坑: 接口装了非空类型</span></span>
+<span id="cb13-18"><a href="#cb13-18" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>returnsNil<span class="op">()</span> <span class="op">==</span> <span class="ot">nil</span><span class="op">)</span> <span class="co">// true</span></span>
+<span id="cb13-19"><a href="#cb13-19" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <h3 id="类型断言与-type-switch">类型断言与 type switch</h3>
 <p>从接口取回具体类型:</p>
-<div class="sourceCode" id="cb15"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> i <span class="dt">any</span> <span class="op">=</span> <span class="st">&quot;hello&quot;</span></span>
-<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>s <span class="op">:=</span> i<span class="op">.(</span><span class="dt">string</span><span class="op">)</span>         <span class="co">// 断言, 失败会 panic</span></span>
-<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>s<span class="op">,</span> ok <span class="op">:=</span> i<span class="op">.(</span><span class="dt">string</span><span class="op">)</span>     <span class="co">// 逗号 ok 形式, 失败 ok=false 不 panic</span></span></code></pre></div>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> i <span class="dt">any</span> <span class="op">=</span> <span class="st">&quot;hello&quot;</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>s <span class="op">:=</span> i<span class="op">.(</span><span class="dt">string</span><span class="op">)</span>         <span class="co">// 断言, 失败会 panic</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>s<span class="op">,</span> ok <span class="op">:=</span> i<span class="op">.(</span><span class="dt">string</span><span class="op">)</span>     <span class="co">// 逗号 ok 形式, 失败 ok=false 不 panic</span></span></code></pre></div>
 <p>底层:比较接口里的 <code>_type</code>/<code>itab</code>
 与目标类型是否一致,一致就返回 <code>data</code>(必要时解引用/拷贝)。</p>
 <p>type switch 按动态类型分派:</p>
-<div class="sourceCode" id="cb16"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="cf">switch</span> v <span class="op">:=</span> i<span class="op">.(</span><span class="kw">type</span><span class="op">)</span> <span class="op">{</span></span>
-<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="cf">case</span> <span class="dt">int</span><span class="op">:</span></span>
-<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;int&quot;</span><span class="op">,</span> v<span class="op">)</span>     <span class="co">// v 是 int</span></span>
-<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a><span class="cf">case</span> <span class="dt">string</span><span class="op">:</span></span>
-<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;string&quot;</span><span class="op">,</span> v<span class="op">)</span>  <span class="co">// v 是 string</span></span>
-<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a><span class="cf">case</span> fmt<span class="op">.</span>Stringer<span class="op">:</span></span>
-<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>v<span class="op">.</span>String<span class="op">())</span>   <span class="co">// 也能匹配接口</span></span>
-<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a><span class="cf">default</span><span class="op">:</span></span>
-<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;其他&quot;</span><span class="op">)</span></span>
-<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb15"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="cf">switch</span> v <span class="op">:=</span> i<span class="op">.(</span><span class="kw">type</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="cf">case</span> <span class="dt">int</span><span class="op">:</span></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;int&quot;</span><span class="op">,</span> v<span class="op">)</span>     <span class="co">// v 是 int</span></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a><span class="cf">case</span> <span class="dt">string</span><span class="op">:</span></span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;string&quot;</span><span class="op">,</span> v<span class="op">)</span>  <span class="co">// v 是 string</span></span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a><span class="cf">case</span> fmt<span class="op">.</span>Stringer<span class="op">:</span></span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>v<span class="op">.</span>String<span class="op">())</span>   <span class="co">// 也能匹配接口</span></span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a><span class="cf">default</span><span class="op">:</span></span>
+<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;其他&quot;</span><span class="op">)</span></span>
+<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <h2
 id="四方法集值还是指针能满足接口">四、方法集:值还是指针能满足接口?</h2>
-<h3 id="怎么用-3">怎么用</h3>
 <p>哪些方法”属于”一个类型,决定它能否满足接口。规则:</p>
 <table>
 <thead>
@@ -471,98 +442,100 @@ id="四方法集值还是指针能满足接口">四、方法集:值还是指针�
 </table>
 <p>即:<strong>指针类型 <code>*T</code> 拥有全部方法;值类型
 <code>T</code> 只拥有值接收者方法。</strong></p>
-<div class="sourceCode" id="cb17"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Speaker <span class="kw">interface</span><span class="op">{</span> Speak<span class="op">()</span> <span class="dt">string</span> <span class="op">}</span></span>
-<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Dog <span class="kw">struct</span><span class="op">{</span> Name <span class="dt">string</span> <span class="op">}</span></span>
-<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>d <span class="op">*</span>Dog<span class="op">)</span> Speak<span class="op">()</span> <span class="dt">string</span> <span class="op">{</span> <span class="cf">return</span> d<span class="op">.</span>Name <span class="op">+</span> <span class="st">&quot; says woof&quot;</span> <span class="op">}</span> <span class="co">// 指针接收者</span></span>
-<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>d <span class="op">:=</span> <span class="op">&amp;</span>Dog<span class="op">{</span>Name<span class="op">:</span> <span class="st">&quot;Rex&quot;</span><span class="op">}</span></span>
-<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> s Speaker <span class="op">=</span> d          <span class="co">// OK: *Dog 满足 Speaker</span></span>
-<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Println<span class="op">(</span>s<span class="op">.</span>Speak<span class="op">())</span>     <span class="co">// Rex says woof</span></span></code></pre></div>
+<div class="sourceCode" id="cb16"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Speaker <span class="kw">interface</span><span class="op">{</span> Speak<span class="op">()</span> <span class="dt">string</span> <span class="op">}</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Dog <span class="kw">struct</span><span class="op">{</span> Name <span class="dt">string</span> <span class="op">}</span></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>d <span class="op">*</span>Dog<span class="op">)</span> Speak<span class="op">()</span> <span class="dt">string</span> <span class="op">{</span> <span class="cf">return</span> d<span class="op">.</span>Name <span class="op">+</span> <span class="st">&quot; says woof&quot;</span> <span class="op">}</span> <span class="co">// 指针接收者</span></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>d <span class="op">:=</span> <span class="op">&amp;</span>Dog<span class="op">{</span>Name<span class="op">:</span> <span class="st">&quot;Rex&quot;</span><span class="op">}</span></span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> s Speaker <span class="op">=</span> d          <span class="co">// OK: *Dog 满足 Speaker</span></span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Println<span class="op">(</span>s<span class="op">.</span>Speak<span class="op">())</span>     <span class="co">// Rex says woof</span></span></code></pre></div>
 <p>实践建议:<strong>要么全用值接收者,要么全用指针接收者,别混</strong>。需要修改状态、结构体较大、或想让
 <code>*T</code> 满足接口,就用指针接收者。</p>
-<h3 id="底层与-c-对比-3">底层与 C 对比</h3>
-<p>规则背后的原因:因为拿到 <code>*T</code> 能自动取值,拿到
-<code>T</code> 却不一定能取到稳定地址(比如 map
-元素、临时值)去调指针方法。</p>
-<div class="sourceCode" id="cb18"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Speaker <span class="kw">interface</span><span class="op">{</span> Speak<span class="op">()</span> <span class="op">}</span></span>
-<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Dog <span class="kw">struct</span><span class="op">{}</span></span>
-<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>d <span class="op">*</span>Dog<span class="op">)</span> Speak<span class="op">()</span> <span class="op">{}</span>      <span class="co">// 指针接收者</span></span>
-<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> s Speaker <span class="op">=</span> <span class="op">&amp;</span>Dog<span class="op">{}</span>        <span class="co">// OK</span></span>
-<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a><span class="co">// var s Speaker = Dog{}      // 编译错误: Dog 未实现 Speaker(Speak 在 *Dog 上)</span></span></code></pre></div>
+<p>规则背后的原因:因为拿到 <code>*T</code>
+能自动取值(编译器插入一次解引用),拿到 <code>T</code>
+却不一定能取到稳定地址(比如 map
+元素、函数返回的临时值)去调指针方法——若允许 <code>T</code>
+的方法集包含指针方法,<code>Dog{}.Speak()</code>
+这类没有可取地址左值的调用就需要编译器偷偷造一个临时变量再取地址,这个临时变量在方法返回后立刻失效,若方法内部试图保存这个指针供之后使用就会出错。Go
+选择在方法集层面直接禁止这种情况,而不是允许它但留下一个随时可能出错的隐患。</p>
+<div class="sourceCode" id="cb17"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Speaker <span class="kw">interface</span><span class="op">{</span> Speak<span class="op">()</span> <span class="op">}</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Dog <span class="kw">struct</span><span class="op">{}</span></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>d <span class="op">*</span>Dog<span class="op">)</span> Speak<span class="op">()</span> <span class="op">{}</span>      <span class="co">// 指针接收者</span></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> s Speaker <span class="op">=</span> <span class="op">&amp;</span>Dog<span class="op">{}</span>        <span class="co">// OK</span></span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a><span class="co">// var s Speaker = Dog{}      // 编译错误: Dog 未实现 Speaker(Speak 在 *Dog 上)</span></span></code></pre></div>
 <h3 id="方法值-vs-方法表达式">方法值 vs 方法表达式</h3>
-<div class="sourceCode" id="cb19"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>d <span class="op">:=</span> Dog<span class="op">{}</span></span>
-<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>f <span class="op">:=</span> d<span class="op">.</span>Speak            <span class="co">// 方法值: 绑定了 receiver d, 类型 func()</span></span>
-<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>f<span class="op">()</span>                     <span class="co">// 等价 d.Speak()</span></span>
-<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a>g <span class="op">:=</span> <span class="op">(*</span>Dog<span class="op">).</span>Speak       <span class="co">// 方法表达式: receiver 变成显式第一个参数</span></span>
-<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a>g<span class="op">(&amp;</span>d<span class="op">)</span>                   <span class="co">// 等价 d.Speak()</span></span></code></pre></div>
+<div class="sourceCode" id="cb18"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>d <span class="op">:=</span> Dog<span class="op">{}</span></span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>f <span class="op">:=</span> d<span class="op">.</span>Speak            <span class="co">// 方法值: 绑定了 receiver d, 类型 func()</span></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>f<span class="op">()</span>                     <span class="co">// 等价 d.Speak()</span></span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>g <span class="op">:=</span> <span class="op">(*</span>Dog<span class="op">).</span>Speak       <span class="co">// 方法表达式: receiver 变成显式第一个参数</span></span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>g<span class="op">(&amp;</span>d<span class="op">)</span>                   <span class="co">// 等价 d.Speak()</span></span></code></pre></div>
 <p>方法值会捕获
 receiver(可能导致其逃逸到堆,像闭包);方法表达式只是把方法当成普通函数,receiver
 显式传。</p>
 <h2 id="五泛型go-1.18类型参数与约束">五、泛型(Go
 1.18+):类型参数与约束</h2>
-<h3 id="怎么用-4">怎么用</h3>
 <p>Go 长期没有泛型,1.18 引入类型参数。语法:方括号声明类型参数,配
 <strong>约束(constraint)</strong>,写一次函数就能对多种类型工作:</p>
-<div class="sourceCode" id="cb20"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> Sum<span class="op">[</span>T <span class="dt">int</span> <span class="op">|</span> <span class="dt">float64</span><span class="op">](</span>xs <span class="op">[]</span>T<span class="op">)</span> T <span class="op">{</span></span>
-<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> total T</span>
-<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _<span class="op">,</span> x <span class="op">:=</span> <span class="kw">range</span> xs <span class="op">{</span></span>
-<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>        total <span class="op">+=</span> x</span>
-<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> total</span>
-<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb20-9"><a href="#cb20-9" aria-hidden="true" tabindex="-1"></a>Sum<span class="op">([]</span><span class="dt">int</span><span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">})</span>        <span class="co">// 6, 类型实参 int 自动推导</span></span>
-<span id="cb20-10"><a href="#cb20-10" aria-hidden="true" tabindex="-1"></a>Sum<span class="op">([]</span><span class="dt">float64</span><span class="op">{</span><span class="fl">1.5</span><span class="op">,</span> <span class="fl">2.5</span><span class="op">})</span>   <span class="co">// 4</span></span></code></pre></div>
+<div class="sourceCode" id="cb19"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> Sum<span class="op">[</span>T <span class="dt">int</span> <span class="op">|</span> <span class="dt">float64</span><span class="op">](</span>xs <span class="op">[]</span>T<span class="op">)</span> T <span class="op">{</span></span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> total T</span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _<span class="op">,</span> x <span class="op">:=</span> <span class="kw">range</span> xs <span class="op">{</span></span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a>        total <span class="op">+=</span> x</span>
+<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> total</span>
+<span id="cb19-7"><a href="#cb19-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb19-8"><a href="#cb19-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-9"><a href="#cb19-9" aria-hidden="true" tabindex="-1"></a>Sum<span class="op">([]</span><span class="dt">int</span><span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">})</span>        <span class="co">// 6, 类型实参 int 自动推导</span></span>
+<span id="cb19-10"><a href="#cb19-10" aria-hidden="true" tabindex="-1"></a>Sum<span class="op">([]</span><span class="dt">float64</span><span class="op">{</span><span class="fl">1.5</span><span class="op">,</span> <span class="fl">2.5</span><span class="op">})</span>   <span class="co">// 4</span></span></code></pre></div>
 <p>约束还可以先定义成一个具名接口,列出允许的类型集合:</p>
-<div class="sourceCode" id="cb21"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="co">// 约束: 一个接口, 列出允许的类型集合</span></span>
-<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Number <span class="kw">interface</span> <span class="op">{</span></span>
-<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a>    <span class="op">~</span><span class="dt">int</span> <span class="op">|</span> <span class="op">~</span><span class="dt">int64</span> <span class="op">|</span> <span class="op">~</span><span class="dt">float64</span>   <span class="co">// ~T 表示&quot;底层类型是 T 的所有类型&quot;</span></span>
-<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> Sum<span class="op">[</span>T Number<span class="op">](</span>xs <span class="op">[]</span>T<span class="op">)</span> T <span class="op">{</span></span>
-<span id="cb21-7"><a href="#cb21-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> total T</span>
-<span id="cb21-8"><a href="#cb21-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _<span class="op">,</span> x <span class="op">:=</span> <span class="kw">range</span> xs <span class="op">{</span></span>
-<span id="cb21-9"><a href="#cb21-9" aria-hidden="true" tabindex="-1"></a>        total <span class="op">+=</span> x</span>
-<span id="cb21-10"><a href="#cb21-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb21-11"><a href="#cb21-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> total</span>
-<span id="cb21-12"><a href="#cb21-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb20"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="co">// 约束: 一个接口, 列出允许的类型集合</span></span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Number <span class="kw">interface</span> <span class="op">{</span></span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>    <span class="op">~</span><span class="dt">int</span> <span class="op">|</span> <span class="op">~</span><span class="dt">int64</span> <span class="op">|</span> <span class="op">~</span><span class="dt">float64</span>   <span class="co">// ~T 表示&quot;底层类型是 T 的所有类型&quot;</span></span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> Sum<span class="op">[</span>T Number<span class="op">](</span>xs <span class="op">[]</span>T<span class="op">)</span> T <span class="op">{</span></span>
+<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> total T</span>
+<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _<span class="op">,</span> x <span class="op">:=</span> <span class="kw">range</span> xs <span class="op">{</span></span>
+<span id="cb20-9"><a href="#cb20-9" aria-hidden="true" tabindex="-1"></a>        total <span class="op">+=</span> x</span>
+<span id="cb20-10"><a href="#cb20-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb20-11"><a href="#cb20-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> total</span>
+<span id="cb20-12"><a href="#cb20-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p><code>comparable</code> 是内建约束(可用
 <code>==</code>/<code>!=</code> 的类型),常用于 map 键类泛型:</p>
-<div class="sourceCode" id="cb22"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> Keys<span class="op">[</span>K <span class="dt">comparable</span><span class="op">,</span> V <span class="dt">any</span><span class="op">](</span>m <span class="kw">map</span><span class="op">[</span>K<span class="op">]</span>V<span class="op">)</span> <span class="op">[]</span>K <span class="op">{</span> <span class="co">/* ... */</span> <span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb21"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> Keys<span class="op">[</span>K <span class="dt">comparable</span><span class="op">,</span> V <span class="dt">any</span><span class="op">](</span>m <span class="kw">map</span><span class="op">[</span>K<span class="op">]</span>V<span class="op">)</span> <span class="op">[]</span>K <span class="op">{</span> <span class="co">/* ... */</span> <span class="op">}</span></span></code></pre></div>
 <p>约束的本质:它就是一个接口,既能列方法(要求实现某方法),也能列<strong>类型集合</strong>(<code>| ~T</code>)。</p>
 <p>可运行,展示 <code>~</code> 的意义(它接纳底层类型匹配的具名类型):</p>
-<div class="sourceCode" id="cb23"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
-<span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="st">&quot;fmt&quot;</span></span>
-<span id="cb23-4"><a href="#cb23-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb23-5"><a href="#cb23-5" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Number <span class="kw">interface</span> <span class="op">{</span></span>
-<span id="cb23-6"><a href="#cb23-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">~</span><span class="dt">int</span> <span class="op">|</span> <span class="op">~</span><span class="dt">int64</span> <span class="op">|</span> <span class="op">~</span><span class="dt">float64</span></span>
-<span id="cb23-7"><a href="#cb23-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb23-8"><a href="#cb23-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb23-9"><a href="#cb23-9" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> Sum<span class="op">[</span>T Number<span class="op">](</span>xs <span class="op">[]</span>T<span class="op">)</span> T <span class="op">{</span></span>
-<span id="cb23-10"><a href="#cb23-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> total T</span>
-<span id="cb23-11"><a href="#cb23-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _<span class="op">,</span> x <span class="op">:=</span> <span class="kw">range</span> xs <span class="op">{</span></span>
-<span id="cb23-12"><a href="#cb23-12" aria-hidden="true" tabindex="-1"></a>        total <span class="op">+=</span> x</span>
-<span id="cb23-13"><a href="#cb23-13" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb23-14"><a href="#cb23-14" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> total</span>
-<span id="cb23-15"><a href="#cb23-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb23-16"><a href="#cb23-16" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb23-17"><a href="#cb23-17" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Celsius <span class="dt">float64</span> <span class="co">// 底层类型是 float64, 所以 ~float64 接纳它</span></span>
-<span id="cb23-18"><a href="#cb23-18" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb23-19"><a href="#cb23-19" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
-<span id="cb23-20"><a href="#cb23-20" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>Sum<span class="op">([]</span><span class="dt">int</span><span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">}))</span>      <span class="co">// 6   (T 推导为 int)</span></span>
-<span id="cb23-21"><a href="#cb23-21" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>Sum<span class="op">([]</span><span class="dt">float64</span><span class="op">{</span><span class="fl">1.5</span><span class="op">,</span> <span class="fl">2.5</span><span class="op">}))</span> <span class="co">// 4</span></span>
-<span id="cb23-22"><a href="#cb23-22" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>Sum<span class="op">([]</span>Celsius<span class="op">{</span><span class="fl">1.5</span><span class="op">,</span> <span class="fl">2.5</span><span class="op">}))</span> <span class="co">// 4   (~float64 接纳具名类型 Celsius)</span></span>
-<span id="cb23-23"><a href="#cb23-23" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb22"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-5"><a href="#cb22-5" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Number <span class="kw">interface</span> <span class="op">{</span></span>
+<span id="cb22-6"><a href="#cb22-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">~</span><span class="dt">int</span> <span class="op">|</span> <span class="op">~</span><span class="dt">int64</span> <span class="op">|</span> <span class="op">~</span><span class="dt">float64</span></span>
+<span id="cb22-7"><a href="#cb22-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb22-8"><a href="#cb22-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-9"><a href="#cb22-9" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> Sum<span class="op">[</span>T Number<span class="op">](</span>xs <span class="op">[]</span>T<span class="op">)</span> T <span class="op">{</span></span>
+<span id="cb22-10"><a href="#cb22-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> total T</span>
+<span id="cb22-11"><a href="#cb22-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _<span class="op">,</span> x <span class="op">:=</span> <span class="kw">range</span> xs <span class="op">{</span></span>
+<span id="cb22-12"><a href="#cb22-12" aria-hidden="true" tabindex="-1"></a>        total <span class="op">+=</span> x</span>
+<span id="cb22-13"><a href="#cb22-13" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb22-14"><a href="#cb22-14" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> total</span>
+<span id="cb22-15"><a href="#cb22-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb22-16"><a href="#cb22-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-17"><a href="#cb22-17" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Celsius <span class="dt">float64</span> <span class="co">// 底层类型是 float64, 所以 ~float64 接纳它</span></span>
+<span id="cb22-18"><a href="#cb22-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-19"><a href="#cb22-19" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb22-20"><a href="#cb22-20" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>Sum<span class="op">([]</span><span class="dt">int</span><span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">}))</span>      <span class="co">// 6   (T 推导为 int)</span></span>
+<span id="cb22-21"><a href="#cb22-21" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>Sum<span class="op">([]</span><span class="dt">float64</span><span class="op">{</span><span class="fl">1.5</span><span class="op">,</span> <span class="fl">2.5</span><span class="op">}))</span> <span class="co">// 4</span></span>
+<span id="cb22-22"><a href="#cb22-22" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>Sum<span class="op">([]</span>Celsius<span class="op">{</span><span class="fl">1.5</span><span class="op">,</span> <span class="fl">2.5</span><span class="op">}))</span> <span class="co">// 4   (~float64 接纳具名类型 Celsius)</span></span>
+<span id="cb22-23"><a href="#cb22-23" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <h3 id="底层实现gc-shape-stenciling-字典">底层实现:GC shape stenciling +
 字典</h3>
 <p>这是和 C++ 模板差异最大的地方。C++
@@ -585,8 +558,15 @@ itab 等),供运行时查具体大小、方法地址。</li>
 Sum&lt;int&gt;    → 代码副本A     Sum[int]     → int 的 shape 代码 + int 字典
 Sum&lt;int64&gt;  → 代码副本B     Sum[int64]   → int64 的 shape 代码 + int64 字典(与 int 不共享)
 Sum&lt;*T&gt;×N   → N 份副本      Sum[*T]×N    → 1 份指针 shape 代码 + 各自字典</code></pre>
-<p>结论:<strong>介于单态化与装箱之间</strong>。比 Java
-的类型擦除+装箱快(无处不装箱),比 C++
+<p><strong>为什么不像 C++ 一样直接单态化</strong>:Go
+团队在设计泛型时明确担心重蹈 C++
+模板的覆辙——单态化编译慢、二进制膨胀,尤其在 Go
+强调的快速编译、单一静态二进制这两个目标下代价过高。<strong>为什么也不像
+Java
+一样纯类型擦除</strong>:类型擦除意味着所有泛型实参都要装箱成接口,每次访问都有一次间接跳转和潜在分配,运行时代价更高。GC
+shape stenciling 是两者之间的折中:同 shape
+的类型共享代码,避免了单态化的膨胀;但共享的是机器码而非类型信息本身,通过字典在运行时补齐类型细节,避免了类型擦除必须无处不装箱的代价。结论:<strong>介于单态化与装箱之间</strong>——比
+Java 的类型擦除+装箱快(无处不装箱),比 C++
 单态化省代码;但字典查找、经指针间接访问会带来一点运行时开销,某些场景不如手写具体类型或不如
 C++ 模板极致。</p>
 <table>
@@ -625,7 +605,6 @@ C++ 模板极致。</p>
 </tr>
 </tbody>
 </table>
-<h3 id="什么时候用泛型">什么时候用泛型</h3>
 <p>不要为了泛型而泛型。适合:容器/算法(<code>slices</code>、<code>maps</code>
 包,见<a
 href="11-标准库算法.html">第11章</a>)、对多种数值类型做同一操作。很多场景一个
@@ -636,13 +615,12 @@ href="11-标准库算法.html">第11章</a>)、对多种数值类型做同一操
 定义方法,值接收者拷贝、指针接收者能就地修改;嵌入(匿名字段)让字段/方法被”提升”到外层;接口只要方法签名匹配就自动满足,不用显式声明实现;<code>T</code>/<code>*T</code>
 方法集不同——指针接收者的方法只属于 <code>*T</code>;泛型用
 <code>[T 约束]</code> 声明类型参数,一份代码支持多种类型。</li>
-<li><strong>底层层面</strong>:方法调用就是把 receiver
-当第一个参数传的普通函数调用,无隐藏
-this;嵌入是编译期的名字转发和字段内联,零运行时开销,不是虚派发;接口值是两个机器字(<code>itab</code>/<code>_type</code>
-+ <code>data</code>),<code>itab</code> 缓存了方法地址表相当于
-vtable,但存在接口值里而非对象里;<code>nil</code> 接口的坑源于”接口值只有
-tab 和 data 都为 nil 才等于 nil”;泛型不是单态化也不是纯装箱,而是按 GC
-shape 分组生成代码 + 传字典,介于两者之间。</li>
+<li><strong>设计取舍</strong>:没有类和继承、只有组合+接口,是把”组合优于继承”从最佳实践升级为语言强制,代价是牺牲了深继承体系的表达力,换来的是杜绝脆弱基类问题;接口隐式实现让接口定义权下放给使用方而非实现方,降低模块耦合,代价是编译器无法在类型定义处直接列出它实现了哪些接口;接口值是两个机器字(<code>itab</code>/<code>_type</code>
++ <code>data</code>),这个双字表示本身导致了”具体类型的 nil 指针≠接口
+nil”这个必然的坑,换来的是免装箱开销的高效方法分派;方法集规则(<code>*T</code>
+全有、<code>T</code>
+只有值接收者方法)源于值类型不一定有可取地址的左值这一事实;泛型不是单态化也不是纯装箱,而是按
+GC shape 分组生成代码 + 传字典,是”编译膨胀”与”装箱开销”之间的折中。</li>
 </ul>
 <hr />
 <p><a href="07-复合数据结构.html">← 上一章:复合数据结构</a> · <a

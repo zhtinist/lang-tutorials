@@ -34,8 +34,7 @@
 <a href="../go/index.html">Go</a>
 <a href="../algo/index.html">算法笔记</a>
 <a href="../architecture/index.html" style="color:var(--accent-dark);font-weight:700">架构设计</a>
-<a href="../oodlld/index.html">OOD/LLD</a>
-<a class="topnav-lang" href="#" onclick="switchLang();return false;" title="切换语言:中文 / English">🌐 <span class="lp on">中文</span><span class="sep">/</span><span class="lp">EN</span></a></div></div><script>function switchLang(){var p=location.pathname,en=p.indexOf('/en/')>-1,n=en?p.replace('/en/','/zh/'):p.replace('/zh/','/en/');try{localStorage.setItem('lang',en?'zh':'en')}catch(e){}location.href=n;}</script>
+<a href="../oodlld/index.html">OOD/LLD</a></div></div>
 <div class="wrap">
 <nav id="TOC" role="doc-toc">
 <ul>
@@ -69,7 +68,7 @@ Microservices Architecture</h1>
 </blockquote>
 <hr />
 <h2 id="一从单体到微服务通俗演进">一、从单体到微服务（通俗演进）</h2>
-<p>好比一家公司从「一人身兼数职的夫妻店」，长成「各部门独立、甚至各开分公司的大集团」——本节按这个演进顺序讲三个阶段。</p>
+<p>好比一家公司从「一人身兼数职的夫妻店」，长成「各部门独立、甚至各开分公司的大集团」：规模变大后，职责必须拆给不同的人，拆出去的部门再各自独立运作、独立对外负责。</p>
 <h3 id="单体-monolith">1.1 单体 (Monolith)</h3>
 <p>所有功能写在一起，单一部署单元。</p>
 <table>
@@ -175,6 +174,12 @@ Broker)</h3>
          ▼            ▼            ▼
       DB_order     DB_inv        DB_user   ← 理想：每服务自有数据</code></pre>
 <p><strong>数据归属</strong>：尽量「服务拥有自己的数据」；多服务直连同一库会把微服务打回「分布式单体」。</p>
+<p>反例：假设 Order 服务和 Inventory
+服务表面上是两个独立部署的进程，但都直接连着同一张
+<code>inventory</code> 表——Order 服务下单时自己写 SQL 扣库存，Inventory
+服务也有自己的扣库存逻辑。某天 Inventory
+团队想给这张表加一个字段、调整一下库存计算规则，却发现 Order
+服务里也有一段直接依赖这张表结构的代码，必须两个团队一起改、一起测、一起上线——名义上是两个服务，实际发布节奏完全绑死，这就是「分布式单体」：拆开了进程，却没拆开耦合。</p>
 <hr />
 <h2 id="五优点">五、优点</h2>
 <ol type="1">
@@ -190,6 +195,10 @@ Broker)</h3>
 <h2 id="六缺点与陷阱">六、缺点与陷阱</h2>
 <h3 id="拆分过细">6.1 拆分过细</h3>
 <p>强调独立与低耦合时，服务可能<strong>拆得过碎</strong>：依赖图凌乱、调用链过长、性能与运维变差。</p>
+<p>例如把「下单」这一个动作拆成
+<code>CreateOrder</code>、<code>ValidateOrder</code>、<code>PriceOrder</code>、<code>ReserveInventory</code>、<code>ShipOrder</code>
+五个独立微服务，一次用户下单就要串行发起五次网络调用；只要其中一次因为网络抖动多花
+200ms，或者某个服务临时扩容不及时排队变长，端到端延迟就会从单体里的几十毫秒暴涨到接近一秒，而且任何一次调用失败都要考虑重试与补偿——排查一次下单失败要翻五个服务的日志，比在单体里定位一个函数调用麻烦得多。</p>
 <h3 id="服务间通信成本">6.2 服务间通信成本</h3>
 <p>一旦服务 A 依赖 B，架构复杂度陡增。对通用 Utility：</p>
 <ul>
@@ -203,6 +212,9 @@ Broker)</h3>
 <h3 id="分布式事务">6.3 分布式事务</h3>
 <p>跨服务难以像单体一样本地事务回滚。需
 Saga、事务消息、出箱模式、幂等等——<strong>最终一致</strong>是常态，强一致要额外设计。</p>
+<p>例如下单需要依次调用「扣库存」「扣款」两个服务：在单体里这是一个数据库事务，扣款失败直接整体回滚，库存自动恢复。但拆成两个服务后，如果库存已经扣成功、扣款却因为余额不足失败，系统不能像本地事务那样简单回滚——必须显式发一个「扣款失败，请恢复库存」的补偿消息给库存服务，由库存服务自己执行「加回库存」的操作。这一串「正向操作
++ 失败后补偿」的编排就是
+Saga；一旦某个补偿步骤也失败或者消息重复投递，还需要额外的重试与幂等设计，否则库存可能被恢复两次。</p>
 <h3 id="运维与可观测性">6.4 运维与可观测性</h3>
 <p>日志、链路追踪、配置、密钥、服务发现、熔断限流——成本从「应用内」外移到「平台」。</p>
 <hr />

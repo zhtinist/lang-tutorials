@@ -99,8 +99,7 @@
 <a href="../go/index.html">Go</a>
 <a href="../algo/index.html">算法笔记</a>
 <a href="../architecture/index.html" style="color:var(--accent-dark);font-weight:700">架构设计</a>
-<a href="../oodlld/index.html">OOD/LLD</a>
-<a class="topnav-lang" href="#" onclick="switchLang();return false;" title="切换语言:中文 / English">🌐 <span class="lp on">中文</span><span class="sep">/</span><span class="lp">EN</span></a></div></div><script>function switchLang(){var p=location.pathname,en=p.indexOf('/en/')>-1,n=en?p.replace('/en/','/zh/'):p.replace('/zh/','/en/');try{localStorage.setItem('lang',en?'zh':'en')}catch(e){}location.href=n;}</script>
+<a href="../oodlld/index.html">OOD/LLD</a></div></div>
 <div class="wrap">
 <nav id="TOC" role="doc-toc">
 <ul>
@@ -166,6 +165,11 @@ architecture）把软件切成若干<strong>水平层</strong>。每一层有清
 </table>
 <p>有的系统在业务层与持久层之间再加<strong>服务层
 (Service)</strong>，抽出跨用例的通用能力。</p>
+<p>以一个电商网站的下单流程为例：用户在网页上点击「提交订单」，请求先到<strong>表现层</strong>——一个
+<code>OrderController</code>，它只负责解析 HTTP 请求里的商品
+ID、数量、收货地址，不判断「库存够不够」「金额算得对不对」；接着交给<strong>业务层</strong>——<code>OrderService</code>，由它检查库存是否充足、计算实付金额、判断是否命中优惠规则，这些才是「业务规则」；业务层确认无误后，调用<strong>持久层</strong>——<code>OrderRepository</code>，把订单数据转换成
+SQL
+写进<strong>数据库</strong>。如果哪天要把付款方式从「货到付款」换成「在线支付」，改动只发生在业务层的规则判断里，表现层的表单和持久层的存储代码基本不用动——这就是分层带来的隔离好处。</p>
 <hr />
 <h2 id="二结构与请求流">二、结构与请求流</h2>
 <pre><code>  Client / Browser
@@ -258,6 +262,14 @@ Service」，领域规则散落在多处，则：</p>
 <li>后续可向 <strong>DDD 富模型</strong> 或
 <strong>整洁架构用例层</strong> 演进（见后续章节）</li>
 </ul>
+<p>例如「订单」这个类如果只有 <code>status</code> 字段的
+getter/setter，那么「已发货的订单不能取消」这条规则该写在哪？如果
+<code>OrderService.cancel_order()</code>
+里写一遍，<code>OrderService.refund_order()</code>
+里又写一遍这条判断，两处实现一旦不一致，就会出现「明明已发货却能取消成功」的线上
+bug——这就是「规则散落在多处」的具体代价。改进方向是把这条判断收进
+<code>Order</code> 对象自身的 <code>cancel()</code>
+方法里，任何调用方都绕不开它。</p>
 <p>分层本身不强制贫血或充血；关键是<strong>规则放在哪一层、能否被单测锁定</strong>。</p>
 <hr />
 <h2 id="四优点">四、优点</h2>
@@ -283,6 +295,13 @@ Service」，领域规则散落在多处，则：</p>
 </li>
 <li><strong>扩展性受限</strong>：请求暴增时往往要<strong>每一层一起扩</strong>；层内耦合时，水平扩展更难</li>
 </ol>
+<p>具体例子：给订单加一个「备注」字段，看似简单，实际要改表现层的表单和响应结构、业务层的校验逻辑、持久层的
+SQL
+映射，再加一次数据库迁移——四处都要改、四处都要测，这就是「改动面大」；而如果这个单体应用有
+100
+万行代码，哪怕只改了这一个字段，多数团队仍会把整个应用重新构建、打包、部署一次，期间可能有几十秒到几分钟的服务中断——这就是「部署笨重」的真实代价。促销活动导致流量陡增时，如果表现层能扛住但持久层的数据库连接数已经打满，这时候多开几台
+Web
+服务器并不能解决问题，还是得<strong>整层一起扩</strong>（比如同时扩容数据库），这就是「扩展性受限」。</p>
 <hr />
 <h2 id="六何时使用">六、何时使用</h2>
 <table>

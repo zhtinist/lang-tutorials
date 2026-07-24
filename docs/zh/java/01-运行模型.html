@@ -99,8 +99,7 @@
 <a href="../go/index.html">Go</a>
 <a href="../algo/index.html">算法笔记</a>
 <a href="../architecture/index.html">架构设计</a>
-<a href="../oodlld/index.html">OOD/LLD</a>
-<a class="topnav-lang" href="#" onclick="switchLang();return false;" title="切换语言:中文 / English">🌐 <span class="lp on">中文</span><span class="sep">/</span><span class="lp">EN</span></a></div></div><script>function switchLang(){var p=location.pathname,en=p.indexOf('/en/')>-1,n=en?p.replace('/en/','/zh/'):p.replace('/zh/','/en/');try{localStorage.setItem('lang',en?'zh':'en')}catch(e){}location.href=n;}</script>
+<a href="../oodlld/index.html">OOD/LLD</a></div></div>
 <div class="wrap">
 <nav id="TOC" role="doc-toc">
 <ul>
@@ -108,23 +107,20 @@
 id="toc-运行模型javac字节码jvm-与-jit">运行模型：javac、字节码、JVM 与
 JIT</a>
 <ul>
-<li><a href="#先会用写第一个-java-程序"
-id="toc-先会用写第一个-java-程序">先会用：写第一个 Java 程序</a></li>
-<li><a href="#开始深入从-.java-到进程两段式执行模型是怎么回事"
-id="toc-开始深入从-.java-到进程两段式执行模型是怎么回事">开始深入：从
-.java 到进程，两段式执行模型是怎么回事</a></li>
-<li><a href="#一从源码到字节码javac-干了什么"
-id="toc-一从源码到字节码javac-干了什么">一、从源码到字节码：javac
-干了什么</a></li>
-<li><a href="#二类加载把-.class-装进-jvm"
-id="toc-二类加载把-.class-装进-jvm">二、类加载：把 .class 装进
+<li><a href="#一编译与运行的最小流程"
+id="toc-一编译与运行的最小流程">一、编译与运行的最小流程</a></li>
+<li><a href="#二从源码到字节码javac-产出什么"
+id="toc-二从源码到字节码javac-产出什么">二、从源码到字节码：javac
+产出什么</a></li>
+<li><a href="#三类加载把-.class-装进-jvm"
+id="toc-三类加载把-.class-装进-jvm">三、类加载：把 .class 装进
 JVM</a></li>
-<li><a href="#三执行解释-jit-混合模式"
-id="toc-三执行解释-jit-混合模式">三、执行：解释 + JIT 混合模式</a></li>
-<li><a href="#四运行时内存区域"
-id="toc-四运行时内存区域">四、运行时内存区域</a></li>
-<li><a href="#五aotgraalvm-native-image"
-id="toc-五aotgraalvm-native-image">五、AOT：GraalVM
+<li><a href="#四执行解释-jit-混合模式"
+id="toc-四执行解释-jit-混合模式">四、执行：解释 + JIT 混合模式</a></li>
+<li><a href="#五运行时内存区域"
+id="toc-五运行时内存区域">五、运行时内存区域</a></li>
+<li><a href="#六aotgraalvm-native-image"
+id="toc-六aotgraalvm-native-image">六、AOT：GraalVM
 native-image</a></li>
 <li><a href="#小结" id="toc-小结">小结</a></li>
 </ul></li>
@@ -132,15 +128,13 @@ native-image</a></li>
 </nav>
 <h1 id="运行模型javac字节码jvm-与-jit">运行模型：javac、字节码、JVM 与
 JIT</h1>
-<p>本章先给你一条最短路径：写一个 <code>.java</code>
-文件、编译、运行、看到输出——这一步不需要任何 JVM 背景知识，跟你写第一个
-<code>hello.c</code> 一样直接。然后才进入本章真正的主题：Java
-的<strong>两段式执行模型</strong>——<code>javac</code> 编译成什么、JVM
-怎么把它跑起来、JIT 怎么让它越跑越快，这部分会大量对照你熟悉的 C
-编译链路（gcc/ld/ELF）。只想会写会跑，看完第一节就够上手；想搞懂”Java
-内部到底怎么回事”，把全篇读完——这是全书内存模型的地基。</p>
-<hr />
-<h2 id="先会用写第一个-java-程序">先会用：写第一个 Java 程序</h2>
+<p>C/C++ 的编译链路是单段式的：<code>gcc</code>/<code>clang</code> 把
+<code>.c</code> 源码直接编成目标 CPU
+架构的机器码，链接后得到一个绑定特定 OS/架构的可执行文件。Java
+是<strong>两段式</strong>的：<code>javac</code>
+先把源码编译成平台无关的中间表示（字节码），再由 JVM
+在目标机器上把字节码变成实际执行的指令。本章讲清这条链路的每一环，以及为什么要多插入字节码这一层——这是理解后续内存模型、调用栈、并发一切内容的地基。</p>
+<h2 id="一编译与运行的最小流程">一、编译与运行的最小流程</h2>
 <p>Java 程序的最小骨架：一个 <strong>class</strong>，里面一个
 <code>main</code> 方法，程序从 <code>main</code> 开始跑。</p>
 <div class="sourceCode" id="cb1"><pre
@@ -179,23 +173,10 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb4-1"><a href="
 java Add</code></pre>
 <p>输出：</p>
 <pre><code>7</code></pre>
-<p><code>javac</code> 编译、<code>java</code>
-运行——这两步就是你以后每次跑 Java 代码的全部流程（IDE
-只是替你点了这两下按钮）。至于这中间到底发生了什么，就是本章接下来要拆开讲的内容。</p>
-<hr />
-<h2 id="开始深入从-.java-到进程两段式执行模型是怎么回事">开始深入：从
-.java 到进程，两段式执行模型是怎么回事</h2>
-<p>从这里开始进入底层。作为 C/C++
-工程师，你熟悉的编译链路是：<code>.c</code>
-源码经预处理、编译、汇编生成目标文件
-<code>.o</code>，再由链接器拼成一个针对<strong>特定 CPU 架构 +
-特定操作系统</strong>的可执行文件（ELF/Mach-O/PE）。CPU
-直接执行其中的机器码。</p>
-<p>Java
-走的是一条<strong>两段式</strong>的路：先编成一种平台无关的中间码（字节码），再由一台”虚拟
-CPU”（JVM）在运行时执行。理解这条链路，是理解后面所有内存行为的前提。</p>
-<h2 id="一从源码到字节码javac-干了什么">一、从源码到字节码：javac
-干了什么</h2>
+<p><code>javac</code> 编译、<code>java</code> 运行，IDE
+也只是替你自动执行这两步。这两步背后是什么,是本章要拆开讲的内容。</p>
+<h2 id="二从源码到字节码javac-产出什么">二、从源码到字节码：javac
+产出什么</h2>
 <div class="sourceCode" id="cb7"><pre
 class="sourceCode java"><code class="sourceCode java"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Hello.java</span></span>
 <span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Hello <span class="op">{</span></span>
@@ -255,6 +236,16 @@ JVM
 </tr>
 </tbody>
 </table>
+<p><strong>为什么要多插入字节码这一层，而不是像 <code>gcc</code>
+一样直接编译到机器码</strong>：这是”可移植性”与”极致性能”之间一次明确的取舍。直接编译到机器码（AOT，Ahead-Of-Time）能让编译器在编译期看到完整的目标
+CPU 特性，做深入的静态优化，程序启动即以峰值速度运行，但产物与目标 CPU
+架构、操作系统、ABI 强绑定——挪到另一种 CPU 就要重新编译，这是 C/C++
+“一次编写，各平台分别编译”模型的代价。Java
+把”翻译成具体机器指令”这一步推迟到运行时，编译器只需要面向一台抽象的栈式虚拟机，产出的
+<code>.class</code> 文件在任何装了 JVM
+的机器上逐字节相同，换来”一次编写，到处运行”；代价是运行时必须多做一轮翻译（解释或
+JIT 编译），程序启动阶段无法立刻达到原生代码的速度。第三节的 JIT
+和第五节的 GraalVM AOT 会看到这套取舍具体如何被弥补或反向选择。</p>
 <p>关键点：<strong><code>.class</code>
 保留了完整的类型与符号信息</strong>。C 程序 strip
 之后几乎只剩机器码，符号丢失；而 <code>.class</code>
@@ -311,10 +302,13 @@ slot（<code>locals=</code>）。这些是编译期就算好的固定值，JVM
 据此分配栈帧——见<a
 href="06-函数与调用栈.html">「函数与调用栈」</a>。</p>
 </blockquote>
-<h2 id="二类加载把-.class-装进-jvm">二、类加载：把 .class 装进 JVM</h2>
+<h2 id="三类加载把-.class-装进-jvm">三、类加载：把 .class 装进 JVM</h2>
 <p>C 程序启动时，加载器（loader）把 ELF
 段映射进内存，重定位、绑定动态库符号，一次性搞定。Java
-的类加载是<strong>惰性的、按需的、运行期的</strong>，分三个阶段：</p>
+的类加载是<strong>惰性的、按需的、运行期的</strong>，分三个阶段。</p>
+<p><strong>为什么类加载要设计成懒加载</strong>：一个典型 Java
+程序在编译期依赖成百上千个类（JDK 核心类库 + 第三方库），如果启动时像 C
+静态链接那样把全部依赖一次性加载解析完毕，启动时间会随依赖图规模线性增长，而其中大多数类在这次运行里根本用不到（一个分支从未走到的异常处理类、一个从未触发的功能模块）。懒加载把加载/链接/初始化的开销分摊到”第一次真正用到该类”的那一刻，未被触碰的类完全零开销，这是”启动快”这一目标下的直接工程选择。它还有一个次生好处：类可以来自还不存在的地方（网络、动态生成的字节码、插件在运行时才提供的实现），只要在真正使用前能找到字节流即可——这在”必须在链接期见到全部符号”的静态链接模型下是做不到的。</p>
 <h3 id="加载-loading">1. 加载 Loading</h3>
 <p>根据类的全限定名找到 <code>.class</code>
 字节流（从文件系统、jar、网络、甚至运行时生成），解析成方法区/元空间里的一个内部数据结构，并在堆上创建一个代表该类的
@@ -380,7 +374,7 @@ Delegation</h3>
 <code>java.lang.String</code>
 顶替系统类——这是一种安全与一致性保证。C/C++ 里若两个 <code>.so</code>
 各自带同名符号，行为取决于链接顺序，容易出问题；双亲委派从机制上避免了核心类被”劫持”。</p>
-<h2 id="三执行解释-jit-混合模式">三、执行：解释 + JIT 混合模式</h2>
+<h2 id="四执行解释-jit-混合模式">四、执行：解释 + JIT 混合模式</h2>
 <p>拿到字节码后，JVM 怎么执行？两种手段并用（HotSpot
 的默认”混合模式”）：</p>
 <h3 id="解释执行">解释执行</h3>
@@ -415,6 +409,16 @@ Spot）。JVM 为每个方法维护计数器（方法调用次数 +
 </tbody>
 </table>
 <p>典型路径：解释执行 → C1 编译（带性能计数）→ C2 重编译最热部分。</p>
+<p><strong>为什么需要 JIT，而不是纯解释或纯 AOT
+二选一</strong>：三种方案各自卡在一个极端。纯解释器启动零延迟（不用等编译），但每条字节码都要经过”取指-查表-分派”的开销，长期运行的代码也一直慢；纯
+AOT（如
+<code>gcc</code>）能提前做深度优化，但编译期看不到运行时才知道的信息（这次运行里某个虚方法调用点实际上只被一个实现类命中、某个循环实际迭代了几十亿次值得激进展开），只能基于静态假设做保守优化。JIT
+把两者的优点拼在一起：先用解释执行（或最快的
+C1）立刻跑起来，避免启动等待；同时用计数器持续观察运行时行为,一旦某段代码被证实”热”，才投入编译期成本更高、优化更激进的
+C2,用实际观测到的分支概率、类型信息做静态编译器不敢做的<strong>投机优化</strong>。<strong>分层编译（Tiered
+Compilation）</strong>正是”启动延迟”与”峰值吞吐”这对矛盾的调和方案：C1
+编译快、优化保守，负责让代码尽早摆脱解释执行的慢速；C2
+编译慢、优化激进，只对少数真正的热点方法投入，避免把编译时间浪费在只跑一次的代码上。赌错的投机优化可以<strong>去优化（deoptimization）</strong>退回解释执行重新收集信息，这是”运行时信息可能过时或不全”这一代价的兜底机制。</p>
 <p><strong>这就是 Java “越跑越快”、且有时能逼近甚至局部超过 C
 的原因</strong>：JIT
 掌握<strong>运行时信息</strong>——实际走哪个分支、某个虚方法实际只调用了一个实现类、某个循环边界是多少。它能据此做静态编译器做不到的<strong>投机优化</strong>（speculative
@@ -443,7 +447,7 @@ GC 回收。（HotSpot
 HotSpot 实现层面，逃逸分析可能让短命的、不逃逸的对象根本不进堆。这弥合了
 Java 与 C（栈上放 struct）的部分性能差距。详见<a
 href="03-变量与内存模型.html">「变量与内存模型」</a>。</p>
-<h2 id="四运行时内存区域">四、运行时内存区域</h2>
+<h2 id="五运行时内存区域">五、运行时内存区域</h2>
 <p>一个运行中的 JVM 把内存划成几块（JVM 规范定义，HotSpot 实现）：</p>
 <pre><code>┌───────────────────────────────────────────────────────┐
 │                         JVM 进程                         │
@@ -524,7 +528,7 @@ href="09-错误处理与资源管理.html">「错误处理与资源管理」</a>
 一样</strong>：每次方法调用压一个栈帧，返回时弹出；栈太深触发
 <code>StackOverflowError</code>（对应 C 的栈溢出，但 JVM
 会抛异常而非直接段错误）。</p>
-<h2 id="五aotgraalvm-native-image">五、AOT：GraalVM native-image</h2>
+<h2 id="六aotgraalvm-native-image">六、AOT：GraalVM native-image</h2>
 <p>Java 也能像 C
 一样<strong>提前编译（Ahead-Of-Time）</strong>成原生可执行文件。<strong>GraalVM
 的 <code>native-image</code></strong>
@@ -545,26 +549,21 @@ C2。</p>
 的唯一路径）。</p>
 <h2 id="小结">小结</h2>
 <ul>
-<li><strong>用法层面</strong>：写一个 <code>.java</code>
-文件（类名必须和文件名一致）→ <code>javac 文件名.java</code> 编译 →
-<code>java 类名</code>（不带后缀）运行。这两步就是开发流程的全部，IDE
-只是替你自动点了这两下。</li>
-<li><strong>底层层面</strong>：
-<ul>
+<li><strong>流程</strong>：<code>javac 文件名.java</code>
+编译（类名须与文件名一致）→ <code>java 类名</code>（不带后缀）运行；IDE
+只是自动执行这两步。</li>
 <li><code>javac</code>
-产出的是<strong>平台无关字节码</strong>，不是机器码；执行它需要 JVM
-这台栈式虚拟机。</li>
-<li>类加载是<strong>运行时、惰性、分层（双亲委派）</strong>的，且保留完整类型信息。</li>
-<li>HotSpot <strong>先解释、探测热点后
-JIT</strong>（C1/C2、内联、逃逸分析）；逃逸分析能对不逃逸对象做<strong>标量替换</strong>（拆成标量放栈帧/寄存器，而非整体栈上分配）。</li>
+产出<strong>平台无关字节码</strong>而非机器码，代价是运行时需要 JVM
+这台栈式虚拟机再翻译一遍，换来的是同一份 <code>.class</code>
+到处运行；这是可移植性与 AOT 峰值性能之间的取舍。</li>
+<li>类加载是<strong>运行时、惰性、分层（双亲委派）</strong>的——懒加载把开销分摊到真正用到某个类的那一刻，避免为用不到的类付出启动成本；双亲委派保证核心类不会被伪造版本顶替。</li>
+<li>HotSpot <strong>先解释、探测热点后 JIT</strong>（C1 快编译顶上、C2
+深度优化最热代码），分层编译正是”启动延迟”与”峰值吞吐”这对矛盾的调和；逃逸分析能对不逃逸对象做<strong>标量替换</strong>（拆成标量放栈帧/寄存器，而非整体栈上分配）。</li>
 <li>运行时内存分<strong>共享的堆/元空间</strong>与<strong>每线程的 JVM
 栈/PC/本地栈</strong>；堆由 GC 自动回收。</li>
 <li>需要 C 式的快启动原生二进制时，用 GraalVM <code>native-image</code>
 做 AOT，代价是牺牲运行时动态性与峰值优化。</li>
-</ul></li>
 </ul>
-<p>这套模型是后续所有章节的舞台。尤其是”堆 vs 栈”、“引用 vs
-值”，请带着本章的内存分区图去读下一章。</p>
 <hr />
 <p><a href="index.html">← 上一章：目录</a> · <a
 href="index.html">返回目录</a> · <a

@@ -99,20 +99,13 @@
 <a href="../go/index.html" style="color:var(--accent-dark);font-weight:700">Go</a>
 <a href="../algo/index.html">算法笔记</a>
 <a href="../architecture/index.html">架构设计</a>
-<a href="../oodlld/index.html">OOD/LLD</a>
-<a class="topnav-lang" href="#" onclick="switchLang();return false;" title="切换语言:中文 / English">🌐 <span class="lp on">中文</span><span class="sep">/</span><span class="lp">EN</span></a></div></div><script>function switchLang(){var p=location.pathname,en=p.indexOf('/en/')>-1,n=en?p.replace('/en/','/zh/'):p.replace('/zh/','/en/');try{localStorage.setItem('lang',en?'zh':'en')}catch(e){}location.href=n;}</script>
+<a href="../oodlld/index.html">OOD/LLD</a></div></div>
 <div class="wrap">
 <nav id="TOC" role="doc-toc">
 <ul>
 <li><a href="#并发模型goroutine-与-channel"
 id="toc-并发模型goroutine-与-channel">并发模型:goroutine 与 channel</a>
 <ul>
-<li><a href="#先会用goroutinechannelselect-速览"
-id="toc-先会用goroutinechannelselect-速览">先会用:goroutine、channel、select
-速览</a></li>
-<li><a href="#开始深入为什么-goroutine-便宜"
-id="toc-开始深入为什么-goroutine-便宜">开始深入:为什么 goroutine
-便宜</a></li>
 <li><a href="#一goroutine极轻量的协程"
 id="toc-一goroutine极轻量的协程">一、goroutine:极轻量的协程</a></li>
 <li><a href="#二channel-与-csp" id="toc-二channel-与-csp">二、channel 与
@@ -138,85 +131,34 @@ id="toc-九data-race-与--race-检测器">九、data race 与 -race
 </ul>
 </nav>
 <h1 id="并发模型goroutine-与-channel">并发模型:goroutine 与 channel</h1>
-<p>并发是 Go 的招牌。<strong>本章先讲 goroutine/channel/select
-这几样东西「怎么写、怎么用」——普通的并发代码看得懂就够;再讲「底层与 C
-对比」——运行时怎么把几十万个 goroutine 塞进几个 OS 线程里调度。</strong>
-对 C++ 程序员:先忘掉 <code>std::thread</code>(1:1 映射 OS 线程、每个几
-MB 栈、创建昂贵),后面你会看到 Go 的 goroutine 是运行时在少量 OS
-线程上多路复用的用户态协程,便宜到可以开几十万个。</p>
-<h2
-id="先会用goroutinechannelselect-速览">先会用:goroutine、channel、select
-速览</h2>
-<p>不涉及任何调度器细节,先看这三样东西怎么写:</p>
-<div class="sourceCode" id="cb1"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="st">&quot;fmt&quot;</span></span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> say<span class="op">(</span>msg <span class="dt">string</span><span class="op">,</span> done <span class="kw">chan</span> <span class="dt">bool</span><span class="op">)</span> <span class="op">{</span></span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>msg<span class="op">)</span></span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    done <span class="op">&lt;-</span> <span class="ot">true</span> <span class="co">// 通过 channel 告诉外面: 我干完了</span></span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
-<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    done <span class="op">:=</span> <span class="bu">make</span><span class="op">(</span><span class="kw">chan</span> <span class="dt">bool</span><span class="op">)</span></span>
-<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">go</span> say<span class="op">(</span><span class="st">&quot;in goroutine&quot;</span><span class="op">,</span> done<span class="op">)</span> <span class="co">// 启动一个 goroutine, 立即往下走(不等它)</span></span>
-<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="op">&lt;-</span>done                       <span class="co">// 阻塞, 直到 goroutine 发来信号</span></span>
-<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    ch <span class="op">:=</span> <span class="bu">make</span><span class="op">(</span><span class="kw">chan</span> <span class="dt">int</span><span class="op">,</span> <span class="dv">1</span><span class="op">)</span></span>
-<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    ch <span class="op">&lt;-</span> <span class="dv">100</span> <span class="co">// 发送</span></span>
-<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    <span class="cf">select</span> <span class="op">{</span> <span class="co">// select 同时等待多个 channel, 哪个就绪走哪个</span></span>
-<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    <span class="cf">case</span> v <span class="op">:=</span> <span class="op">&lt;-</span>ch<span class="op">:</span></span>
-<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>        fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;received:&quot;</span><span class="op">,</span> v<span class="op">)</span> <span class="co">// received: 100</span></span>
-<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>    <span class="cf">default</span><span class="op">:</span></span>
-<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>        fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;no value&quot;</span><span class="op">)</span></span>
-<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
-<p>简单总结:</p>
-<ul>
-<li><code>go 函数调用(...)</code> 启动一个
-goroutine——一个”轻量级的并发任务”,立即返回,不等它跑完。</li>
-<li>goroutine 之间用 channel 传数据/发信号:<code>ch &lt;- v</code>
-发送,<code>v := &lt;-ch</code> 接收(<a
-href="07-复合数据结构.html">回顾第07章 channel 的基本用法</a>)。</li>
-<li><code>select</code> 同时盯着几个
-channel,哪个先就绪就走哪个分支;<code>default</code> 让它不阻塞。</li>
-</ul>
-<p>这几个够你写出能跑的并发代码了。下面进入”底层”——为什么 Go
-能轻松开几十万个 goroutine、调度器怎么把它们安排到 CPU 上。</p>
-<h2 id="开始深入为什么-goroutine-便宜">开始深入:为什么 goroutine
-便宜</h2>
-<p>从这一节起讲底层。要理解 Go
-并发的性能特征,先记住一句话:<strong>goroutine 不是 OS
-线程,是运行时自己管理的用户态协程,由 Go 运行时的调度器(GMP
-模型)多路复用到少数几个 OS 线程上。</strong></p>
+<p>并发是 Go 的招牌。对 C++ 程序员来说,第一件要重新校准的事是忘掉
+<code>std::thread</code> 那种”一个并发单元 = 一个 OS
+线程”的心智模型——goroutine 是运行时在少量 OS
+线程上多路复用的用户态协程,便宜到可以开几十万个,这背后是一整套调度器设计,而不只是”更轻的线程”这么简单。</p>
 <h2 id="一goroutine极轻量的协程">一、goroutine:极轻量的协程</h2>
-<h3 id="怎么用">怎么用</h3>
 <p><code>go</code> 关键字加一个函数调用就启动一个 goroutine:</p>
-<div class="sourceCode" id="cb2"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="cf">go</span> f<span class="op">(</span>x<span class="op">,</span> y<span class="op">)</span>        <span class="co">// 启动一个 goroutine 跑 f(x,y), 立即返回, 不等它</span></span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="cf">go</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span></span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;in goroutine&quot;</span><span class="op">)</span></span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="op">}()</span></span></code></pre></div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="cf">go</span> f<span class="op">(</span>x<span class="op">,</span> y<span class="op">)</span>        <span class="co">// 启动一个 goroutine 跑 f(x,y), 立即返回, 不等它</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="cf">go</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;in goroutine&quot;</span><span class="op">)</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="op">}()</span></span></code></pre></div>
 <p>配合 <code>sync.WaitGroup</code> 等一组 goroutine 都跑完(下面「sync
 包」一节详细介绍):</p>
-<div class="sourceCode" id="cb3"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> wg sync<span class="op">.</span>WaitGroup</span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>results <span class="op">:=</span> <span class="bu">make</span><span class="op">([]</span><span class="dt">int</span><span class="op">,</span> <span class="dv">3</span><span class="op">)</span></span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i <span class="op">:=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">3</span><span class="op">;</span> i<span class="op">++</span> <span class="op">{</span></span>
-<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    wg<span class="op">.</span>Add<span class="op">(</span><span class="dv">1</span><span class="op">)</span></span>
-<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">go</span> <span class="kw">func</span><span class="op">(</span>id <span class="dt">int</span><span class="op">)</span> <span class="op">{</span> <span class="co">// 启动一个 goroutine</span></span>
-<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">defer</span> wg<span class="op">.</span>Done<span class="op">()</span></span>
-<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>        results<span class="op">[</span>id<span class="op">]</span> <span class="op">=</span> id <span class="op">*</span> id</span>
-<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">}(</span>i<span class="op">)</span></span>
-<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>wg<span class="op">.</span>Wait<span class="op">()</span> <span class="co">// 等所有 goroutine 完成</span></span>
-<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Println<span class="op">(</span>results<span class="op">)</span> <span class="co">// [0 1 4]</span></span></code></pre></div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> wg sync<span class="op">.</span>WaitGroup</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>results <span class="op">:=</span> <span class="bu">make</span><span class="op">([]</span><span class="dt">int</span><span class="op">,</span> <span class="dv">3</span><span class="op">)</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i <span class="op">:=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">3</span><span class="op">;</span> i<span class="op">++</span> <span class="op">{</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    wg<span class="op">.</span>Add<span class="op">(</span><span class="dv">1</span><span class="op">)</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">go</span> <span class="kw">func</span><span class="op">(</span>id <span class="dt">int</span><span class="op">)</span> <span class="op">{</span> <span class="co">// 启动一个 goroutine</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">defer</span> wg<span class="op">.</span>Done<span class="op">()</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>        results<span class="op">[</span>id<span class="op">]</span> <span class="op">=</span> id <span class="op">*</span> id</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">}(</span>i<span class="op">)</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>wg<span class="op">.</span>Wait<span class="op">()</span> <span class="co">// 等所有 goroutine 完成</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Println<span class="op">(</span>results<span class="op">)</span> <span class="co">// [0 1 4]</span></span></code></pre></div>
 <p>goroutine 什么时候结束:函数体返回就结束。<code>main</code>
 函数返回则整个程序退出,<strong>不等其他 goroutine</strong>——需要等待就用
 channel 或 <code>sync.WaitGroup</code>。</p>
-<h3 id="底层与-c-对比">底层与 C 对比</h3>
-<p>为什么便宜:</p>
 <table>
 <thead>
 <tr>
@@ -248,12 +190,23 @@ channel 或 <code>sync.WaitGroup</code>。</p>
 </tr>
 </tbody>
 </table>
+<p><strong>为什么 goroutine 能便宜到这个数量级,而不是直接用 OS
+线程或某个简单的协程库</strong>。OS
+线程的成本主要来自两处:一是每个线程要预留一块固定大小、通常几 MB
+的栈(即便实际只用了几十
+KB,虚拟地址空间和物理内存的记账开销依然存在),几千个线程就足以让虚拟内存管理和上下文切换的成本变得可观;二是线程的创建、销毁、调度都要经过内核,每次切换都要陷入内核态、保存恢复完整的寄存器和内核态数据结构,代价是微秒级的。简单的用户态协程库(不涉及运行时调度器,只做”保存/恢复寄存器”式的协作式切换)确实能避开第二个问题,但通常仍需要程序员手动决定何时让出、如何和阻塞式系统调用共存,一旦协程发起阻塞式
+I/O,照样会拖住整个承载它的 OS 线程。Go
+的方案是同时解决这两个问题:<strong>用户态、按需增长的小栈</strong>(2KB
+起步)砍掉了固定大栈的开销;<strong>运行时自带的 M:N
+调度器</strong>(下面的 GMP 模型)接管了协程和系统调用/网络 I/O
+的交互,让”看起来同步阻塞”的代码底层自动变成非阻塞加调度切换,程序员不需要手写状态机或显式
+yield。这两者缺一都不足以把并发单元的成本降到 goroutine
+现在这个量级——只做小栈而没有集成调度器,只是省了内存但阻塞问题还在;只做调度器而没有小栈,起始开销依然是线程级的。</p>
 <p><strong>栈增长</strong>:goroutine 栈起始
 2KB,不够时运行时分配更大的栈、把内容拷过去、并<strong>改写所有指向该栈的指针</strong>(<a
 href="06-函数与调用栈.html">第06章连续栈</a>)。正因为运行时会在栈”搬家”时修正指针,你<strong>照样可以</strong>像平常一样对局部变量取地址(<code>&amp;local</code>)、把它返回或传给别处:逃逸分析会把真正逃逸的变量放到堆上,其余留在栈上,你完全无感。这点恰恰和
 C 相反——C 里返回/长期持有栈变量地址是悬垂指针 bug,Go 里则安全。</p>
 <h2 id="二channel-与-csp">二、channel 与 CSP</h2>
-<h3 id="怎么用-1">怎么用</h3>
 <p>Go 奉行 CSP(Communicating Sequential Processes)哲学:</p>
 <blockquote>
 <p><strong>不要通过共享内存来通信,而要通过通信来共享内存。</strong>
@@ -261,44 +214,46 @@ Don’t communicate by sharing memory; share memory by communicating.</p>
 </blockquote>
 <p>意思是:优先用 channel 在 goroutine
 间<strong>传递数据的所有权</strong>,而不是多个 goroutine
-抢一块共享内存靠锁保护。</p>
-<div class="sourceCode" id="cb4"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>ch <span class="op">:=</span> <span class="bu">make</span><span class="op">(</span><span class="kw">chan</span> <span class="dt">int</span><span class="op">)</span>        <span class="co">// 无缓冲</span></span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>ch <span class="op">:=</span> <span class="bu">make</span><span class="op">(</span><span class="kw">chan</span> <span class="dt">int</span><span class="op">,</span> <span class="dv">10</span><span class="op">)</span>    <span class="co">// 缓冲 10</span></span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>ch <span class="op">&lt;-</span> <span class="dv">42</span>                    <span class="co">// 发送</span></span>
-<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>v <span class="op">:=</span> <span class="op">&lt;-</span>ch                   <span class="co">// 接收</span></span>
-<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>v<span class="op">,</span> ok <span class="op">:=</span> <span class="op">&lt;-</span>ch               <span class="co">// ok=false 表示已关闭且空</span></span>
-<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="bu">close</span><span class="op">(</span>ch<span class="op">)</span>                   <span class="co">// 关闭(由发送方关, 别由接收方关)</span></span>
-<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> v <span class="op">:=</span> <span class="kw">range</span> ch <span class="op">{</span> <span class="op">}</span>       <span class="co">// 收到 channel 关闭为止</span></span></code></pre></div>
+抢一块共享内存靠锁保护(<a
+href="07-复合数据结构.html">第07章</a>已展开这条哲学与共享内存+锁模型的对比)。</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>ch <span class="op">:=</span> <span class="bu">make</span><span class="op">(</span><span class="kw">chan</span> <span class="dt">int</span><span class="op">)</span>        <span class="co">// 无缓冲</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>ch <span class="op">:=</span> <span class="bu">make</span><span class="op">(</span><span class="kw">chan</span> <span class="dt">int</span><span class="op">,</span> <span class="dv">10</span><span class="op">)</span>    <span class="co">// 缓冲 10</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>ch <span class="op">&lt;-</span> <span class="dv">42</span>                    <span class="co">// 发送</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>v <span class="op">:=</span> <span class="op">&lt;-</span>ch                   <span class="co">// 接收</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>v<span class="op">,</span> ok <span class="op">:=</span> <span class="op">&lt;-</span>ch               <span class="co">// ok=false 表示已关闭且空</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="bu">close</span><span class="op">(</span>ch<span class="op">)</span>                   <span class="co">// 关闭(由发送方关, 别由接收方关)</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> v <span class="op">:=</span> <span class="kw">range</span> ch <span class="op">{</span> <span class="op">}</span>       <span class="co">// 收到 channel 关闭为止</span></span></code></pre></div>
 <p>常见用法:用 channel 等待一个 goroutine 完成。</p>
-<div class="sourceCode" id="cb5"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>done <span class="op">:=</span> <span class="bu">make</span><span class="op">(</span><span class="kw">chan</span> <span class="kw">struct</span><span class="op">{})</span>   <span class="co">// struct{} 零大小, 只当信号</span></span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="cf">go</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span></span>
-<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    work<span class="op">()</span></span>
-<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    <span class="bu">close</span><span class="op">(</span>done<span class="op">)</span>               <span class="co">// 或 done &lt;- struct{}{}</span></span>
-<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="op">}()</span></span>
-<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a><span class="op">&lt;-</span>done                        <span class="co">// 阻塞直到 work 完成</span></span></code></pre></div>
-<h3 id="底层与-c-对比-1">底层与 C 对比</h3>
+<div class="sourceCode" id="cb4"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>done <span class="op">:=</span> <span class="bu">make</span><span class="op">(</span><span class="kw">chan</span> <span class="kw">struct</span><span class="op">{})</span>   <span class="co">// struct{} 零大小, 只当信号</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="cf">go</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    work<span class="op">()</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    <span class="bu">close</span><span class="op">(</span>done<span class="op">)</span>               <span class="co">// 或 done &lt;- struct{}{}</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="op">}()</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="op">&lt;-</span>done                        <span class="co">// 阻塞直到 work 完成</span></span></code></pre></div>
 <p>channel 的底层结构(<code>hchan</code>:环形缓冲 + 一把锁 +
 等待队列)已经在<a
-href="07-复合数据结构.html">第07章</a>详细讲过。这里补充一点运行时行为:无缓冲
-channel 的发送/接收是一次<strong>会合(rendezvous)</strong>,天然构成
+href="07-复合数据结构.html">第07章</a>详细讲过。这里补充一点运行时行为:<strong>无缓冲
+channel
+的发送/接收是一次会合(rendezvous),这不是实现上偶然的选择,而是它的语义定义本身</strong>——无缓冲意味着没有任何存储空间供数据暂存,“发送完成”这件事在定义上就等于”接收方已经把值取走”,所以发送方和接收方必须在时间轴上重叠于同一点,数据直接从一个
+goroutine 的栈拷到另一个的栈,不经过任何中间缓冲。这一点天然构成
 happens-before(下面「Go
-内存模型」一节详细展开),常用作信号量/同步点——这正是上面”等待 goroutine
-完成”模式能工作的原因。</p>
+内存模型」一节详细展开):一次发送发生的时刻,必然早于或等于对应接收完成的时刻,反过来说,只要接收方观察到自己收到了值,就能确信发送方在此之前的所有操作都已完成并对自己可见。这正是上面”等待
+goroutine 完成”模式能正确工作的原因——它依赖的不是”channel
+大致能同步”这种模糊直觉,而是会合语义提供的精确的可见性保证。</p>
 <h2 id="三select多路复用">三、select:多路复用</h2>
-<h3 id="怎么用-2">怎么用</h3>
 <p><code>select</code> 同时等待多个 channel
 操作,哪个就绪走哪个(多个就绪则随机选一个,防饥饿):</p>
-<div class="sourceCode" id="cb6"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="cf">select</span> <span class="op">{</span></span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="cf">case</span> v <span class="op">:=</span> <span class="op">&lt;-</span>ch1<span class="op">:</span></span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;from ch1&quot;</span><span class="op">,</span> v<span class="op">)</span></span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="cf">case</span> ch2 <span class="op">&lt;-</span> x<span class="op">:</span></span>
-<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;sent to ch2&quot;</span><span class="op">)</span></span>
-<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a><span class="cf">case</span> <span class="op">&lt;-</span>time<span class="op">.</span>After<span class="op">(</span><span class="dv">2</span> <span class="op">*</span> time<span class="op">.</span>Second<span class="op">):</span></span>
-<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;超时&quot;</span><span class="op">)</span>            <span class="co">// 超时模式</span></span>
-<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a><span class="cf">default</span><span class="op">:</span></span>
-<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;都没就绪, 非阻塞&quot;</span><span class="op">)</span> <span class="co">// 有 default 就不阻塞</span></span>
-<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="cf">select</span> <span class="op">{</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="cf">case</span> v <span class="op">:=</span> <span class="op">&lt;-</span>ch1<span class="op">:</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;from ch1&quot;</span><span class="op">,</span> v<span class="op">)</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="cf">case</span> ch2 <span class="op">&lt;-</span> x<span class="op">:</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;sent to ch2&quot;</span><span class="op">)</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a><span class="cf">case</span> <span class="op">&lt;-</span>time<span class="op">.</span>After<span class="op">(</span><span class="dv">2</span> <span class="op">*</span> time<span class="op">.</span>Second<span class="op">):</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;超时&quot;</span><span class="op">)</span>            <span class="co">// 超时模式</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a><span class="cf">default</span><span class="op">:</span></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;都没就绪, 非阻塞&quot;</span><span class="op">)</span> <span class="co">// 有 default 就不阻塞</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <ul>
 <li>无 <code>default</code>:阻塞到至少一个 case 就绪。</li>
 <li>有 <code>default</code>:所有 case 都没就绪时立即走 default ——
@@ -307,55 +262,60 @@ happens-before(下面「Go
 <strong>超时</strong>惯用法。</li>
 <li>对 nil channel 的 case 永远不就绪,可用于动态”禁用”某分支。</li>
 </ul>
+<p>多个 case
+同时就绪时<strong>随机</strong>选择一个执行,而不是按代码里书写的顺序优先——这和
+map 遍历顺序随机化是同一类考虑(见<a
+href="07-复合数据结构.html">第07章</a>):如果 <code>select</code>
+按书写顺序确定性地优先某个
+case,程序员会不自觉地把这种顺序当成隐含的优先级来用,而这从未是语言承诺的语义;强制随机化让”多个
+channel 同时就绪时谁先被处理”从一开始就不可预测,防止某个 case
+因为写在前面就长期”饿死”排在后面的
+case,也逼着需要真正优先级语义的代码显式实现,而不是依赖巧合的书写顺序。</p>
 <p>可运行示例:两路 channel 多路复用 + <code>time.After</code>
 超时兜底。两个 goroutine 到点各发一次,<code>select</code>
 收满两条才退出。到达顺序不定,所以断言<strong>集合</strong>而非精确顺序:</p>
-<div class="sourceCode" id="cb7"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="op">(</span></span>
-<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;fmt&quot;</span></span>
-<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;time&quot;</span></span>
-<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a><span class="op">)</span></span>
-<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
-<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>    nums <span class="op">:=</span> <span class="bu">make</span><span class="op">(</span><span class="kw">chan</span> <span class="dt">int</span><span class="op">)</span></span>
-<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>    strs <span class="op">:=</span> <span class="bu">make</span><span class="op">(</span><span class="kw">chan</span> <span class="dt">string</span><span class="op">)</span></span>
-<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">go</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span></span>
-<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>        time<span class="op">.</span>Sleep<span class="op">(</span><span class="dv">10</span> <span class="op">*</span> time<span class="op">.</span>Millisecond<span class="op">)</span></span>
-<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>        nums <span class="op">&lt;-</span> <span class="dv">42</span></span>
-<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a>    <span class="op">}()</span></span>
-<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a>    <span class="cf">go</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span></span>
-<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a>        time<span class="op">.</span>Sleep<span class="op">(</span><span class="dv">20</span> <span class="op">*</span> time<span class="op">.</span>Millisecond<span class="op">)</span></span>
-<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a>        strs <span class="op">&lt;-</span> <span class="st">&quot;hi&quot;</span></span>
-<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a>    <span class="op">}()</span></span>
-<span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-21"><a href="#cb7-21" aria-hidden="true" tabindex="-1"></a>    got <span class="op">:=</span> <span class="kw">map</span><span class="op">[</span><span class="dt">string</span><span class="op">]</span><span class="dt">bool</span><span class="op">{}</span></span>
-<span id="cb7-22"><a href="#cb7-22" aria-hidden="true" tabindex="-1"></a>    timeout <span class="op">:=</span> time<span class="op">.</span>After<span class="op">(</span><span class="dv">100</span> <span class="op">*</span> time<span class="op">.</span>Millisecond<span class="op">)</span></span>
-<span id="cb7-23"><a href="#cb7-23" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="bu">len</span><span class="op">(</span>got<span class="op">)</span> <span class="op">&lt;</span> <span class="dv">2</span> <span class="op">{</span></span>
-<span id="cb7-24"><a href="#cb7-24" aria-hidden="true" tabindex="-1"></a>        <span class="cf">select</span> <span class="op">{</span></span>
-<span id="cb7-25"><a href="#cb7-25" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> n <span class="op">:=</span> <span class="op">&lt;-</span>nums<span class="op">:</span></span>
-<span id="cb7-26"><a href="#cb7-26" aria-hidden="true" tabindex="-1"></a>            got<span class="op">[</span>fmt<span class="op">.</span>Sprintf<span class="op">(</span><span class="st">&quot;num:%d&quot;</span><span class="op">,</span> n<span class="op">)]</span> <span class="op">=</span> <span class="ot">true</span></span>
-<span id="cb7-27"><a href="#cb7-27" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> s <span class="op">:=</span> <span class="op">&lt;-</span>strs<span class="op">:</span></span>
-<span id="cb7-28"><a href="#cb7-28" aria-hidden="true" tabindex="-1"></a>            got<span class="op">[</span>fmt<span class="op">.</span>Sprintf<span class="op">(</span><span class="st">&quot;str:%s&quot;</span><span class="op">,</span> s<span class="op">)]</span> <span class="op">=</span> <span class="ot">true</span></span>
-<span id="cb7-29"><a href="#cb7-29" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> <span class="op">&lt;-</span>timeout<span class="op">:</span></span>
-<span id="cb7-30"><a href="#cb7-30" aria-hidden="true" tabindex="-1"></a>            fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;timed out&quot;</span><span class="op">)</span></span>
-<span id="cb7-31"><a href="#cb7-31" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span></span>
-<span id="cb7-32"><a href="#cb7-32" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
-<span id="cb7-33"><a href="#cb7-33" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb7-34"><a href="#cb7-34" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;got num:&quot;</span><span class="op">,</span> got<span class="op">[</span><span class="st">&quot;num:42&quot;</span><span class="op">])</span></span>
-<span id="cb7-35"><a href="#cb7-35" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;got str:&quot;</span><span class="op">,</span> got<span class="op">[</span><span class="st">&quot;str:hi&quot;</span><span class="op">])</span></span>
-<span id="cb7-36"><a href="#cb7-36" aria-hidden="true" tabindex="-1"></a>    <span class="co">// got num: true</span></span>
-<span id="cb7-37"><a href="#cb7-37" aria-hidden="true" tabindex="-1"></a>    <span class="co">// got str: true</span></span>
-<span id="cb7-38"><a href="#cb7-38" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="op">(</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;time&quot;</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a><span class="op">)</span></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>    nums <span class="op">:=</span> <span class="bu">make</span><span class="op">(</span><span class="kw">chan</span> <span class="dt">int</span><span class="op">)</span></span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>    strs <span class="op">:=</span> <span class="bu">make</span><span class="op">(</span><span class="kw">chan</span> <span class="dt">string</span><span class="op">)</span></span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">go</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>        time<span class="op">.</span>Sleep<span class="op">(</span><span class="dv">10</span> <span class="op">*</span> time<span class="op">.</span>Millisecond<span class="op">)</span></span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a>        nums <span class="op">&lt;-</span> <span class="dv">42</span></span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>    <span class="op">}()</span></span>
+<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a>    <span class="cf">go</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a>        time<span class="op">.</span>Sleep<span class="op">(</span><span class="dv">20</span> <span class="op">*</span> time<span class="op">.</span>Millisecond<span class="op">)</span></span>
+<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a>        strs <span class="op">&lt;-</span> <span class="st">&quot;hi&quot;</span></span>
+<span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a>    <span class="op">}()</span></span>
+<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-21"><a href="#cb6-21" aria-hidden="true" tabindex="-1"></a>    got <span class="op">:=</span> <span class="kw">map</span><span class="op">[</span><span class="dt">string</span><span class="op">]</span><span class="dt">bool</span><span class="op">{}</span></span>
+<span id="cb6-22"><a href="#cb6-22" aria-hidden="true" tabindex="-1"></a>    timeout <span class="op">:=</span> time<span class="op">.</span>After<span class="op">(</span><span class="dv">100</span> <span class="op">*</span> time<span class="op">.</span>Millisecond<span class="op">)</span></span>
+<span id="cb6-23"><a href="#cb6-23" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="bu">len</span><span class="op">(</span>got<span class="op">)</span> <span class="op">&lt;</span> <span class="dv">2</span> <span class="op">{</span></span>
+<span id="cb6-24"><a href="#cb6-24" aria-hidden="true" tabindex="-1"></a>        <span class="cf">select</span> <span class="op">{</span></span>
+<span id="cb6-25"><a href="#cb6-25" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> n <span class="op">:=</span> <span class="op">&lt;-</span>nums<span class="op">:</span></span>
+<span id="cb6-26"><a href="#cb6-26" aria-hidden="true" tabindex="-1"></a>            got<span class="op">[</span>fmt<span class="op">.</span>Sprintf<span class="op">(</span><span class="st">&quot;num:%d&quot;</span><span class="op">,</span> n<span class="op">)]</span> <span class="op">=</span> <span class="ot">true</span></span>
+<span id="cb6-27"><a href="#cb6-27" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> s <span class="op">:=</span> <span class="op">&lt;-</span>strs<span class="op">:</span></span>
+<span id="cb6-28"><a href="#cb6-28" aria-hidden="true" tabindex="-1"></a>            got<span class="op">[</span>fmt<span class="op">.</span>Sprintf<span class="op">(</span><span class="st">&quot;str:%s&quot;</span><span class="op">,</span> s<span class="op">)]</span> <span class="op">=</span> <span class="ot">true</span></span>
+<span id="cb6-29"><a href="#cb6-29" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> <span class="op">&lt;-</span>timeout<span class="op">:</span></span>
+<span id="cb6-30"><a href="#cb6-30" aria-hidden="true" tabindex="-1"></a>            fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;timed out&quot;</span><span class="op">)</span></span>
+<span id="cb6-31"><a href="#cb6-31" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span></span>
+<span id="cb6-32"><a href="#cb6-32" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb6-33"><a href="#cb6-33" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb6-34"><a href="#cb6-34" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;got num:&quot;</span><span class="op">,</span> got<span class="op">[</span><span class="st">&quot;num:42&quot;</span><span class="op">])</span></span>
+<span id="cb6-35"><a href="#cb6-35" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;got str:&quot;</span><span class="op">,</span> got<span class="op">[</span><span class="st">&quot;str:hi&quot;</span><span class="op">])</span></span>
+<span id="cb6-36"><a href="#cb6-36" aria-hidden="true" tabindex="-1"></a>    <span class="co">// got num: true</span></span>
+<span id="cb6-37"><a href="#cb6-37" aria-hidden="true" tabindex="-1"></a>    <span class="co">// got str: true</span></span>
+<span id="cb6-38"><a href="#cb6-38" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <h2 id="四gmp-调度模型">四、GMP 调度模型</h2>
-<p>goroutine/channel/select
-的基本用法到此为止。这一节是纯粹的运行时内部机制——解释为什么上面这些便宜、好用。</p>
-<h3 id="怎么用gomaxprocs">怎么用:GOMAXPROCS</h3>
 <p>日常写并发代码基本不需要关心调度器,唯一常打交道的旋钮是并行度:</p>
-<div class="sourceCode" id="cb8"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>runtime<span class="op">.</span>GOMAXPROCS<span class="op">(</span><span class="dv">4</span><span class="op">)</span>         <span class="co">// 设置/查询 P 的数量(即并行度上限)</span></span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>n <span class="op">:=</span> runtime<span class="op">.</span>GOMAXPROCS<span class="op">(</span><span class="dv">0</span><span class="op">)</span>    <span class="co">// 传 0 表示只查询不修改</span></span></code></pre></div>
-<h3 id="底层与-c-对比-2">底层与 C 对比</h3>
+<div class="sourceCode" id="cb7"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>runtime<span class="op">.</span>GOMAXPROCS<span class="op">(</span><span class="dv">4</span><span class="op">)</span>         <span class="co">// 设置/查询 P 的数量(即并行度上限)</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>n <span class="op">:=</span> runtime<span class="op">.</span>GOMAXPROCS<span class="op">(</span><span class="dv">0</span><span class="op">)</span>    <span class="co">// 传 0 表示只查询不修改</span></span></code></pre></div>
 <p>Go 运行时用 <strong>G-M-P</strong> 三元组把 goroutine 多路复用到 OS
 线程上。</p>
 <ul>
@@ -381,24 +341,29 @@ G 队列</strong>。P 的数量 = <code>GOMAXPROCS</code>(默认 = 可用 CPU
       │(线程) │         │(线程) │
       └───────┘         └───────┘
            实际跑在 CPU 核上</code></pre>
-<h3 id="调度要点">调度要点</h3>
+<p><strong>为什么要三层(G-M-P),而不是 goroutine 直接映射线程、或者只有 G
+和 M 两层</strong>。只有 G 和 M 两层(goroutine 直接排队等 M
+执行)会遇到一个具体问题:当某个 G 发起阻塞式系统调用时,执行它的 M
+陷入内核阻塞,如果没有第三个概念把”可以并行执行的名额”和”某一时刻具体绑定哪个线程”分开,要么整个运行时的并行度因为这一次阻塞而减少,要么每次阻塞都要临时决定”还要不要多开一个线程来维持并行度”而缺乏一个清晰的记账单位。P
+就是这个”并行度名额”的显式载体:<code>GOMAXPROCS</code> 个 P
+决定了同一时刻最多有多少个 G 在真正并行执行,M 的数量则可以按需超过 P
+的数量(应对阻塞的系统调用)。这让”并行度”和”线程数”成为两个独立可调的量,而不是纠缠在一起。</p>
 <p><strong>本地队列 + work-stealing(工作窃取)</strong>:每个 P
 有本地队列,新建的 G 优先放本地(无锁,快)。P
 本地空了,先去全局队列拿,再<strong>从别的 P
 队列偷一半</strong>。这让负载自动均衡,又尽量避免全局锁竞争。</p>
-<p><strong>为什么要有 P(而不是 G 直接绑 M)</strong>:P
-这层解耦了”并行度(GOMAXPROCS 个 P)“与”线程数(M 可以更多)“。当一个 M
-因系统调用阻塞时,它的 P 可以交给别的 M 继续跑其他 G——见下。</p>
 <p><strong>系统调用时 P 与 M 解绑(hand-off)</strong>:某个 G
 发起阻塞式系统调用(如读文件),它所在的 M 会陷入内核阻塞。运行时把这个 M
 的 P <strong>摘下</strong>,交给另一个(空闲或新建的)M,让 P 上其余的 G
 继续在别的核上跑,不被一个阻塞调用拖住。系统调用返回后,原 M
-尝试重新获取一个 P,拿不到就把 G 放回队列、自己休眠。</p>
+尝试重新获取一个 P,拿不到就把 G 放回队列、自己休眠。这正是上一段”P 与 M
+解耦”这个设计带来的直接收益:P 可以在原 M 阻塞期间被摘下转交给别的
+M,并行度不因为一次阻塞调用而下降。</p>
 <p><strong>网络 I/O 用 netpoller</strong>:网络读写不会真的阻塞
 M,而是注册到基于 epoll/kqueue 的 netpoller,goroutine 挂起、M 去跑别的
 G,I/O 就绪时再唤醒。所以你能用”每连接一个
 goroutine、同步阻塞式写法”却获得 epoll 的伸缩性——这是 Go
-网络服务爽点的底层原因。</p>
+网络服务爽点的底层原因:程序员写的是最直观的同步代码,调度器在背后把它转换成事件驱动模型的效果。</p>
 <p><strong>抢占式调度</strong>:早期 Go
 是协作式(只在函数调用处让出),一个纯计算死循环会饿死同 P 的其他 G。Go
 1.14 起是<strong>基于信号的异步抢占</strong>:运行时可向长时间不让出的 G
@@ -408,14 +373,14 @@ goroutine、同步阻塞式写法”却获得 epoll 的伸缩性——这是 Go
 OS,切换要进内核;Go 是 <strong>M:N</strong>(M 个 G 跑在 N
 个线程上),大部分调度在用户态完成,切换成本低得多。</p>
 <h2 id="五sync-包传统锁与同步原语">五、sync 包:传统锁与同步原语</h2>
-<h3 id="怎么用-3">怎么用</h3>
 <p>不是所有场景都适合
-channel。共享计数器、保护一小段临界区,用锁更直接、更快。</p>
-<div class="sourceCode" id="cb10"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> mu sync<span class="op">.</span>Mutex</span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>mu<span class="op">.</span>Lock<span class="op">()</span></span>
-<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>count<span class="op">++</span></span>
-<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>mu<span class="op">.</span>Unlock<span class="op">()</span>          <span class="co">// 常配 defer mu.Unlock()</span></span></code></pre></div>
+channel。共享计数器、保护一小段临界区,用锁更直接、更快——这也提醒一件事:CSP
+哲学是 Go 并发设计的主导思想,但不是教条,<code>sync</code>
+包同样是一等公民,用在 channel 不合适的地方。</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> mu sync<span class="op">.</span>Mutex</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>mu<span class="op">.</span>Lock<span class="op">()</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>count<span class="op">++</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>mu<span class="op">.</span>Unlock<span class="op">()</span>          <span class="co">// 常配 defer mu.Unlock()</span></span></code></pre></div>
 <table>
 <thead>
 <tr>
@@ -463,16 +428,16 @@ class="sourceCode go"><code class="sourceCode go"><span id="cb10-1"><a href="#cb
 </tbody>
 </table>
 <p>WaitGroup 惯用法:</p>
-<div class="sourceCode" id="cb11"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> wg sync<span class="op">.</span>WaitGroup</span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i <span class="op">:=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">10</span><span class="op">;</span> i<span class="op">++</span> <span class="op">{</span></span>
-<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>    wg<span class="op">.</span>Add<span class="op">(</span><span class="dv">1</span><span class="op">)</span></span>
-<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">go</span> <span class="kw">func</span><span class="op">(</span>id <span class="dt">int</span><span class="op">)</span> <span class="op">{</span></span>
-<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">defer</span> wg<span class="op">.</span>Done<span class="op">()</span></span>
-<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>        work<span class="op">(</span>id<span class="op">)</span></span>
-<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">}(</span>i<span class="op">)</span>                  <span class="co">// 注意: 把 i 作为参数传进去(Go1.22 前循环变量复用坑)</span></span>
-<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a>wg<span class="op">.</span>Wait<span class="op">()</span>                 <span class="co">// 阻塞到计数归零</span></span></code></pre></div>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> wg sync<span class="op">.</span>WaitGroup</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i <span class="op">:=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">10</span><span class="op">;</span> i<span class="op">++</span> <span class="op">{</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>    wg<span class="op">.</span>Add<span class="op">(</span><span class="dv">1</span><span class="op">)</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">go</span> <span class="kw">func</span><span class="op">(</span>id <span class="dt">int</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">defer</span> wg<span class="op">.</span>Done<span class="op">()</span></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>        work<span class="op">(</span>id<span class="op">)</span></span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">}(</span>i<span class="op">)</span>                  <span class="co">// 注意: 把 i 作为参数传进去(Go1.22 前循环变量复用坑)</span></span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>wg<span class="op">.</span>Wait<span class="op">()</span>                 <span class="co">// 阻塞到计数归零</span></span></code></pre></div>
 <blockquote>
 <p>Go 1.22 起 <code>for</code>
 循环变量每轮独立,老代码里”闭包捕获循环变量”的经典 bug
@@ -486,57 +451,56 @@ class="sourceCode go"><code class="sourceCode go"><span id="cb11-1"><a href="#cb
 <code>mu.Lock/Unlock</code> 去掉、改成裸
 <code>count++</code>,<code>go run -race</code> 会报
 <code>DATA RACE</code>,结果也会因<strong>丢更新</strong>小于 100000:</p>
-<div class="sourceCode" id="cb12"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="op">(</span></span>
-<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;fmt&quot;</span></span>
-<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;sync&quot;</span></span>
-<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;sync/atomic&quot;</span></span>
-<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a><span class="op">)</span></span>
-<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
-<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">const</span> goroutines<span class="op">,</span> per <span class="op">=</span> <span class="dv">100</span><span class="op">,</span> <span class="dv">1000</span></span>
-<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>    want <span class="op">:=</span> <span class="dt">int64</span><span class="op">(</span>goroutines <span class="op">*</span> per<span class="op">)</span></span>
-<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 1) sync.Mutex 保护普通计数器</span></span>
-<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> mu sync<span class="op">.</span>Mutex</span>
-<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> muCount <span class="dt">int64</span></span>
-<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> wg sync<span class="op">.</span>WaitGroup</span>
-<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> i <span class="op">:=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> goroutines<span class="op">;</span> i<span class="op">++</span> <span class="op">{</span></span>
-<span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a>        wg<span class="op">.</span>Add<span class="op">(</span><span class="dv">1</span><span class="op">)</span></span>
-<span id="cb12-19"><a href="#cb12-19" aria-hidden="true" tabindex="-1"></a>        <span class="cf">go</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span></span>
-<span id="cb12-20"><a href="#cb12-20" aria-hidden="true" tabindex="-1"></a>            <span class="cf">defer</span> wg<span class="op">.</span>Done<span class="op">()</span></span>
-<span id="cb12-21"><a href="#cb12-21" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> j <span class="op">:=</span> <span class="dv">0</span><span class="op">;</span> j <span class="op">&lt;</span> per<span class="op">;</span> j<span class="op">++</span> <span class="op">{</span></span>
-<span id="cb12-22"><a href="#cb12-22" aria-hidden="true" tabindex="-1"></a>                mu<span class="op">.</span>Lock<span class="op">()</span></span>
-<span id="cb12-23"><a href="#cb12-23" aria-hidden="true" tabindex="-1"></a>                muCount<span class="op">++</span></span>
-<span id="cb12-24"><a href="#cb12-24" aria-hidden="true" tabindex="-1"></a>                mu<span class="op">.</span>Unlock<span class="op">()</span></span>
-<span id="cb12-25"><a href="#cb12-25" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
-<span id="cb12-26"><a href="#cb12-26" aria-hidden="true" tabindex="-1"></a>        <span class="op">}()</span></span>
-<span id="cb12-27"><a href="#cb12-27" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb12-28"><a href="#cb12-28" aria-hidden="true" tabindex="-1"></a>    wg<span class="op">.</span>Wait<span class="op">()</span></span>
-<span id="cb12-29"><a href="#cb12-29" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-30"><a href="#cb12-30" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 2) sync/atomic 原子加</span></span>
-<span id="cb12-31"><a href="#cb12-31" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> atCount atomic<span class="op">.</span>Int64</span>
-<span id="cb12-32"><a href="#cb12-32" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> i <span class="op">:=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> goroutines<span class="op">;</span> i<span class="op">++</span> <span class="op">{</span></span>
-<span id="cb12-33"><a href="#cb12-33" aria-hidden="true" tabindex="-1"></a>        wg<span class="op">.</span>Add<span class="op">(</span><span class="dv">1</span><span class="op">)</span></span>
-<span id="cb12-34"><a href="#cb12-34" aria-hidden="true" tabindex="-1"></a>        <span class="cf">go</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span></span>
-<span id="cb12-35"><a href="#cb12-35" aria-hidden="true" tabindex="-1"></a>            <span class="cf">defer</span> wg<span class="op">.</span>Done<span class="op">()</span></span>
-<span id="cb12-36"><a href="#cb12-36" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> j <span class="op">:=</span> <span class="dv">0</span><span class="op">;</span> j <span class="op">&lt;</span> per<span class="op">;</span> j<span class="op">++</span> <span class="op">{</span></span>
-<span id="cb12-37"><a href="#cb12-37" aria-hidden="true" tabindex="-1"></a>                atCount<span class="op">.</span>Add<span class="op">(</span><span class="dv">1</span><span class="op">)</span></span>
-<span id="cb12-38"><a href="#cb12-38" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
-<span id="cb12-39"><a href="#cb12-39" aria-hidden="true" tabindex="-1"></a>        <span class="op">}()</span></span>
-<span id="cb12-40"><a href="#cb12-40" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb12-41"><a href="#cb12-41" aria-hidden="true" tabindex="-1"></a>    wg<span class="op">.</span>Wait<span class="op">()</span></span>
-<span id="cb12-42"><a href="#cb12-42" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-43"><a href="#cb12-43" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;want  :&quot;</span><span class="op">,</span> want<span class="op">)</span></span>
-<span id="cb12-44"><a href="#cb12-44" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;mutex :&quot;</span><span class="op">,</span> muCount<span class="op">,</span> muCount <span class="op">==</span> want<span class="op">)</span></span>
-<span id="cb12-45"><a href="#cb12-45" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;atomic:&quot;</span><span class="op">,</span> atCount<span class="op">.</span>Load<span class="op">(),</span> atCount<span class="op">.</span>Load<span class="op">()</span> <span class="op">==</span> want<span class="op">)</span></span>
-<span id="cb12-46"><a href="#cb12-46" aria-hidden="true" tabindex="-1"></a>    <span class="co">// want  : 100000</span></span>
-<span id="cb12-47"><a href="#cb12-47" aria-hidden="true" tabindex="-1"></a>    <span class="co">// mutex : 100000 true</span></span>
-<span id="cb12-48"><a href="#cb12-48" aria-hidden="true" tabindex="-1"></a>    <span class="co">// atomic: 100000 true</span></span>
-<span id="cb12-49"><a href="#cb12-49" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
-<h3 id="底层与-c-对比-3">底层与 C 对比</h3>
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="op">(</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;sync&quot;</span></span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;sync/atomic&quot;</span></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a><span class="op">)</span></span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">const</span> goroutines<span class="op">,</span> per <span class="op">=</span> <span class="dv">100</span><span class="op">,</span> <span class="dv">1000</span></span>
+<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a>    want <span class="op">:=</span> <span class="dt">int64</span><span class="op">(</span>goroutines <span class="op">*</span> per<span class="op">)</span></span>
+<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-13"><a href="#cb11-13" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 1) sync.Mutex 保护普通计数器</span></span>
+<span id="cb11-14"><a href="#cb11-14" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> mu sync<span class="op">.</span>Mutex</span>
+<span id="cb11-15"><a href="#cb11-15" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> muCount <span class="dt">int64</span></span>
+<span id="cb11-16"><a href="#cb11-16" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> wg sync<span class="op">.</span>WaitGroup</span>
+<span id="cb11-17"><a href="#cb11-17" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> i <span class="op">:=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> goroutines<span class="op">;</span> i<span class="op">++</span> <span class="op">{</span></span>
+<span id="cb11-18"><a href="#cb11-18" aria-hidden="true" tabindex="-1"></a>        wg<span class="op">.</span>Add<span class="op">(</span><span class="dv">1</span><span class="op">)</span></span>
+<span id="cb11-19"><a href="#cb11-19" aria-hidden="true" tabindex="-1"></a>        <span class="cf">go</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb11-20"><a href="#cb11-20" aria-hidden="true" tabindex="-1"></a>            <span class="cf">defer</span> wg<span class="op">.</span>Done<span class="op">()</span></span>
+<span id="cb11-21"><a href="#cb11-21" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> j <span class="op">:=</span> <span class="dv">0</span><span class="op">;</span> j <span class="op">&lt;</span> per<span class="op">;</span> j<span class="op">++</span> <span class="op">{</span></span>
+<span id="cb11-22"><a href="#cb11-22" aria-hidden="true" tabindex="-1"></a>                mu<span class="op">.</span>Lock<span class="op">()</span></span>
+<span id="cb11-23"><a href="#cb11-23" aria-hidden="true" tabindex="-1"></a>                muCount<span class="op">++</span></span>
+<span id="cb11-24"><a href="#cb11-24" aria-hidden="true" tabindex="-1"></a>                mu<span class="op">.</span>Unlock<span class="op">()</span></span>
+<span id="cb11-25"><a href="#cb11-25" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
+<span id="cb11-26"><a href="#cb11-26" aria-hidden="true" tabindex="-1"></a>        <span class="op">}()</span></span>
+<span id="cb11-27"><a href="#cb11-27" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb11-28"><a href="#cb11-28" aria-hidden="true" tabindex="-1"></a>    wg<span class="op">.</span>Wait<span class="op">()</span></span>
+<span id="cb11-29"><a href="#cb11-29" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-30"><a href="#cb11-30" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 2) sync/atomic 原子加</span></span>
+<span id="cb11-31"><a href="#cb11-31" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> atCount atomic<span class="op">.</span>Int64</span>
+<span id="cb11-32"><a href="#cb11-32" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> i <span class="op">:=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> goroutines<span class="op">;</span> i<span class="op">++</span> <span class="op">{</span></span>
+<span id="cb11-33"><a href="#cb11-33" aria-hidden="true" tabindex="-1"></a>        wg<span class="op">.</span>Add<span class="op">(</span><span class="dv">1</span><span class="op">)</span></span>
+<span id="cb11-34"><a href="#cb11-34" aria-hidden="true" tabindex="-1"></a>        <span class="cf">go</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb11-35"><a href="#cb11-35" aria-hidden="true" tabindex="-1"></a>            <span class="cf">defer</span> wg<span class="op">.</span>Done<span class="op">()</span></span>
+<span id="cb11-36"><a href="#cb11-36" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> j <span class="op">:=</span> <span class="dv">0</span><span class="op">;</span> j <span class="op">&lt;</span> per<span class="op">;</span> j<span class="op">++</span> <span class="op">{</span></span>
+<span id="cb11-37"><a href="#cb11-37" aria-hidden="true" tabindex="-1"></a>                atCount<span class="op">.</span>Add<span class="op">(</span><span class="dv">1</span><span class="op">)</span></span>
+<span id="cb11-38"><a href="#cb11-38" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
+<span id="cb11-39"><a href="#cb11-39" aria-hidden="true" tabindex="-1"></a>        <span class="op">}()</span></span>
+<span id="cb11-40"><a href="#cb11-40" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb11-41"><a href="#cb11-41" aria-hidden="true" tabindex="-1"></a>    wg<span class="op">.</span>Wait<span class="op">()</span></span>
+<span id="cb11-42"><a href="#cb11-42" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-43"><a href="#cb11-43" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;want  :&quot;</span><span class="op">,</span> want<span class="op">)</span></span>
+<span id="cb11-44"><a href="#cb11-44" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;mutex :&quot;</span><span class="op">,</span> muCount<span class="op">,</span> muCount <span class="op">==</span> want<span class="op">)</span></span>
+<span id="cb11-45"><a href="#cb11-45" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;atomic:&quot;</span><span class="op">,</span> atCount<span class="op">.</span>Load<span class="op">(),</span> atCount<span class="op">.</span>Load<span class="op">()</span> <span class="op">==</span> want<span class="op">)</span></span>
+<span id="cb11-46"><a href="#cb11-46" aria-hidden="true" tabindex="-1"></a>    <span class="co">// want  : 100000</span></span>
+<span id="cb11-47"><a href="#cb11-47" aria-hidden="true" tabindex="-1"></a>    <span class="co">// mutex : 100000 true</span></span>
+<span id="cb11-48"><a href="#cb11-48" aria-hidden="true" tabindex="-1"></a>    <span class="co">// atomic: 100000 true</span></span>
+<span id="cb11-49"><a href="#cb11-49" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p><code>sync.Mutex</code> 本身很小(概念上是一个状态字 + 一个信号量,共 8
 字节),加锁分两条路径:无竞争时靠一次原子 CAS 直接拿到锁(fast
 path,几乎零开销);抢不到才会短暂自旋几次,还拿不到就通过运行时的信号量把
@@ -544,7 +508,10 @@ goroutine 挂起(park),解锁时唤醒——挂起的 goroutine 会被调度器�
 M,和普通 channel 阻塞是同一套”挂起-唤醒”机制。这与 C++
 <code>std::mutex</code> 通常直接包一层内核 futex 等待不同:Go
 的锁是运行时调度框架内的一部分,阻塞的是 goroutine
-而不是线程本身。细节随版本演进,以运行时源码 <code>sync/mutex.go</code>
+而不是线程本身,这与前面 GMP 一节”阻塞一个 goroutine 不阻塞 OS
+线程”的原则是一致的——不管是 channel 收发阻塞还是 mutex
+抢锁失败,底层都复用同一套”挂起 G、腾出 M 去跑别的
+G”的机制。细节随版本演进,以运行时源码 <code>sync/mutex.go</code>
 为准。</p>
 <h2 id="六go-内存模型与-happens-before">六、Go 内存模型与
 happens-before</h2>
@@ -569,20 +536,19 @@ happens-before 接收到零值。</li>
 的写另一个能看到。</strong> 这和 C++ 的 <code>std::memory_order</code>
 是同一类问题,Go 把它简化成”用 channel/锁,不要裸共享”。</p>
 <h2 id="七context取消超时传值">七、context:取消、超时、传值</h2>
-<h3 id="怎么用-4">怎么用</h3>
 <p><code>context.Context</code> 是跨 goroutine/跨 API
 传递<strong>取消信号、截止时间、请求域值</strong>的标准方式,几乎所有阻塞型标准库/框架
 API 第一个参数都是它。</p>
-<div class="sourceCode" id="cb13"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>ctx<span class="op">,</span> cancel <span class="op">:=</span> context<span class="op">.</span>WithTimeout<span class="op">(</span>context<span class="op">.</span>Background<span class="op">(),</span> <span class="dv">3</span><span class="op">*</span>time<span class="op">.</span>Second<span class="op">)</span></span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="cf">defer</span> cancel<span class="op">()</span>                        <span class="co">// 必须调 cancel 释放资源</span></span>
-<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a><span class="cf">select</span> <span class="op">{</span></span>
-<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a><span class="cf">case</span> res <span class="op">:=</span> <span class="op">&lt;-</span>doAsync<span class="op">(</span>ctx<span class="op">):</span></span>
-<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>    use<span class="op">(</span>res<span class="op">)</span></span>
-<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a><span class="cf">case</span> <span class="op">&lt;-</span>ctx<span class="op">.</span>Done<span class="op">():</span>                    <span class="co">// 超时或被取消</span></span>
-<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;取消原因:&quot;</span><span class="op">,</span> ctx<span class="op">.</span>Err<span class="op">())</span> <span class="co">// context.DeadlineExceeded / Canceled</span></span>
-<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>ctx<span class="op">,</span> cancel <span class="op">:=</span> context<span class="op">.</span>WithTimeout<span class="op">(</span>context<span class="op">.</span>Background<span class="op">(),</span> <span class="dv">3</span><span class="op">*</span>time<span class="op">.</span>Second<span class="op">)</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="cf">defer</span> cancel<span class="op">()</span>                        <span class="co">// 必须调 cancel 释放资源</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a><span class="cf">select</span> <span class="op">{</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a><span class="cf">case</span> res <span class="op">:=</span> <span class="op">&lt;-</span>doAsync<span class="op">(</span>ctx<span class="op">):</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>    use<span class="op">(</span>res<span class="op">)</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a><span class="cf">case</span> <span class="op">&lt;-</span>ctx<span class="op">.</span>Done<span class="op">():</span>                    <span class="co">// 超时或被取消</span></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;取消原因:&quot;</span><span class="op">,</span> ctx<span class="op">.</span>Err<span class="op">())</span> <span class="co">// context.DeadlineExceeded / Canceled</span></span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p><code>ctx.Done()</code> 返回一个在取消时被关闭的 channel,配合
 <code>select</code> 用。取消信号会沿 context 树向下传播,一处
 cancel,所有派生 context 都收到——用于”请求结束了,把它启动的所有下游
@@ -591,95 +557,100 @@ trace id),但别拿它传函数参数。</p>
 <p>可运行示例:一次 <code>cancel()</code> 广播给 3 个 worker,它们各自的
 <code>ctx.Done()</code> 同时就绪并退出。用 <code>WaitGroup</code>
 确定性收敛,断言退出计数与 <code>ctx.Err()</code>:</p>
-<div class="sourceCode" id="cb14"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
-<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="op">(</span></span>
-<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;context&quot;</span></span>
-<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;fmt&quot;</span></span>
-<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;sync&quot;</span></span>
-<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;time&quot;</span></span>
-<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a><span class="op">)</span></span>
-<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
-<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a>    ctx<span class="op">,</span> cancel <span class="op">:=</span> context<span class="op">.</span>WithCancel<span class="op">(</span>context<span class="op">.</span>Background<span class="op">())</span></span>
-<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> wg sync<span class="op">.</span>WaitGroup</span>
-<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a>    <span class="kw">const</span> n <span class="op">=</span> <span class="dv">3</span></span>
-<span id="cb14-14"><a href="#cb14-14" aria-hidden="true" tabindex="-1"></a>    stopped <span class="op">:=</span> <span class="bu">make</span><span class="op">(</span><span class="kw">chan</span> <span class="dt">int</span><span class="op">,</span> n<span class="op">)</span></span>
-<span id="cb14-15"><a href="#cb14-15" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-16"><a href="#cb14-16" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> id <span class="op">:=</span> <span class="dv">0</span><span class="op">;</span> id <span class="op">&lt;</span> n<span class="op">;</span> id<span class="op">++</span> <span class="op">{</span></span>
-<span id="cb14-17"><a href="#cb14-17" aria-hidden="true" tabindex="-1"></a>        wg<span class="op">.</span>Add<span class="op">(</span><span class="dv">1</span><span class="op">)</span></span>
-<span id="cb14-18"><a href="#cb14-18" aria-hidden="true" tabindex="-1"></a>        <span class="cf">go</span> <span class="kw">func</span><span class="op">(</span>id <span class="dt">int</span><span class="op">)</span> <span class="op">{</span></span>
-<span id="cb14-19"><a href="#cb14-19" aria-hidden="true" tabindex="-1"></a>            <span class="cf">defer</span> wg<span class="op">.</span>Done<span class="op">()</span></span>
-<span id="cb14-20"><a href="#cb14-20" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> <span class="op">{</span></span>
-<span id="cb14-21"><a href="#cb14-21" aria-hidden="true" tabindex="-1"></a>                <span class="cf">select</span> <span class="op">{</span></span>
-<span id="cb14-22"><a href="#cb14-22" aria-hidden="true" tabindex="-1"></a>                <span class="cf">case</span> <span class="op">&lt;-</span>ctx<span class="op">.</span>Done<span class="op">():</span> <span class="co">// 收到取消信号, 退出</span></span>
-<span id="cb14-23"><a href="#cb14-23" aria-hidden="true" tabindex="-1"></a>                    stopped <span class="op">&lt;-</span> id</span>
-<span id="cb14-24"><a href="#cb14-24" aria-hidden="true" tabindex="-1"></a>                    <span class="cf">return</span></span>
-<span id="cb14-25"><a href="#cb14-25" aria-hidden="true" tabindex="-1"></a>                <span class="cf">default</span><span class="op">:</span></span>
-<span id="cb14-26"><a href="#cb14-26" aria-hidden="true" tabindex="-1"></a>                    time<span class="op">.</span>Sleep<span class="op">(</span>time<span class="op">.</span>Millisecond<span class="op">)</span> <span class="co">// 模拟干活</span></span>
-<span id="cb14-27"><a href="#cb14-27" aria-hidden="true" tabindex="-1"></a>                <span class="op">}</span></span>
-<span id="cb14-28"><a href="#cb14-28" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
-<span id="cb14-29"><a href="#cb14-29" aria-hidden="true" tabindex="-1"></a>        <span class="op">}(</span>id<span class="op">)</span></span>
-<span id="cb14-30"><a href="#cb14-30" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb14-31"><a href="#cb14-31" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-32"><a href="#cb14-32" aria-hidden="true" tabindex="-1"></a>    time<span class="op">.</span>Sleep<span class="op">(</span><span class="dv">20</span> <span class="op">*</span> time<span class="op">.</span>Millisecond<span class="op">)</span></span>
-<span id="cb14-33"><a href="#cb14-33" aria-hidden="true" tabindex="-1"></a>    cancel<span class="op">()</span> <span class="co">// 广播取消: 所有 worker 的 ctx.Done() 一起就绪</span></span>
-<span id="cb14-34"><a href="#cb14-34" aria-hidden="true" tabindex="-1"></a>    wg<span class="op">.</span>Wait<span class="op">()</span></span>
-<span id="cb14-35"><a href="#cb14-35" aria-hidden="true" tabindex="-1"></a>    <span class="bu">close</span><span class="op">(</span>stopped<span class="op">)</span></span>
-<span id="cb14-36"><a href="#cb14-36" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-37"><a href="#cb14-37" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;ctx.Err():&quot;</span><span class="op">,</span> ctx<span class="op">.</span>Err<span class="op">())</span></span>
-<span id="cb14-38"><a href="#cb14-38" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;stopped  :&quot;</span><span class="op">,</span> <span class="bu">len</span><span class="op">(</span>stopped<span class="op">))</span></span>
-<span id="cb14-39"><a href="#cb14-39" aria-hidden="true" tabindex="-1"></a>    <span class="co">// ctx.Err(): context canceled</span></span>
-<span id="cb14-40"><a href="#cb14-40" aria-hidden="true" tabindex="-1"></a>    <span class="co">// stopped  : 3</span></span>
-<span id="cb14-41"><a href="#cb14-41" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="op">(</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;context&quot;</span></span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;sync&quot;</span></span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;time&quot;</span></span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a><span class="op">)</span></span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a>    ctx<span class="op">,</span> cancel <span class="op">:=</span> context<span class="op">.</span>WithCancel<span class="op">(</span>context<span class="op">.</span>Background<span class="op">())</span></span>
+<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> wg sync<span class="op">.</span>WaitGroup</span>
+<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a>    <span class="kw">const</span> n <span class="op">=</span> <span class="dv">3</span></span>
+<span id="cb13-14"><a href="#cb13-14" aria-hidden="true" tabindex="-1"></a>    stopped <span class="op">:=</span> <span class="bu">make</span><span class="op">(</span><span class="kw">chan</span> <span class="dt">int</span><span class="op">,</span> n<span class="op">)</span></span>
+<span id="cb13-15"><a href="#cb13-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-16"><a href="#cb13-16" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> id <span class="op">:=</span> <span class="dv">0</span><span class="op">;</span> id <span class="op">&lt;</span> n<span class="op">;</span> id<span class="op">++</span> <span class="op">{</span></span>
+<span id="cb13-17"><a href="#cb13-17" aria-hidden="true" tabindex="-1"></a>        wg<span class="op">.</span>Add<span class="op">(</span><span class="dv">1</span><span class="op">)</span></span>
+<span id="cb13-18"><a href="#cb13-18" aria-hidden="true" tabindex="-1"></a>        <span class="cf">go</span> <span class="kw">func</span><span class="op">(</span>id <span class="dt">int</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb13-19"><a href="#cb13-19" aria-hidden="true" tabindex="-1"></a>            <span class="cf">defer</span> wg<span class="op">.</span>Done<span class="op">()</span></span>
+<span id="cb13-20"><a href="#cb13-20" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> <span class="op">{</span></span>
+<span id="cb13-21"><a href="#cb13-21" aria-hidden="true" tabindex="-1"></a>                <span class="cf">select</span> <span class="op">{</span></span>
+<span id="cb13-22"><a href="#cb13-22" aria-hidden="true" tabindex="-1"></a>                <span class="cf">case</span> <span class="op">&lt;-</span>ctx<span class="op">.</span>Done<span class="op">():</span> <span class="co">// 收到取消信号, 退出</span></span>
+<span id="cb13-23"><a href="#cb13-23" aria-hidden="true" tabindex="-1"></a>                    stopped <span class="op">&lt;-</span> id</span>
+<span id="cb13-24"><a href="#cb13-24" aria-hidden="true" tabindex="-1"></a>                    <span class="cf">return</span></span>
+<span id="cb13-25"><a href="#cb13-25" aria-hidden="true" tabindex="-1"></a>                <span class="cf">default</span><span class="op">:</span></span>
+<span id="cb13-26"><a href="#cb13-26" aria-hidden="true" tabindex="-1"></a>                    time<span class="op">.</span>Sleep<span class="op">(</span>time<span class="op">.</span>Millisecond<span class="op">)</span> <span class="co">// 模拟干活</span></span>
+<span id="cb13-27"><a href="#cb13-27" aria-hidden="true" tabindex="-1"></a>                <span class="op">}</span></span>
+<span id="cb13-28"><a href="#cb13-28" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
+<span id="cb13-29"><a href="#cb13-29" aria-hidden="true" tabindex="-1"></a>        <span class="op">}(</span>id<span class="op">)</span></span>
+<span id="cb13-30"><a href="#cb13-30" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb13-31"><a href="#cb13-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-32"><a href="#cb13-32" aria-hidden="true" tabindex="-1"></a>    time<span class="op">.</span>Sleep<span class="op">(</span><span class="dv">20</span> <span class="op">*</span> time<span class="op">.</span>Millisecond<span class="op">)</span></span>
+<span id="cb13-33"><a href="#cb13-33" aria-hidden="true" tabindex="-1"></a>    cancel<span class="op">()</span> <span class="co">// 广播取消: 所有 worker 的 ctx.Done() 一起就绪</span></span>
+<span id="cb13-34"><a href="#cb13-34" aria-hidden="true" tabindex="-1"></a>    wg<span class="op">.</span>Wait<span class="op">()</span></span>
+<span id="cb13-35"><a href="#cb13-35" aria-hidden="true" tabindex="-1"></a>    <span class="bu">close</span><span class="op">(</span>stopped<span class="op">)</span></span>
+<span id="cb13-36"><a href="#cb13-36" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-37"><a href="#cb13-37" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;ctx.Err():&quot;</span><span class="op">,</span> ctx<span class="op">.</span>Err<span class="op">())</span></span>
+<span id="cb13-38"><a href="#cb13-38" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;stopped  :&quot;</span><span class="op">,</span> <span class="bu">len</span><span class="op">(</span>stopped<span class="op">))</span></span>
+<span id="cb13-39"><a href="#cb13-39" aria-hidden="true" tabindex="-1"></a>    <span class="co">// ctx.Err(): context canceled</span></span>
+<span id="cb13-40"><a href="#cb13-40" aria-hidden="true" tabindex="-1"></a>    <span class="co">// stopped  : 3</span></span>
+<span id="cb13-41"><a href="#cb13-41" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <h2 id="八常见并发模式">八、常见并发模式</h2>
 <p><strong>Worker Pool(固定数量 worker 消费任务)</strong>:</p>
-<div class="sourceCode" id="cb15"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>jobs <span class="op">:=</span> <span class="bu">make</span><span class="op">(</span><span class="kw">chan</span> <span class="dt">int</span><span class="op">,</span> <span class="dv">100</span><span class="op">)</span></span>
-<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>results <span class="op">:=</span> <span class="bu">make</span><span class="op">(</span><span class="kw">chan</span> <span class="dt">int</span><span class="op">,</span> <span class="dv">100</span><span class="op">)</span></span>
-<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> wg sync<span class="op">.</span>WaitGroup</span>
-<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> w <span class="op">:=</span> <span class="dv">0</span><span class="op">;</span> w <span class="op">&lt;</span> <span class="dv">4</span><span class="op">;</span> w<span class="op">++</span> <span class="op">{</span>              <span class="co">// 4 个 worker</span></span>
-<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>    wg<span class="op">.</span>Add<span class="op">(</span><span class="dv">1</span><span class="op">)</span></span>
-<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">go</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span></span>
-<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">defer</span> wg<span class="op">.</span>Done<span class="op">()</span></span>
-<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> j <span class="op">:=</span> <span class="kw">range</span> jobs <span class="op">{</span>         <span class="co">// 自动随 jobs 关闭而退出</span></span>
-<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a>            results <span class="op">&lt;-</span> j <span class="op">*</span> j</span>
-<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
-<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">}()</span></span>
-<span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb15-13"><a href="#cb15-13" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i <span class="op">:=</span> <span class="dv">1</span><span class="op">;</span> i <span class="op">&lt;=</span> <span class="dv">20</span><span class="op">;</span> i<span class="op">++</span> <span class="op">{</span> jobs <span class="op">&lt;-</span> i <span class="op">}</span></span>
-<span id="cb15-14"><a href="#cb15-14" aria-hidden="true" tabindex="-1"></a><span class="bu">close</span><span class="op">(</span>jobs<span class="op">)</span>                            <span class="co">// 关闭 → worker 循环结束</span></span>
-<span id="cb15-15"><a href="#cb15-15" aria-hidden="true" tabindex="-1"></a><span class="cf">go</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span> wg<span class="op">.</span>Wait<span class="op">();</span> <span class="bu">close</span><span class="op">(</span>results<span class="op">)</span> <span class="op">}()</span></span>
-<span id="cb15-16"><a href="#cb15-16" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> r <span class="op">:=</span> <span class="kw">range</span> results <span class="op">{</span> fmt<span class="op">.</span>Println<span class="op">(</span>r<span class="op">)</span> <span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>jobs <span class="op">:=</span> <span class="bu">make</span><span class="op">(</span><span class="kw">chan</span> <span class="dt">int</span><span class="op">,</span> <span class="dv">100</span><span class="op">)</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>results <span class="op">:=</span> <span class="bu">make</span><span class="op">(</span><span class="kw">chan</span> <span class="dt">int</span><span class="op">,</span> <span class="dv">100</span><span class="op">)</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> wg sync<span class="op">.</span>WaitGroup</span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> w <span class="op">:=</span> <span class="dv">0</span><span class="op">;</span> w <span class="op">&lt;</span> <span class="dv">4</span><span class="op">;</span> w<span class="op">++</span> <span class="op">{</span>              <span class="co">// 4 个 worker</span></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>    wg<span class="op">.</span>Add<span class="op">(</span><span class="dv">1</span><span class="op">)</span></span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">go</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">defer</span> wg<span class="op">.</span>Done<span class="op">()</span></span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> j <span class="op">:=</span> <span class="kw">range</span> jobs <span class="op">{</span>         <span class="co">// 自动随 jobs 关闭而退出</span></span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a>            results <span class="op">&lt;-</span> j <span class="op">*</span> j</span>
+<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">}()</span></span>
+<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i <span class="op">:=</span> <span class="dv">1</span><span class="op">;</span> i <span class="op">&lt;=</span> <span class="dv">20</span><span class="op">;</span> i<span class="op">++</span> <span class="op">{</span> jobs <span class="op">&lt;-</span> i <span class="op">}</span></span>
+<span id="cb14-14"><a href="#cb14-14" aria-hidden="true" tabindex="-1"></a><span class="bu">close</span><span class="op">(</span>jobs<span class="op">)</span>                            <span class="co">// 关闭 → worker 循环结束</span></span>
+<span id="cb14-15"><a href="#cb14-15" aria-hidden="true" tabindex="-1"></a><span class="cf">go</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span> wg<span class="op">.</span>Wait<span class="op">();</span> <span class="bu">close</span><span class="op">(</span>results<span class="op">)</span> <span class="op">}()</span></span>
+<span id="cb14-16"><a href="#cb14-16" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> r <span class="op">:=</span> <span class="kw">range</span> results <span class="op">{</span> fmt<span class="op">.</span>Println<span class="op">(</span>r<span class="op">)</span> <span class="op">}</span></span></code></pre></div>
 <p><strong>Pipeline(阶段串联,每阶段一个/多个 goroutine,用 channel
 连接)</strong>:</p>
 <pre><code>gen() ──chan──▶ square() ──chan──▶ print()</code></pre>
 <p><strong>Fan-out / Fan-in</strong>:fan-out = 多个 goroutine 从同一个
 channel 读(分摊活);fan-in = 把多个 channel 合并成一个。</p>
-<div class="sourceCode" id="cb17"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="co">// fan-in: 合并多个输入 channel</span></span>
-<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> merge<span class="op">(</span>cs <span class="op">...&lt;-</span><span class="kw">chan</span> <span class="dt">int</span><span class="op">)</span> <span class="op">&lt;-</span><span class="kw">chan</span> <span class="dt">int</span> <span class="op">{</span></span>
-<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>    out <span class="op">:=</span> <span class="bu">make</span><span class="op">(</span><span class="kw">chan</span> <span class="dt">int</span><span class="op">)</span></span>
-<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> wg sync<span class="op">.</span>WaitGroup</span>
-<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _<span class="op">,</span> c <span class="op">:=</span> <span class="kw">range</span> cs <span class="op">{</span></span>
-<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a>        wg<span class="op">.</span>Add<span class="op">(</span><span class="dv">1</span><span class="op">)</span></span>
-<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">go</span> <span class="kw">func</span><span class="op">(</span>c <span class="op">&lt;-</span><span class="kw">chan</span> <span class="dt">int</span><span class="op">)</span> <span class="op">{</span></span>
-<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a>            <span class="cf">defer</span> wg<span class="op">.</span>Done<span class="op">()</span></span>
-<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> v <span class="op">:=</span> <span class="kw">range</span> c <span class="op">{</span> out <span class="op">&lt;-</span> v <span class="op">}</span></span>
-<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a>        <span class="op">}(</span>c<span class="op">)</span></span>
-<span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb17-12"><a href="#cb17-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">go</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span> wg<span class="op">.</span>Wait<span class="op">();</span> <span class="bu">close</span><span class="op">(</span>out<span class="op">)</span> <span class="op">}()</span></span>
-<span id="cb17-13"><a href="#cb17-13" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> out</span>
-<span id="cb17-14"><a href="#cb17-14" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb16"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="co">// fan-in: 合并多个输入 channel</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> merge<span class="op">(</span>cs <span class="op">...&lt;-</span><span class="kw">chan</span> <span class="dt">int</span><span class="op">)</span> <span class="op">&lt;-</span><span class="kw">chan</span> <span class="dt">int</span> <span class="op">{</span></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>    out <span class="op">:=</span> <span class="bu">make</span><span class="op">(</span><span class="kw">chan</span> <span class="dt">int</span><span class="op">)</span></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> wg sync<span class="op">.</span>WaitGroup</span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _<span class="op">,</span> c <span class="op">:=</span> <span class="kw">range</span> cs <span class="op">{</span></span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>        wg<span class="op">.</span>Add<span class="op">(</span><span class="dv">1</span><span class="op">)</span></span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">go</span> <span class="kw">func</span><span class="op">(</span>c <span class="op">&lt;-</span><span class="kw">chan</span> <span class="dt">int</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>            <span class="cf">defer</span> wg<span class="op">.</span>Done<span class="op">()</span></span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> v <span class="op">:=</span> <span class="kw">range</span> c <span class="op">{</span> out <span class="op">&lt;-</span> v <span class="op">}</span></span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a>        <span class="op">}(</span>c<span class="op">)</span></span>
+<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">go</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span> wg<span class="op">.</span>Wait<span class="op">();</span> <span class="bu">close</span><span class="op">(</span>out<span class="op">)</span> <span class="op">}()</span></span>
+<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> out</span>
+<span id="cb16-14"><a href="#cb16-14" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>这三种模式都是同一个思想的具体化:用 channel
+把”数据的所有权在哪个阶段”表达成显式的管道结构,而不是让多个 goroutine
+共享一堆状态、靠隐式约定协调——这正是本章第二节 CSP
+哲学在实际工程中的落地形态。</p>
 <h2 id="九data-race-与--race-检测器">九、data race 与 -race 检测器</h2>
 <p><strong>数据竞争(data race)</strong>:两个 goroutine
 并发访问同一内存,至少一个是写,且无同步。行为未定义——可能读到撕裂值、可能崩溃。Go
-不会自动帮你消除竞争(除了 map 会主动崩溃报错)。</p>
+不会自动帮你消除竞争(除了 map 会主动崩溃报错,见<a
+href="07-复合数据结构.html">第07章</a>)。</p>
 <p>Go 内置竞争检测器,编译时加 <code>-race</code>:</p>
-<div class="sourceCode" id="cb18"><pre
-class="sourceCode bash"><code class="sourceCode bash"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> run <span class="at">-race</span> main.go</span>
-<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> test <span class="at">-race</span> ./...</span></code></pre></div>
+<div class="sourceCode" id="cb17"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> run <span class="at">-race</span> main.go</span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> test <span class="at">-race</span> ./...</span></code></pre></div>
 <p>它在运行时插桩每次内存访问,发现无同步的并发读写就打印详细报告(哪两个
 goroutine、哪一行、调用栈)。<strong>性能开销大(慢几倍、内存涨),只在测试/CI
 用,不上生产</strong>。这是 Go
@@ -700,14 +671,17 @@ goroutine,不等它跑完;channel 用
 处理共享状态;<code>context</code> 传取消/超时;worker
 pool、pipeline、fan-in/out 是常见骨架;写并发代码要用 <code>-race</code>
 跑一遍。</li>
-<li><strong>底层层面</strong>:goroutine 是 2KB
-起步、用户态调度的协程,栈可增长/收缩,M:N 多路复用到 OS 线程;GMP
-三元组——G 协程、M 线程、P 上下文(=GOMAXPROCS)——靠本地队列 +
-work-stealing + 抢占 + 系统调用 hand-off 实现调度,网络 I/O 靠 netpoller
-而不阻塞线程;<code>sync.Mutex</code> 是原子 CAS 快路径 +
-运行时挂起/唤醒的慢路径,阻塞的是 goroutine 不是 OS 线程;正确性由
-happens-before 保证,没有同步就不能假设写操作对另一个 goroutine
-可见。</li>
+<li><strong>设计取舍</strong>:goroutine 是 2KB
+起步、用户态调度的协程,便宜到几十万个可行,靠的是”小栈”和”运行时集成调度器”两者共同作用,少一个都不够;GMP
+三元组把”并行度”(P,数量=GOMAXPROCS)和”线程数”(M,可按需超过
+P)解耦,系统调用阻塞时 P 可以转交别的 M,并行度不因单次阻塞下降;网络 I/O
+靠 netpoller 把同步写法转成事件驱动;无缓冲 channel
+的”会合”语义是它定义本身的推论,天然提供
+happens-before;<code>select</code> 多个 case
+就绪时随机选择,是防止程序依赖不该依赖的书写顺序,与 map
+遍历顺序随机化同源;<code>sync.Mutex</code> 阻塞的是 goroutine
+而非线程,与 channel 共用同一套挂起-唤醒机制;正确性由 happens-before
+保证,没有同步就不能假设写操作对另一个 goroutine 可见。</li>
 </ul>
 <hr />
 <p><a href="09-错误处理与资源管理.html">← 上一章:错误处理与资源管理</a>

@@ -99,16 +99,12 @@
 <a href="../go/index.html" style="color:var(--accent-dark);font-weight:700">Go</a>
 <a href="../algo/index.html">算法笔记</a>
 <a href="../architecture/index.html">架构设计</a>
-<a href="../oodlld/index.html">OOD/LLD</a>
-<a class="topnav-lang" href="#" onclick="switchLang();return false;" title="切换语言:中文 / English">🌐 <span class="lp on">中文</span><span class="sep">/</span><span class="lp">EN</span></a></div></div><script>function switchLang(){var p=location.pathname,en=p.indexOf('/en/')>-1,n=en?p.replace('/en/','/zh/'):p.replace('/zh/','/en/');try{localStorage.setItem('lang',en?'zh':'en')}catch(e){}location.href=n;}</script>
+<a href="../oodlld/index.html">OOD/LLD</a></div></div>
 <div class="wrap">
 <nav id="TOC" role="doc-toc">
 <ul>
 <li><a href="#控制流" id="toc-控制流">控制流</a>
 <ul>
-<li><a href="#先会用循环分支defer-速览"
-id="toc-先会用循环分支defer-速览">先会用:循环、分支、defer 速览</a></li>
-<li><a href="#开始深入" id="toc-开始深入">开始深入</a></li>
 <li><a href="#for唯一的循环关键字"
 id="toc-for唯一的循环关键字">for:唯一的循环关键字</a></li>
 <li><a href="#range遍历的语义与拷贝行为"
@@ -120,22 +116,22 @@ id="toc-switch无自动-fallthrough">switch:无自动 fallthrough</a></li>
 <li><a href="#带标签的-break-continue"
 id="toc-带标签的-break-continue">带标签的 break / continue</a></li>
 <li><a href="#goto" id="toc-goto">goto</a></li>
-<li><a href="#defer延迟执行" id="toc-defer延迟执行">⭐
-defer:延迟执行</a></li>
+<li><a href="#defer延迟执行"
+id="toc-defer延迟执行">defer:延迟执行</a></li>
 <li><a href="#小结" id="toc-小结">小结</a></li>
 </ul></li>
 </ul>
 </nav>
 <h1 id="控制流">控制流</h1>
-<p>本章先带你把
-<code>for</code>、<code>if</code>、<code>switch</code>、<code>defer</code>
-这些控制流关键字<strong>怎么写</strong>过一遍——零基础也能看懂,照着写就能跑;然后再进入底层——<code>range</code>、<code>defer</code>
-背后的拷贝语义和求值时机,这是 C/C++
-老手最容易踩坑的地方,也是本章后半段的重点。只想会用,读完第一节就够;想搞懂”为什么这段代码打印的顺序这么怪”,继续往下看。</p>
-<h2 id="先会用循环分支defer-速览">先会用:循环、分支、defer 速览</h2>
 <p>Go 只有一个循环关键字 <code>for</code>,一个分支关键字
 <code>if</code>/<code>switch</code>,外加一个很实用的
-<code>defer</code>。先看一个把它们全用上的小例子:</p>
+<code>defer</code>。C/C++ 里的
+<code>while</code>、<code>do...while</code>、逗号运算符、复杂的
+<code>for(;;)</code> 变体在这里被压缩成唯一一个
+<code>for</code>;<code>switch</code>
+也彻底翻转了默认行为。本章从底层视角讲清楚每个构造在编译后变成了什么,以及
+<code>range</code>、<code>defer</code>
+背后的拷贝语义与求值时机——这两个是 C/C++ 老手最容易踩坑的地方。</p>
 <div class="sourceCode" id="cb1"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="st">&quot;fmt&quot;</span></span>
@@ -179,8 +175,8 @@ defer:延迟执行</a></li>
 2 cherry
 及格
 良好</code></pre>
-<p>再认识
-<code>defer</code>——它把一句调用<strong>推迟到当前函数返回前</strong>才执行,常用来做”用完就关闭/清理”这类收尾工作:</p>
+<p><code>defer</code>
+把一句调用<strong>推迟到当前函数返回前</strong>才执行,常用来做”用完就关闭/清理”这类收尾工作:</p>
 <div class="sourceCode" id="cb3"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="st">&quot;fmt&quot;</span></span>
@@ -198,22 +194,8 @@ defer:延迟执行</a></li>
 <pre><code>开始工作
 工作中...
 工作结束,清理一下</code></pre>
-<p>注意”清理一下”这句虽然写在中间,却是最后打印的——这就是
-<code>defer</code>
-的效果。这些足够你写出正常的循环、分支、收尾逻辑了。下面开始进入底层:Go
-的控制流刻意做得”少而正”,<code>for</code> 吃掉了 C 里
-<code>while</code>/<code>do...while</code>/复杂 <code>for</code>
-变体的所有场景,<code>switch</code> 也彻底翻转了默认行为,而
-<code>range</code>、<code>defer</code>
-的拷贝与求值时机,是本章真正的重点。</p>
-<h2 id="开始深入">开始深入</h2>
-<p>Go 的控制流刻意做得”少而正”。C/C++ 里的
-<code>while</code>、<code>do...while</code>、逗号运算符、复杂的
-<code>for(;;)</code> 变体在这里被压缩成<strong>唯一一个 <code>for</code>
-关键字</strong>;<code>switch</code>
-也彻底翻转了默认行为。本章接下来从底层视角讲清楚每个构造在编译后变成了什么,以及
-<code>range</code>、<code>defer</code> 背后的拷贝语义——这两个是 C/C++
-老手最容易踩坑的地方。</p>
+<p>“清理一下”这句虽然写在中间,却是最后打印的——这就是 <code>defer</code>
+的效果。</p>
 <h2 id="for唯一的循环关键字">for:唯一的循环关键字</h2>
 <p>Go 没有 <code>while</code>,也没有
 <code>do...while</code>。所有循环都用
@@ -246,6 +228,18 @@ defer:延迟执行</a></li>
 <span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a>        count<span class="op">++</span></span>
 <span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
 <span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p><strong>为什么 Go 只保留一个 <code>for</code> 关键字,而不是像 C
+那样并存
+<code>for</code>/<code>while</code>/<code>do...while</code></strong>:三者在语义上完全可以互相表达——<code>while(cond)</code>
+就是省略了初始化和步进的 <code>for</code>,<code>do...while</code>
+就是”先执行一次再判断”的 <code>for</code>。C
+保留三者纯粹是历史积累和书写习惯上的便利,但代价是语言的学习面和阅读面都变宽了:读者看到循环,要先分辨这是哪一种,每种关键字还有各自的边界情况(<code>do...while</code>
+的分号位置、逗号运算符在 <code>for</code> 里的用法)。Go 的极简主义(见<a
+href="01-运行模型.html#八极简主义哲学为什么去掉异常早期泛型类继承">第 1
+章</a>)把这条原则也应用到控制流上:<strong>只提供一个正交、够用的结构,而不是为每种便利写法都发明一个关键字</strong>。用一个关键字的三种形态覆盖所有场景,好处是读者只需要认识
+<code>for</code> 这一件事,坏处是某些场景下写法不如专门的关键字直白(比如
+<code>do...while</code> 要手写
+<code>for { ...; if !cond { break } }</code>),这是”语言表面积”与”表达便利性”之间的取舍。</p>
 <p>三段式里的 <code>i := 0</code> 声明的 <code>i</code>
 <strong>作用域仅限于该 for 语句</strong>(包括循环体),这点和 C99 的
 <code>for(int i...)</code>
@@ -372,10 +366,29 @@ class="sourceCode go"><code class="sourceCode go"><span id="cb15-1"><a href="#cb
 <span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> _<span class="op">,</span> f <span class="op">:=</span> <span class="kw">range</span> funcs <span class="op">{</span></span>
 <span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>    f<span class="op">()</span></span>
 <span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
-<p>Go 1.22
-起,<strong>每轮迭代的循环变量都是一个新实例</strong>(逻辑上每轮重新声明),闭包各自捕获到不同的变量,输出变为
-<code>0 1 2</code>。这解决了历史上最常见的 bug 之一。捕获细节见 <a
-href="06-函数与调用栈.html#闭包捕获的是变量不是值">06-函数与调用栈</a>。</p>
+<p><strong>为什么最初要设计成”整个循环共享一个变量实例”</strong>:这不是疏忽,而是当时看起来合理的选择——它精确对应
+C 的语义(C 的 <code>for (int i...)</code> 里 <code>i</code>
+本来就是同一个变量在被反复修改,从未有”每轮一个新变量”的概念),而且避免了每轮迭代都分配一个新变量的开销,在闭包和
+goroutine 捕获还不像后来那样普遍的年代,这个选择的代价并不明显。</p>
+<p>问题在于 Go 的两个核心特性把这个代价放大了:goroutine 极其廉价(第 6
+章),<code>go func() { ... }()</code>
+在循环体内捕获循环变量是一种极其自然、随处可见的写法;而”捕获的是变量、不是值”这条规则(见<a
+href="06-函数与调用栈.html#闭包捕获的是变量不是值">第 6
+章「闭包捕获的是变量,不是值」</a>)意味着所有闭包共享的正是那个不断被复用、循环结束后定格在最后一个值上的变量。这个组合使得”循环体里启动
+goroutine/闭包但忘记用 <code>i := i</code> 拷贝一份”成为 Go
+生态里被报告次数最多的真实 bug
+之一——不是理论陷阱,而是从新手到资深工程师都反复踩中的实际故障,<code>go vet</code>
+长期为此专门设一条检查规则。</p>
+<p>Go
+团队最终判断,这个语义相对于它制造的麻烦,收益(省一次变量分配)已经不成立(编译器早已能在大多数情况下证明是否真的需要为每轮分配新内存,不逃逸时开销几乎为零),于是在
+<strong>Go 1.22
+把这一条语义本身改掉</strong>:<strong>每轮迭代的循环变量都是一个新实例</strong>(逻辑上每轮重新声明),闭包各自捕获到不同的变量,输出变为
+<code>0 1 2</code>。这类会改变已有程序行为的语言语义变更极少发生(Go
+对向后兼容极为保守),之所以能够落地,是因为 Go modules 的
+<code>go.mod</code> 里声明的语言版本号提供了一个兼容开关:声明
+<code>go 1.21</code> 及更早版本的旧代码继续按旧语义编译,只有显式升级到
+<code>go 1.22+</code>
+的模块才会得到新语义——用这种方式,修复不会静默改变任何现存代码的行为,但新代码从此彻底摆脱这个坑。</p>
 <h2 id="if-带初始化子句">if 带初始化子句</h2>
 <p><code>if</code>
 可以先执行一条简单语句再判断,该语句声明的变量作用域<strong>仅限 if/else
@@ -485,11 +498,11 @@ class="sourceCode go"><code class="sourceCode go"><span id="cb22-1"><a href="#cb
 <span id="cb22-6"><a href="#cb22-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">goto</span> loop <span class="co">// 向后跳</span></span>
 <span id="cb22-7"><a href="#cb22-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span></code></pre></div>
 <p>实务中几乎总有更好的写法(for、defer),<code>goto</code> 很少用。</p>
-<h2 id="defer延迟执行">⭐ defer:延迟执行</h2>
+<h2 id="defer延迟执行">defer:延迟执行</h2>
 <p><code>defer</code>
 把一个函数调用<strong>推迟到当前函数返回前</strong>执行,是 Go
 管理资源(关文件、解锁、释放)的核心机制,替代了 C++ 的
-RAII/析构函数。第一节已经见过它最基本的用法;这里深入它必须抓住的三个底层事实。</p>
+RAII/析构函数。前面已经见过它最基本的用法;这里深入它必须抓住的三个底层事实。</p>
 <h3 id="事实一lifo-顺序">事实一:LIFO 顺序</h3>
 <p>同一函数里多个 defer
 按<strong>后进先出(栈)</strong>执行。运行时把每个 defer 记录压入当前
@@ -507,6 +520,12 @@ class="sourceCode go"><code class="sourceCode go"><span id="cb23-1"><a href="#cb
 <pre><code>注册顺序: defer1 → defer2 → defer3
 链表:  head → [defer3] → [defer2] → [defer1] → nil
 返回时从 head 弹出执行: 3, 2, 1</code></pre>
+<p><strong>为什么是后进先出,而不是先进先出</strong>:这直接对应 C++ RAII
+里析构函数的反向调用顺序,而 RAII
+的反向顺序本身也不是随意选择——资源之间经常存在依赖关系,后申请的资源可能依赖于先申请的资源仍然有效(例如先打开一个文件,再对它加一把锁;或者先建立数据库连接,再在这个连接上开一个事务)。释放时必须先撤销后建立的依赖,再释放更早、被依赖的资源,否则会出现”释放了还在被使用的资源”这类错误。把这个顺序反过来(先进先出)释放,等价于先释放最早、往往是被别的资源依赖的那个,而后建立的资源可能因此失去前提。<code>defer</code>
+的 LIFO
+顺序让”最后申请的最先释放”这个符合直觉的清理顺序,不需要程序员手动排列,写的时候只管在获取资源后立刻写一条对应的
+<code>defer</code> 清理语句,顺序自然正确。</p>
 <h3 id="事实二注册时即求值参数">事实二:注册时即求值参数</h3>
 <p>这是最容易错的点。<code>defer f(x)</code> 在<strong>执行到 defer
 语句那一刻</strong>就把 <code>x</code> 的当前值拷贝进 defer
@@ -519,7 +538,8 @@ class="sourceCode go"><code class="sourceCode go"><span id="cb25-1"><a href="#cb
 <span id="cb25-5"><a href="#cb25-5" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;函数体结束时 i =&quot;</span><span class="op">,</span> i<span class="op">)</span> <span class="co">// 100</span></span>
 <span id="cb25-6"><a href="#cb25-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
 <span id="cb25-7"><a href="#cb25-7" aria-hidden="true" tabindex="-1"></a><span class="co">// 输出:函数体结束时 i = 100 / defer 看到的 i = 0</span></span></code></pre></div>
-<p>延迟的是<strong>调用的执行</strong>,不是参数的<strong>求值</strong>。若想延迟到调用时才读最新值,把逻辑包进闭包(闭包捕获变量,见事实四):</p>
+<p>延迟的是<strong>调用的执行</strong>,不是参数的<strong>求值</strong>。若想延迟到调用时才读最新值,把逻辑包进闭包(闭包捕获变量,见<a
+href="06-函数与调用栈.html#闭包捕获的是变量不是值">第 6 章</a>):</p>
 <div class="sourceCode" id="cb26"><pre
 class="sourceCode go"><code class="sourceCode go"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a><span class="cf">defer</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span> fmt<span class="op">.</span>Println<span class="op">(</span>i<span class="op">)</span> <span class="op">}()</span> <span class="co">// 调用时才读 i,输出 100</span></span></code></pre></div>
 <p>把 LIFO 和”注册时求值”合起来看,循环里的 defer 最直观:</p>
@@ -597,13 +617,15 @@ while/do-while/无限循环);<code>range</code>
 可带初始化子句;<code>switch</code> 默认不贯穿,一个 case
 可写多个值;<code>defer</code>
 一句话推迟到函数返回前执行,常用来关闭资源。</li>
-<li><strong>底层层面</strong>:<code>range</code>
+<li><strong>底层层面</strong>:<code>for</code>
+是唯一的循环关键字,是极简主义在控制流上的体现;<code>range</code>
 迭代变量是<strong>副本</strong>;range 表达式在循环开始前只求值一次(slice
 拷贝表头,数组按是否取值决定拷不拷贝整个数组);字符串 <code>range</code>
 按 rune 解码;Go 1.22
-起循环变量<strong>每轮新实例</strong>,修复了闭包捕获的历史坑;<code>defer</code>
-按 <strong>LIFO</strong>
-执行,参数在<strong>注册时求值</strong>,能通过命名返回值修改最终返回结果。</li>
+起循环变量<strong>每轮新实例</strong>,这是对多年真实 bug 的修复,靠
+<code>go.mod</code> 版本号做兼容开关;<code>defer</code> 按
+<strong>LIFO</strong> 执行(对应 RAII
+反向析构的依赖顺序),参数在<strong>注册时求值</strong>,能通过命名返回值修改最终返回结果。</li>
 </ul>
 <hr />
 <p><a href="04-数据类型.html">← 上一章:数据类型</a> · <a

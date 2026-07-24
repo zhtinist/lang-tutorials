@@ -99,8 +99,7 @@
 <a href="../go/index.html">Go</a>
 <a href="../algo/index.html">算法笔记</a>
 <a href="../architecture/index.html">架构设计</a>
-<a href="../oodlld/index.html">OOD/LLD</a>
-<a class="topnav-lang" href="#" onclick="switchLang();return false;" title="切换语言:中文 / English">🌐 <span class="lp on">中文</span><span class="sep">/</span><span class="lp">EN</span></a></div></div><script>function switchLang(){var p=location.pathname,en=p.indexOf('/en/')>-1,n=en?p.replace('/en/','/zh/'):p.replace('/zh/','/en/');try{localStorage.setItem('lang',en?'zh':'en')}catch(e){}location.href=n;}</script>
+<a href="../oodlld/index.html">OOD/LLD</a></div></div>
 <div class="wrap">
 <nav id="TOC" role="doc-toc">
 <ul>
@@ -121,16 +120,11 @@ id="toc-构建与依赖管理">构建与依赖管理</a></li>
 <p>C/C++ 的依赖管理长期是痛点:手写 Makefile/CMake,头文件 +
 静态/动态库,vcpkg/Conan 才算晚近的统一方案。Java 生态早就靠
 <strong>Maven/Gradle +
-中央仓库</strong>统一了依赖分发。本章讲构建工具、坐标机制,以及主流库的生态定位——重点是”什么场景用什么”,而非教
-API。</p>
-<p>本章和前面几章不太一样:前面讲的是 Java
-语言本身怎么工作,这里讲的是<strong>生态里有哪些现成的工具/框架、各自解决什么问题、什么场景该选谁</strong>。读法建议:每一节先看”这东西是干什么的、代码长什么样”就够用了;后面提到的机制(反射、注解处理器、动态代理、SPI
-等)是”为什么它能这样工作”的解释,不需要预先懂 JVM
-底层也能看懂——遇到不熟的术语,文中第一次出现时都会顺带解释。</p>
+中央仓库</strong>统一了依赖分发。本章讲构建工具、坐标机制,以及主流库各自解决什么具体问题、代价是什么。</p>
 <h2 id="构建与依赖管理">构建与依赖管理</h2>
 <h3 id="坐标与仓库">坐标与仓库</h3>
-<p>最白话地说:你在配置文件里写一行”要用哪个库、哪个版本”,构建工具就自动去仓库把对应的
-jar 包下载下来放进项目——不用你像 C/C++
+<p>在配置文件里写一行”要用哪个库、哪个版本”,构建工具就自动去仓库把对应的
+jar 包下载下来放进项目——不用像 C/C++
 那样自己去官网下源码或预编译库、手动配 include/lib 路径。</p>
 <p>每个库由 <strong>GAV
 坐标</strong>唯一标识:<code>groupId:artifactId:version</code>。类比 C++
@@ -199,15 +193,12 @@ B,构建工具自动拉取 B——无需你显式声明。类比 C++
 </tr>
 </tbody>
 </table>
-<blockquote>
 <p><code>implementation</code> vs
 <code>api</code>(Gradle):<code>implementation</code>
 不把该依赖传递暴露给下游(封装,类比 PIMPL 隐藏实现),<code>api</code>
 会暴露。合理用 <code>implementation</code>
 能减少重编译范围、避免依赖泄漏。</p>
-</blockquote>
 <h2 id="生态定位">生态定位</h2>
-<p>下面按用途分组,记住”选型”即可,API 用时再查。</p>
 <h3 id="通用工具guavaapache-commons">通用工具:Guava、Apache Commons</h3>
 <ul>
 <li><strong>Guava</strong>(Google):<code>Preconditions</code>
@@ -233,13 +224,25 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb5-1"><a href="
 <span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>Person p2 <span class="op">=</span> gson<span class="op">.</span><span class="fu">fromJson</span><span class="op">(</span>j<span class="op">,</span> Person<span class="op">.</span><span class="fu">class</span><span class="op">);</span></span></code></pre></div>
 <p>选型:Spring 项目直接用 Jackson(已集成);独立小工具用 Gson。</p>
 <h3 id="企业框架spring-spring-boot">企业框架:Spring / Spring Boot</h3>
-<p>Java 后端事实标准。核心是 <strong>IoC 容器 + DI +
-AOP</strong>——这三个词听起来抽象,但做的事很朴素:Spring
-在后台维护一个”大工厂”,你的类需要什么就跟工厂”要”(声明出来),不用自己
-<code>new</code>;需要在方法前后插一段公共逻辑(比如开事务、记日志),也不用在每个方法里手写,声明一下就自动加上。下面分别展开。</p>
-<p><strong>IoC(控制反转)/ DI(依赖注入)</strong>:对象不自己
-<code>new</code>
-依赖,而是声明需要什么,由容器创建并注入。类比”不自己管理生命周期,交给一个全局工厂+作用域管理器”。</p>
+<p>Java 后端事实标准。核心是 <strong>IoC 容器 + DI + AOP</strong>。</p>
+<p><strong>依赖注入(DI)解决的具体问题</strong>:一个类要用到另一个类的功能,最直接的写法是在内部直接
+<code>new</code> 出依赖——<code>OrderService</code> 内部写
+<code>new AlipayClient()</code>。这样写的代价在小项目里不明显,随着项目变大会逐渐暴露出来:
+1. <strong>无法替换实现</strong>:测试 <code>OrderService</code>
+时想用一个不真正发起网络请求的假支付客户端(mock),但
+<code>AlipayClient</code> 已经被硬编码在 <code>OrderService</code>
+内部,没有缝隙可以插入替代实现,只能连真实网络调用一起测试(慢、不稳定、可能产生真实费用)。
+2. <strong>依赖关系必须手工穿透</strong>:如果 <code>AlipayClient</code>
+自己又依赖一个 <code>HttpConfig</code>,<code>OrderService</code>
+要正确构造它就得知道这整条链路怎么拼——依赖图稍微深一点,<code>main</code>
+里手工 <code>new</code>
+的代码就会退化成一大段”谁先造、传给谁”的样板代码,而且下游任何一个构造器签名变化,都要求调用链上所有手工拼装的地方跟着改。
+3. <strong>生命周期和作用域管理</strong>:同一个
+<code>AlipayClient</code>
+实例该在整个应用里只有一份(单例),还是每个请求一份,手工 <code>new</code>
+没有一个统一的地方决定和记录这件事,容易出现”该复用的没复用、该隔离的没隔离”。</p>
+<p>DI
+容器做的事情很朴素:把”由谁创建对象、创建的顺序、创建几份、什么时候销毁”这套记账工作从业务代码里搬到容器里集中管理,业务类只<strong>声明</strong>自己需要什么类型的依赖(通常通过构造器参数),不关心这个依赖具体是哪个实现、怎么造出来的:</p>
 <div class="sourceCode" id="cb6"><pre
 class="sourceCode java"><code class="sourceCode java"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="at">@Service</span>                              <span class="co">// 声明为容器管理的 Bean</span></span>
 <span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> OrderService <span class="op">{</span></span>
@@ -247,8 +250,14 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb6-1"><a href="
 <span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 构造器注入:容器启动时找到 PayClient 类型的 Bean 传进来</span></span>
 <span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="fu">OrderService</span><span class="op">(</span>PayClient payClient<span class="op">)</span> <span class="op">{</span> <span class="kw">this</span><span class="op">.</span><span class="fu">payClient</span> <span class="op">=</span> payClient<span class="op">;</span> <span class="op">}</span></span>
 <span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
-<p>容器在启动时扫描注解、实例化
-Bean、解析依赖图、按序注入(解决依赖顺序、单例复用、循环依赖检测)。</p>
+<p>这样做换来的直接好处对应上面三条代价:测试时把同一个构造器传入一个手写或
+Mockito 生成的假 <code>PayClient</code> 即可,<code>OrderService</code>
+的代码不用改一行;依赖链无论多深,都由容器在启动时统一扫描、解析、按序注入(包括发现循环依赖并报错),业务代码永远只面对”我需要一个
+X”这一层;单例还是多例、何时初始化/销毁,由容器按配置统一管理,不再散落在各处手写的
+<code>new</code>
+里。<strong>为什么这件事值得一个框架来做,而不是自己写一个工厂函数</strong>:一旦手写的工厂要支持”按接口找实现”“处理构造顺序”“检测循环依赖”“区分单例和多例作用域”“按环境/开关切换实现”这些需求,写出来的东西本质上就是一个功能残缺的自制
+DI
+容器——与其重新发明并且需要自己维护这一整套机制,不如用经过大量项目验证、功能完整的现成容器。</p>
 <p><strong>AOP(面向切面)</strong>:把横切关注点(事务、日志、权限)从业务代码里抽出,声明式织入。</p>
 <div class="sourceCode" id="cb7"><pre
 class="sourceCode java"><code class="sourceCode java"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="at">@Transactional</span>                        <span class="co">// 方法自动包裹事务:开始-&gt;执行-&gt;提交/回滚</span></span>
@@ -276,8 +285,35 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb8-1"><a href="
 <span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">@Column</span><span class="op">(</span>nullable <span class="op">=</span> <span class="kw">false</span><span class="op">)</span> <span class="bu">String</span> name<span class="op">;</span></span>
 <span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
 <span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a><span class="co">// 用 EntityManager/Repository 操作对象,框架翻译成 SQL</span></span></code></pre></div>
-<p>把关系表映射为对象,自动生成 SQL、管理会话与缓存。省去手写 JDBC
-样板,但要警惕 N+1 查询、懒加载陷阱等。</p>
+<p><strong>ORM
+解决的具体问题是”对象模型”和”关系模型”之间的阻抗不匹配(impedance
+mismatch)</strong>:对象世界里数据以带继承、关联、集合字段的图结构存在(一个
+<code>User</code> 引用一组 <code>Order</code>,<code>Order</code> 又引用
+<code>Product</code>);关系数据库里数据是按外键关联的扁平表。手写 JDBC
+直接在这两种模型之间转换,意味着每一次查询都要重复写四类样板:拼接 SQL
+字符串(拼错字段名/表名编译期不会报错,只有运行时才暴露)、把
+<code>ResultSet</code>
+逐列取出再手工塞进对象字段、维护连接和事务的开关与异常处理、以及在有字符串拼接时必须自己防住
+SQL
+注入。这些工作对每一张表、每一个查询都要重复一遍,而且大多是机械的字段搬运,不是业务逻辑。</p>
+<p>Hibernate/JPA
+把这套机械转换自动化:类上标注和表的映射关系(<code>@Entity</code>/<code>@Id</code>/<code>@Column</code>),运行时通过反射读写字段,自动生成参数化
+SQL、把结果集自动转回对象。它还顺带做了两件手写 JDBC
+不会自动做的事:<strong>脏检查</strong>(dirty
+checking)——<code>EntityManager</code>
+记住实体从数据库读出时的原始状态,提交事务时自动比较,只对真正被修改过的字段生成
+<code>UPDATE</code>,不需要手工判断”这次到底改了哪些列”;以及<strong>会话级缓存</strong>——同一个事务/会话内重复按
+ID 查询同一个实体,不会重复打到数据库。这些能力如果手写 JDBC
+要重新实现,本质上也是在造一个简化版的 ORM。</p>
+<p>代价同样是真实的,不该被回避:自动生成的 SQL
+不透明,复杂查询容易在无意中触发 <strong>N+1
+查询</strong>(查一个列表再逐条访问每个元素的关联字段,关联若是懒加载,就变成
+1 次列表查询 + N 次关联查询,而不是一次
+JOIN);懒加载对象离开会话后再访问未加载字段会抛
+<code>LazyInitializationException</code>;以及对象-关系映射本身在处理继承层次、复杂多对多关系时并不总是直观。选择
+ORM
+本质上是拿”开发效率、减少样板”换”执行细节的可控性”,复杂报表类查询很多团队仍然选择直接写
+SQL 或用更轻量的 SQL 映射工具(如 MyBatis)。</p>
 <h3 id="测试junit5-mockito">测试:JUnit5 + Mockito</h3>
 <div class="sourceCode" id="cb9"><pre
 class="sourceCode java"><code class="sourceCode java"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="co">// JUnit5:单元测试框架</span></span>
@@ -297,6 +333,13 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb9-1"><a href="
 <span id="cb9-15"><a href="#cb9-15" aria-hidden="true" tabindex="-1"></a>UserService svc <span class="op">=</span> <span class="kw">new</span> <span class="fu">UserService</span><span class="op">(</span>repo<span class="op">);</span></span>
 <span id="cb9-16"><a href="#cb9-16" aria-hidden="true" tabindex="-1"></a>svc<span class="op">.</span><span class="fu">load</span><span class="op">(</span><span class="dv">1L</span><span class="op">);</span></span>
 <span id="cb9-17"><a href="#cb9-17" aria-hidden="true" tabindex="-1"></a><span class="fu">verify</span><span class="op">(</span>repo<span class="op">).</span><span class="fu">findById</span><span class="op">(</span><span class="dv">1L</span><span class="op">);</span>                        <span class="co">// 验证交互发生</span></span></code></pre></div>
+<p>Mockito 能够”隔离被测单元”这件事,前提正是上面 DI
+一节说的构造器注入——<code>UserService</code>
+的依赖通过构造参数声明而非内部
+<code>new</code>,测试代码才有缝隙塞入一个假的 <code>UserRepo</code>;如果
+<code>UserService</code> 内部自己 <code>new</code> 出真实的
+<code>UserRepo</code>,单元测试就无法避免连带测试数据库访问,这也是 DI
+在”可测试性”这一具体收益上的体现。</p>
 <h3 id="编译期增强lombok">编译期增强:Lombok</h3>
 <p>用注解在<strong>编译期生成字节码</strong>,消除
 getter/setter/构造器/<code>toString</code> 等样板代码。</p>
@@ -322,13 +365,11 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb11-1"><a href=
 <span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>log<span class="op">.</span><span class="fu">info</span><span class="op">(</span><span class="st">&quot;user {} logged in&quot;</span><span class="op">,</span> userId<span class="op">);</span>   <span class="co">// 占位符 {} 惰性拼接,级别不够时不构造字符串,省开销</span></span>
 <span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>log<span class="op">.</span><span class="fu">error</span><span class="op">(</span><span class="st">&quot;failed&quot;</span><span class="op">,</span> exception<span class="op">);</span></span></code></pre></div>
 <p>配置文件(<code>logback.xml</code>)控制级别、输出格式、滚动策略,无需改代码。</p>
-<blockquote>
 <p>“门面依赖接口、运行期绑定实现”的底层机制,就是 JDK 自带的
 <strong>SPI(Service Provider
 Interface)</strong>:<code>java.util.ServiceLoader</code>。SLF4J
 正是靠它在运行期发现并绑定 <code>Logback</code> 等实现。下面用纯 JDK
 演示这套机制——<strong>无需任何第三方库</strong>。</p>
-</blockquote>
 <p>调用方只依赖接口 <code>Greeter</code>,实现类通过
 <code>META-INF/services/</code> 下的配置文件注册,运行期由
 <code>ServiceLoader</code> 发现,<code>new</code>/<code>import</code>
@@ -368,7 +409,7 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb12-1"><a href=
 spi.EnglishGreeter
 spi.FrenchGreeter</code></pre>
 <p>编译运行(<code>out</code> 目录同时含 class 与
-<code>META-INF/services/</code>):</p>
+<code>META-INF/services</code>):</p>
 <div class="sourceCode" id="cb14"><pre
 class="sourceCode bash"><code class="sourceCode bash"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="ex">javac</span> <span class="at">-d</span> out spi/<span class="pp">*</span>.java</span>
 <span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="ex">java</span> <span class="at">-cp</span> out spi.Main</span>
@@ -382,6 +423,10 @@ class="sourceCode bash"><code class="sourceCode bash"><span id="cb14-1"><a href=
 <p>异步事件驱动的网络框架,基于 Java NIO(多路复用 epoll/kqueue),用
 <strong>Reactor 模式</strong> + 少量线程处理海量连接。RPC
 框架(gRPC-Java、Dubbo)、消息中间件底层多用它。</p>
+<p>Netty 要解决的问题和虚拟线程(见<a
+href="10-并发模型.html">「并发模型」</a>)其实是同一个根源——“一个网络连接占一个线程”在连接数上万时会在线程栈内存和上下文切换上撑不住——但给出的是另一条路线:虚拟线程让阻塞式代码在运行时被透明地卸载/挂载;Netty
+则是从编程模型上直接不让线程阻塊在单个连接上,而是用少量线程通过操作系统的多路复用机制(epoll/kqueue,一次系统调用查询一大批连接里谁就绪了)轮询海量连接,就绪的连接才被处理,处理本身也不阻塞。两条路线本质上都是”用少量执行单元覆盖大量等待中的连接”,区别在于虚拟线程保留同步编程风格,Netty
+是显式的事件驱动回调风格。</p>
 <ul>
 <li><strong>EventLoop</strong>:一个线程绑一个 selector,轮询多路 channel
 事件——类比 C 里手写 epoll 事件循环,但封装成 pipeline。</li>
@@ -408,11 +453,9 @@ jar,<code>java -jar app.jar</code> 直接跑。Spring Boot 用
 class="sourceCode bash"><code class="sourceCode bash"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="ex">mvn</span> package                       <span class="co"># 产出 target/app.jar</span></span>
 <span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="ex">java</span> <span class="at">-jar</span> target/app.jar          <span class="co"># fat-jar 直接运行</span></span>
 <span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a><span class="ex">java</span> <span class="at">-cp</span> <span class="st">&quot;app.jar:libs/*&quot;</span> Main    <span class="co"># 普通 jar 需指定 classpath</span></span></code></pre></div>
-<blockquote>
 <p>fat-jar 里多个依赖含同名资源(如各自的
 <code>META-INF/services</code>)会冲突,shade 插件的 transformer
 负责合并。</p>
-</blockquote>
 <h2 id="jni调用-c-的代价">JNI:调用 C 的代价</h2>
 <p>Java 代码本身跑在 JVM
 这个受管环境里(自动垃圾回收、内存安全),没法直接调用编译好的 C
@@ -434,11 +477,9 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb16-1"><a href=
 JVM</strong>,失去 JVM 的内存安全保障。 -
 <strong>可移植性</strong>:需为每个平台编译本地库,破坏 Java
 “一次编写到处运行”。</p>
-<blockquote>
 <p>JDK 正推 <strong>FFM API(Foreign Function &amp; Memory,JEP 454,JDK22
 正式)</strong> 作为 JNI 的现代替代,纯 Java 声明本地调用与堆外内存,无需写
 C 胶水代码,开销更低、更安全。新项目优先考虑它。</p>
-</blockquote>
 <p>依赖注入与代理背后的反射机制,可结合 <a
 href="08-面向对象与类型系统.html">08-面向对象与类型系统</a>
 的类型信息;fat-jar 的类加载与运行模型见 <a
@@ -452,13 +493,20 @@ Jackson(生态齐全)或 Gson(轻量);Spring 靠注解声明 Bean
 隔离依赖;Lombok 用注解省样板;日志面向 SLF4J 接口写,配置文件换实现;打包成
 fat-jar 一条命令直接跑;JNI/FFM
 仅在必须复用本地库或榨取极限性能时才用。</li>
-<li><strong>原理层面(为什么能这样工作)</strong>:Jackson/Spring DI
-靠<strong>反射</strong>在运行期读写字段、发现类型;Spring AOP
-靠<strong>动态代理</strong>(JDK <code>Proxy</code> 或 CGLIB
-子类)在方法调用外包一层;Lombok 是<strong>注解处理器</strong>,在编译期改
+<li><strong>原理层面(为什么这么设计、解决了什么问题)</strong>:DI
+容器把”对象怎么创建、创建几份、依赖顺序怎么解”从业务代码里搬出来集中管理,直接换来的是可测试性(注入
+mock
+替换真实依赖)和依赖图变化时不必到处手改构造代码,手写等价功能本质是在重新发明一个残缺的容器;Spring
+AOP 靠<strong>动态代理</strong>(JDK <code>Proxy</code> 或 CGLIB
+子类)在方法调用外包一层,和 DI
+一样靠<strong>反射</strong>在运行期读写字段、发现类型;ORM
+解决对象图与关系表之间的阻抗不匹配,自动生成 SQL
+并做脏检查、会话缓存,代价是生成 SQL 不透明、容易踩 N+1
+查询和懒加载陷阱;Lombok 是<strong>注解处理器</strong>,在编译期改
 AST,零运行开销;SLF4J 门面与 JDBC 驱动的可插拔机制,底层都是 JDK 原生的
-<strong>SPI/<code>ServiceLoader</code></strong>;fat-jar 只是把多个 jar
-的 class 与资源合并进一个包,类加载模型不变;JNI
+<strong>SPI/<code>ServiceLoader</code></strong>;Netty
+与虚拟线程解决的是同一类”连接/请求数远超线程数上限”的问题,分别用事件驱动和用户态调度两条路线应对;fat-jar
+只是把多个 jar 的 class 与资源合并进一个包,类加载模型不变;JNI
 的代价来自跨越”受管堆”与”裸内存”边界时的参数封送与 GC 交互。</li>
 </ul>
 <hr />

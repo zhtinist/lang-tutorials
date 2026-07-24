@@ -99,32 +99,28 @@
 <a href="../go/index.html">Go</a>
 <a href="../algo/index.html">算法笔记</a>
 <a href="../architecture/index.html">架构设计</a>
-<a href="../oodlld/index.html">OOD/LLD</a>
-<a class="topnav-lang" href="#" onclick="switchLang();return false;" title="切换语言:中文 / English">🌐 <span class="lp on">中文</span><span class="sep">/</span><span class="lp">EN</span></a></div></div><script>function switchLang(){var p=location.pathname,en=p.indexOf('/en/')>-1,n=en?p.replace('/en/','/zh/'):p.replace('/zh/','/en/');try{localStorage.setItem('lang',en?'zh':'en')}catch(e){}location.href=n;}</script>
+<a href="../oodlld/index.html">OOD/LLD</a></div></div>
 <div class="wrap">
 <nav id="TOC" role="doc-toc">
 <ul>
 <li><a href="#函数与调用栈方法与参数传递的真相"
 id="toc-函数与调用栈方法与参数传递的真相">函数与调用栈:方法与参数传递的真相</a>
 <ul>
-<li><a href="#先会用方法怎么定义怎么调用"
-id="toc-先会用方法怎么定义怎么调用">先会用:方法怎么定义、怎么调用</a></li>
-<li><a href="#开始深入调用栈与参数传递的真相"
-id="toc-开始深入调用栈与参数传递的真相">开始深入:调用栈与参数传递的真相</a></li>
-<li><a href="#方法定义与重载"
-id="toc-方法定义与重载">方法定义与重载</a></li>
-<li><a href="#java-只有值传递反复强调"
-id="toc-java-只有值传递反复强调">Java 只有值传递(反复强调)</a></li>
-<li><a href="#栈帧结构" id="toc-栈帧结构">栈帧结构</a></li>
-<li><a href="#方法分派静态绑定-vs-动态绑定"
-id="toc-方法分派静态绑定-vs-动态绑定">方法分派:静态绑定 vs
+<li><a href="#一方法定义与重载"
+id="toc-一方法定义与重载">一、方法定义与重载</a></li>
+<li><a href="#二java-只有值传递" id="toc-二java-只有值传递">二、Java
+只有值传递</a></li>
+<li><a href="#三栈帧结构" id="toc-三栈帧结构">三、栈帧结构</a></li>
+<li><a href="#四方法分派静态绑定-vs-动态绑定"
+id="toc-四方法分派静态绑定-vs-动态绑定">四、方法分派:静态绑定 vs
 动态绑定</a></li>
-<li><a href="#递归与-stackoverflowerror"
-id="toc-递归与-stackoverflowerror">递归与 StackOverflowError</a></li>
-<li><a href="#可变参数varargs"
-id="toc-可变参数varargs">可变参数(varargs)</a></li>
-<li><a href="#lambda-与方法引用invokedynamic-的舞台"
-id="toc-lambda-与方法引用invokedynamic-的舞台">lambda
+<li><a href="#五递归与-stackoverflowerror"
+id="toc-五递归与-stackoverflowerror">五、递归与
+StackOverflowError</a></li>
+<li><a href="#六可变参数varargs"
+id="toc-六可变参数varargs">六、可变参数(varargs)</a></li>
+<li><a href="#七lambda-与方法引用invokedynamic-的舞台"
+id="toc-七lambda-与方法引用invokedynamic-的舞台">七、lambda
 与方法引用:invokedynamic 的舞台</a></li>
 <li><a href="#小结" id="toc-小结">小结</a></li>
 </ul></li>
@@ -132,13 +128,10 @@ id="toc-lambda-与方法引用invokedynamic-的舞台">lambda
 </nav>
 <h1
 id="函数与调用栈方法与参数传递的真相">函数与调用栈:方法与参数传递的真相</h1>
-<p>本章先讲最基础的事:Java
-里方法怎么定义、怎么调用——这部分和你写过的任何语言差不多,几行代码就能上手。然后再进入本章真正的主题:在
-C++
+<p>在 C++
 里你有全局函数、成员函数、静态成员函数、函数指针、引用参数、<code>std::move</code>……Java
-把这一切收窄成一个概念:<strong>方法(method)</strong>,方法永远属于某个类,没有游离于类之外的函数。但收窄不代表简单——方法调用背后的<strong>栈帧布局</strong>、<strong>分派机制</strong>和<strong>只有值传递</strong>这条铁律,才是本章要拆开的底层真相。只想会写方法,读完「先会用」就够;想搞懂”传对象进方法,改的到底是谁”这类问题,请把全篇读完。</p>
-<hr />
-<h2 id="先会用方法怎么定义怎么调用">先会用:方法怎么定义、怎么调用</h2>
+把这一切收窄成一个概念:<strong>方法(method)</strong>,方法永远属于某个类,没有游离于类之外的函数。但收窄不代表简单——方法调用背后的<strong>栈帧布局</strong>、<strong>分派机制</strong>和<strong>只有值传递</strong>这条铁律,才是本章要拆开的底层真相。</p>
+<h2 id="一方法定义与重载">一、方法定义与重载</h2>
 <p>Java 的方法必须写在某个类里面,由
 <code>返回类型 方法名(参数列表) { 方法体 }</code> 组成:</p>
 <div class="sourceCode" id="cb1"><pre
@@ -167,13 +160,6 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb1-1"><a href="
 <code>对象.方法名(...)</code> 调用,这在<a
 href="08-面向对象与类型系统.html">「面向对象与类型系统」</a>详细展开。</li>
 </ul>
-<p>这些足够你写出正常的方法了。下面进入 Java
-方法调用背后的真相:重载怎么决议、参数到底是怎么传的、调用栈长什么样。</p>
-<hr />
-<h2
-id="开始深入调用栈与参数传递的真相">开始深入:调用栈与参数传递的真相</h2>
-<h2 id="方法定义与重载">方法定义与重载</h2>
-<h3 id="怎么用">怎么用</h3>
 <p>一个类里可以有多个<strong>同名但参数列表不同</strong>的方法,这叫<strong>重载(overload)</strong>,调用时编译器按实参类型自动选中对应的一个:</p>
 <div class="sourceCode" id="cb2"><pre
 class="sourceCode java"><code class="sourceCode java"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Greeter <span class="op">{</span></span>
@@ -185,7 +171,6 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb2-1"><a href="
 <span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>        <span class="fu">say</span><span class="op">(</span><span class="dv">3</span><span class="op">);</span>       <span class="co">// repeat 3 times   -- 选中 say(int)</span></span>
 <span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
 <span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
-<h3 id="底层与-c-对比">底层与 C 对比</h3>
 <p>方法签名 = 方法名 + 参数类型列表(<strong>不含返回类型</strong>,这点和
 C++
 一致)。重载(overload)在<strong>编译期</strong>根据实参的静态类型选定目标,与
@@ -225,7 +210,7 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb4-1"><a href="
 <code>f(x)</code> 仍选中
 <code>f(Object)</code>——因为重载在<strong>编译期</strong>按变量的<strong>声明类型</strong>定死,运行期实际类型不参与。这恰好和重写(override,按运行期实际类型走
 vtable)相反:一个看静态类型编译期定,一个看动态类型运行期定。</p>
-<h2 id="java-只有值传递反复强调">Java 只有值传递(反复强调)</h2>
+<h2 id="二java-只有值传递">二、Java 只有值传递</h2>
 <p>C++ 里你可以显式区分值传递、指针传递、引用传递。Java
 只有一种:<strong>值传递(pass-by-value)</strong>。争议全部来自”引用类型传的是什么值”。</p>
 <p>答案:<strong>传的是引用值(reference,可理解为对象地址)的一份副本</strong>。不是对象本身,也不是
@@ -236,6 +221,20 @@ C++ 意义上的”引用别名”。</p>
 位默认开启指针压缩,通常是 4 字节的 oop)。</li>
 </ul>
 <p>副本和原变量指向<strong>同一个堆对象</strong>,所以你能改对象内容;但重新赋值副本,原变量纹丝不动。</p>
+<p><strong>为什么 Java 只留值传递这一种机制,而不像 C++
+一样再提供引用参数/指针参数</strong>:这是”参数传递规则单一、可预测”与”调用点表达力”之间的取舍。C++
+里同一个函数签名 <code>void f(T x)</code> /
+<code>void f(T&amp; x)</code> / <code>void f(T* x)</code>
+传递语义完全不同,读调用点 <code>f(a)</code>
+时,若不看函数声明根本无法判断 <code>a</code> 会不会被就地修改——这是 C++
+里一个常见的可读性负担,需要靠命名约定或文档弥补。Java
+的设计是:参数传递永远只有一条规则——拷贝调用方变量里的比特,这条规则对基本类型和引用类型一视同仁,与<a
+href="03-变量与内存模型.html">「变量与内存模型」</a>里
+<code>a = b</code>
+的赋值规则完全统一,不需要为参数传递单独学一套语义。代价是牺牲了”就地修改调用方那个引用本身”的能力(即前面
+<code>swap</code>
+例子里证明的、无法真正交换两个引用),想要这种效果只能换一种表达方式:通过共享对象的字段/数组承载可变状态,或返回新值。这与”Java
+没有指针算术、没有默认参数”背后是同一种设计哲学:用更少但完全一致的规则,换取任何调用点都无需查看签名细节就能推断参数传递的实际效果。</p>
 <h3 id="swap-反例证明改不了调用方的指向">swap
 反例:证明改不了调用方的指向</h3>
 <div class="sourceCode" id="cb5"><pre
@@ -313,7 +312,7 @@ C++ 的 <code>Box*&amp;</code> 或 <code>Box&amp;</code>。</p>
 </tr>
 </tbody>
 </table>
-<h2 id="栈帧结构">栈帧结构</h2>
+<h2 id="三栈帧结构">三、栈帧结构</h2>
 <p>每次方法调用,JVM 在当前线程的<strong>Java
 虚拟机栈</strong>上压入一个<strong>栈帧(frame)</strong>。这与 C++
 的调用栈概念一致,但结构是 JVM 规范明确规定的:</p>
@@ -357,7 +356,8 @@ static int add(int, int);
 <p>返回值通过操作数栈传递:被调方 <code>ireturn</code> 弹出栈顶,JVM
 将其压入调用方栈帧的操作数栈。参数传递则相反:调用方把实参压在自己操作数栈上,<code>invoke*</code>
 指令消费它们并填入新帧的局部变量表低位 slot。</p>
-<h2 id="方法分派静态绑定-vs-动态绑定">方法分派:静态绑定 vs 动态绑定</h2>
+<h2 id="四方法分派静态绑定-vs-动态绑定">四、方法分派:静态绑定 vs
+动态绑定</h2>
 <p>C++ 里非虚函数是静态绑定,虚函数走 vtable。Java
 的对应关系更规整,由<strong>四条字节码指令</strong>体现:</p>
 <table>
@@ -432,8 +432,14 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb11-1"><a href=
 <p><code>invokeinterface</code> 稍慢:接口方法在实现类里的 vtable
 索引不固定,需查 itable(interface method table)或做搜索,JIT
 会用内联缓存(inline cache)优化。</p>
-<h2 id="递归与-stackoverflowerror">递归与 StackOverflowError</h2>
-<h3 id="怎么用-1">怎么用</h3>
+<p><strong>为什么重载走编译期静态分派、重写走运行期动态分派,而不是统一成一种机制</strong>:这是因为两者解决的是完全不同层次的问题,统一成一种反而会两头不讨好。重载(overload)解决的是”同一个方法名在不同参数类型下该执行哪段代码”——这个问题的答案只依赖<strong>调用点能看到的信息</strong>(实参的静态类型),在编译期就有充分数据可以决定,没有理由拖到运行期,编译期决议还带来一个直接好处:调用开销更低(<code>invokestatic</code>/<code>invokespecial</code>
+无需查表)、且行为在编译时就完全确定,不会因为运行时对象的实际类型不同而跳到”意料之外”的重载版本(参见前面
+<code>f(x)</code> 恒选 <code>f(Object)</code>
+的例子)。重写(override)解决的是完全不同的问题——“同一段调用代码,面对运行期可能变化的具体子类实现,该调用哪个版本”,这个问题的本质是多态:调用方写代码时往往只知道声明类型(如
+<code>Animal</code>),真正的目标方法必须等到运行期才能知道对象的实际类型(<code>Dog</code>),因此必须用
+<code>invokevirtual</code> 查 vtable
+动态决定。把这两种问题混为一谈——比如让重载也按运行期类型决议——会让”调用哪个重载”这种本该编译期就能确定、廉价的操作,变成每次调用都要运行期查询实参真实类型的开销,且让静态类型检查这道编译期安全网失去意义。分开设计,才能让”参数类型选哪个方法体”和”哪个子类实现被执行”各自用最省成本的方式解决。</p>
+<h2 id="五递归与-stackoverflowerror">五、递归与 StackOverflowError</h2>
 <p>递归方法就是方法体里调用自己,和 C 里写法完全一样:</p>
 <div class="sourceCode" id="cb12"><pre
 class="sourceCode java"><code class="sourceCode java"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Factorial <span class="op">{</span></span>
@@ -445,7 +451,6 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb12-1"><a href=
 <span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="fu">fact</span><span class="op">(</span><span class="dv">5</span><span class="op">));</span>   <span class="co">// 120</span></span>
 <span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
 <span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
-<h3 id="底层与-c-对比-1">底层与 C 对比</h3>
 <p>每层递归压一个栈帧。Java 栈容量由 <code>-Xss</code> 决定(默认约
 512KB~1MB,平台相关)。栈耗尽抛 <code>StackOverflowError</code>(注意是
 <code>Error</code> 不是 <code>Exception</code>,见<a
@@ -465,8 +470,7 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb13-1"><a href=
 <span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>深递归应改写为迭代 + 显式 <code>Deque</code>
 模拟栈,把帧数据从线程栈搬到堆上。</p>
-<h2 id="可变参数varargs">可变参数(varargs)</h2>
-<h3 id="怎么用-2">怎么用</h3>
+<h2 id="六可变参数varargs">六、可变参数(varargs)</h2>
 <p>参数类型后面加 <code>...</code>,调用时可以传任意个数的实参(包括 0
 个),方法内部当数组用:</p>
 <div class="sourceCode" id="cb14"><pre
@@ -481,14 +485,12 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb14-1"><a href=
 <span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="fu">sum</span><span class="op">(</span>arr<span class="op">));</span>     <span class="co">// 直接传数组,不再包一层</span></span>
 <span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
 <span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
-<h3 id="底层与-c-对比-2">底层与 C 对比</h3>
 <p><code>T...</code> 在字节码里就是
 <code>T[]</code>。编译器在调用点自动把散列实参打包成一个<strong>堆上的数组</strong>——所以每次调用都可能有一次数组分配。重载
 + varargs 时,固定参数版本优先于 varargs 版本(varargs
 是决议的最后一档)。</p>
-<h2 id="lambda-与方法引用invokedynamic-的舞台">lambda
+<h2 id="七lambda-与方法引用invokedynamic-的舞台">七、lambda
 与方法引用:invokedynamic 的舞台</h2>
-<h3 id="怎么用-3">怎么用</h3>
 <p>lambda 是”没有名字的方法体”,写法是
 <code>(参数) -&gt; 表达式或代码块</code>,常用来当作一个”可传递的行为”传给别的方法:</p>
 <div class="sourceCode" id="cb15"><pre
@@ -502,7 +504,6 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb15-1"><a href=
 <p>方法引用是 lambda 的简写,<code>类::方法名</code>
 直接把一个已有方法当作行为传递,比如
 <code>System.out::println</code>。</p>
-<h3 id="底层与-c-对比-3">底层与 C 对比</h3>
 <p>C++ 的 lambda 在编译期生成一个匿名闭包类(带
 <code>operator()</code>)。Java <strong>没有</strong>在编译期为每个
 lambda 生成 <code>.class</code>,而是用 <code>invokedynamic</code>
@@ -563,20 +564,15 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb17-1"><a href=
 <hr />
 <h2 id="小结">小结</h2>
 <ul>
-<li><strong>用法层面</strong>:方法写在类里,<code>返回类型 方法名(参数) { ... }</code>
-定义、<code>方法名(实参)</code>
-调用;同名不同参数列表可以重载,编译器按实参类型自动选;递归就是方法调自己;可变参数
-<code>T...</code> 当数组用;lambda 用 <code>(参数) -&gt; 表达式</code>
-写一段可传递的行为。</li>
-<li><strong>底层层面</strong>:方法属于类;传参永远是值传递(引用类型传引用值的副本);重载在编译期按静态类型决议,与运行期按动态类型走
-vtable 的重写是两回事;栈帧由局部变量表 + 操作数栈 +
+<li>方法永远属于某个类,没有游离的自由函数;传参永远是值传递——引用类型传的是引用值的副本,这条统一规则换来的是任何调用点都无需查看签名就能判断传参效果,代价是无法就地修改调用方的引用本身。</li>
+<li>重载在编译期按<strong>静态类型</strong>决议,重写在运行期按<strong>动态类型</strong>走
+vtable——两者解决的是不同层次的问题(前者是”选哪段代码”,后者是”多态调用哪个实现”),混为一谈会让本可编译期定死的开销拖到运行期。</li>
+<li>栈帧由局部变量表 + 操作数栈 +
 帧数据构成;<code>invokestatic/special</code>
 静态绑定,<code>invokevirtual/interface</code> 走 vtable/itable
-动态分派,<code>invokedynamic</code> 承载 lambda 的运行期生成;JVM
-不做尾调用优化,深递归会 <code>StackOverflowError</code>。</li>
+动态分派,<code>invokedynamic</code> 承载 lambda 的运行期生成。</li>
+<li>JVM 不做尾调用优化,深递归会 <code>StackOverflowError</code>。</li>
 </ul>
-<p>下一章我们把镜头转向异常与内存回收——当栈帧因异常提前展开、当堆对象无人引用时,JVM
-如何收场。</p>
 <hr />
 <p><a href="05-控制流.html">← 上一章:控制流</a> · <a
 href="index.html">返回目录</a> · <a

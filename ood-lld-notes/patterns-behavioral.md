@@ -34,6 +34,31 @@
 - 计费规则、推荐策略、压缩算法、限流算法
 - 想符合 OCP：加新算法不改上下文类
 
+### 不用Strategy会怎样
+
+```python
+class ParkingLotBad:
+    def __init__(self, fee_kind: str) -> None:
+        self._fee_kind = fee_kind
+
+    def quote(self, hours: int) -> float:
+        if self._fee_kind == "hourly":
+            return hours * 5
+        elif self._fee_kind == "daily":
+            return -(-hours // 24) * 40
+        raise ValueError(self._fee_kind)
+
+    def refund_quote(self, hours: int) -> float:
+        # 退款要用同一套计费公式，于是把上面的 if-elif 复制了一遍
+        if self._fee_kind == "hourly":
+            return hours * 5 * 0.5
+        elif self._fee_kind == "daily":
+            return -(-hours // 24) * 40 * 0.5
+        raise ValueError(self._fee_kind)
+```
+
+`quote()` 和 `refund_quote()` 各自复制了一份"按小时/按天"的计费判断。产品新增一种"月租价"时，要同时改这两个方法里的 `if-elif`，一旦漏改一处（比如只改了 `quote` 忘了改 `refund_quote`），退款金额和实际收费金额的计算规则就会悄悄对不上，而这种不一致只有在用户申请退款时才会暴露。
+
 ### 结构
 
 ```
@@ -109,6 +134,20 @@ class ParkingLot:
 - 库存变更通知 UI / 邮件 / 指标
 - 解耦「事件源」与「反应方」
 
+### 不用Observer会怎样
+
+```python
+class OrderServiceBad:
+    def place(self, order_id: str) -> None:
+        print(f"创建订单 {order_id}")  # 订单已经创建成功
+        email_service.send(order_id)
+        metrics_service.record("order_placed")
+        sms_service.send(order_id)  # 假设短信服务网络超时，这里抛出异常
+        print("这行代码不会被执行到")
+```
+
+发邮件、发短信、记指标这些"附加动作"和"创建订单"这个核心业务逻辑写在同一个方法里。如果短信服务网络超时抛出异常，整个 `place()` 方法会跟着中断退出——用户的订单其实已经创建成功，调用方却因为发短信失败而收到"下单失败"的报错。而且以后每加一个新通知渠道（比如 Slack 群通知），都要回来改这个核心下单方法，改错了同样可能连累下单本身。
+
 ### Python 代码
 
 ```python
@@ -181,6 +220,33 @@ class MetricsNotifier(Observer):
 - 电梯：停靠/上行/下行/维护
 - 订单：已创建→已支付→已发货→完成
 - TCP：监听/已连接/关闭
+
+### 不用State会怎样
+
+```python
+class ElevatorBad:
+    def __init__(self) -> None:
+        self.state = "idle"  # 用字符串表示状态
+        self.floor = 1
+
+    def request(self, to_floor: int) -> None:
+        if self.state == "idle":
+            if to_floor == self.floor:
+                return
+            print(f"从 {self.floor} 前往 {to_floor}")
+            self.state = "moving"
+            self.floor = to_floor
+            self.state = "idle"
+            print("到达，空闲")
+        elif self.state == "moving":
+            print("移动中，请求入队（示意）")
+        elif self.state == "maintenance":
+            print("维护中，拒绝请求")
+        # 新增一种 "door_open" 状态时，上面每个分支都可能需要跟着改一遍
+        # 哪个分支漏加了对应判断，电梯门开着的时候就可能被派发新任务
+```
+
+状态用字符串保存，判断散落在一个大 `if-elif` 里。系统要加一个新状态"门已打开"时，需要回头检查每一个已有分支要不要拒绝这个新状态下的请求——漏掉一个分支，电梯门开着的时候仍然会响应楼层请求。State 模式把每个状态封装成独立的类，新增状态只需要新增一个类，不用逐个检查所有旧分支。
 
 ### 与 Strategy 区别
 
@@ -256,6 +322,26 @@ class MovingState(ElevatorState):
 - 数据导入：校验→转换→写入，各源细节不同
 - 游戏 AI 回合：感知→决策→执行
 
+### 不用Template Method会怎样
+
+```python
+class CsvImporterBad:
+    def run(self, data: list[dict[str, str]] | None) -> int:
+        if not data:  # 空列表或 None 都算异常
+            raise ValueError("空数据")
+        return len(data)
+
+
+class JsonImporterBad:
+    def run(self, data: list[dict[str, str]] | None) -> int:
+        # 从 CsvImporterBad 复制过来，但校验条件写成了只判断 None
+        if data is None:
+            raise ValueError("空数据")
+        return len(data)  # 传入空列表 [] 时不会报错，直接返回 0
+```
+
+两个导入器的流程骨架（读取→解析→校验→写入）几乎一样，是复制粘贴出来的。后来 `CsvImporterBad` 把校验规则从"是否为 None"升级成了"是否为空"，但改的时候忘了同步到 `JsonImporterBad`，导致 JSON 导入器碰到空列表时会静默写入 0 行数据、不报任何错——两个看起来一样的流程在校验细节上悄悄跑偏了。Template Method 把固定流程写在父类里只维护一份，子类只覆写真正因数据源而异的步骤。
+
 ### Python 代码
 
 ```python
@@ -321,6 +407,26 @@ class CsvImporter(DataImporter):
 
 - 编辑器 Undo/Redo
 - 任务队列、智能家居遥控器
+
+### 不用Command会怎样
+
+```python
+class EditorBad:
+    def __init__(self) -> None:
+        self.text = ""
+        self._last_typed = ""  # 只能记住"最近一次"输入，撑不住连续多步撤销
+
+    def type_text(self, chunk: str) -> None:
+        self.text += chunk
+        self._last_typed = chunk
+
+    def undo(self) -> None:
+        if self._last_typed:
+            self.text = self.text[: -len(self._last_typed)]
+            self._last_typed = ""  # 撤销之后就再也想不起上一步是什么了
+```
+
+这种写法只能撤销"最近一次"输入。连续打了两段文字后，第一次 `undo()` 能撤掉最后一段，但再调用第二次 `undo()` 什么也不会发生——因为整个历史只保留了一个变量，早前那次输入已经被覆盖、无从追溯。要支持多步撤销，只能不停加更多变量或者维护一个专门的历史列表；与其临时打补丁，不如一开始就把每次操作封装成一个 `Command` 对象放进栈里，天然支持任意步数的撤销。
 
 ### Python 代码
 
@@ -391,6 +497,30 @@ class CommandHistory:
 
 - HTTP 中间件、日志级别过滤、审批流（经理→总监→CEO）
 
+### 不用Chain of Responsibility会怎样
+
+```python
+def approve_expense(amount: float) -> str:
+    if amount <= 1000:
+        return f"经理批准 {amount}"
+    elif amount <= 10000:
+        return f"总监批准 {amount}"
+    else:
+        return f"CEO 批准 {amount}"
+
+
+def approve_travel(amount: float) -> str:
+    # 差旅审批走另一套流程，复制了同一段金额分级判断
+    if amount <= 1000:
+        return f"经理批准（差旅）{amount}"
+    elif amount <= 10000:
+        return f"总监批准（差旅）{amount}"
+    else:
+        return f"CEO 批准（差旅）{amount}"
+```
+
+报销审批和差旅审批各自复制了一份"金额分级"判断。后来财务把总监的审批额度上限从 10000 调到 20000，只改了 `approve_expense`，`approve_travel` 忘了同步更新，两条审批线的额度从此不一致，只能靠人工发现。用 Chain of Responsibility 把每一级审批抽成一个 `Handler` 后，调整某一级的额度只需要改那一个 `Handler` 类，所有引用这条链的业务都会同步生效。
+
 ### Python 代码
 
 ```python
@@ -460,7 +590,7 @@ mgr.set_next(director).set_next(ceo)
 ## 八、Iterator / Mediator（略）
 
 - **Iterator**：不管底层是数组、链表还是树，你只要写 `for x in xxx` 去遍历，不用关心内部到底怎么存的——统一遍历方式；Python 实现 `__iter__` / `__next__` 即是。
-- **Mediator**：机场塔台就是飞机之间的中介——飞机不会互相直接联系商量降落顺序，都是找塔台协调，减少飞机与飞机之间乱七八糟的直接通信。组件不互相直连，经中介转发，降低网状依赖。对话框里按钮与输入框通过 Dialog 中介通信是经典例子。
+- **Mediator**：机场塔台就是飞机之间的中介——飞机不会互相直接联系商量降落顺序，都是找塔台协调，减少飞机与飞机之间乱七八糟的直接通信。组件不互相直连，经中介转发，降低网状依赖。如果 4 个组件两两直接通信，最多要维护 6 条连接；加到 5 个组件就变成 10 条——连接数以 `N×(N-1)/2` 的速度增长，组件稍微一多，谁跟谁通信就理不清了。改成都通过中介转发后，连接数量退化成跟组件数量线性相关。对话框里按钮与输入框通过 Dialog 中介通信是经典例子。
 
 ---
 
@@ -486,8 +616,6 @@ mgr.set_next(director).set_next(ceo)
 | 审批 / 中间件 | Chain |
 
 ---
-
-下一章把模式嵌进完整面试流程。
 
 下一篇：[LLD 面试框架](lld-framework.md)
 

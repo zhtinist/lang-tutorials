@@ -58,6 +58,8 @@ SearchStrategy <<interface>>
 
 状态：`BookItemStatus = AVAILABLE | LOANED | LOST`
 
+如果不把搜索规则抽成 `SearchStrategy`，`Catalog.search` 内部就要直接写死"`query.lower() in title.lower()`"这一种匹配方式；以后想支持按作者搜索、或者支持更宽松的模糊匹配，就得改这个已经在被"借书页面搜索"和"管理员后台搜索"两处调用的同一个方法，稍有不慎就会把原本按书名搜索的用户体验也改坏。`SearchStrategy` 让 `search` 方法本身保持不变，只需要传入不同的匹配策略。
+
 ---
 
 ## 四、代码骨架

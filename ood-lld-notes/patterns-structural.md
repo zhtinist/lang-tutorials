@@ -33,6 +33,31 @@
 - 业务要 `PaymentGateway.charge`，第三方却是 `pay(cents)`
 - 不想改第三方，也不想污染业务代码
 
+### 不用Adapter会怎样
+
+```python
+class StripePaymentA:
+    def __init__(self) -> None:
+        self._sdk = LegacyStripeSDK()
+
+    def charge(self, amount_yuan: float) -> str:
+        # 每个用到 LegacyStripeSDK 的地方都要自己做"元转分"的换算
+        cents = int(amount_yuan * 100)  # 忘了 round()，浮点误差可能让分数算错
+        return self._sdk.pay(cents)["id"]
+
+
+class StripePaymentB:
+    def __init__(self) -> None:
+        self._sdk = LegacyStripeSDK()
+
+    def refund_charge(self, amount_yuan: float) -> str:
+        # 另一个地方又写了一遍换算，这次用了 round()，两处逻辑不一致
+        cents = int(round(amount_yuan * 100))
+        return self._sdk.pay(-cents)["id"]
+```
+
+业务里只要用到第三方 SDK，就得在每个调用点各自重复一遍"元转分"的换算逻辑。`StripePaymentA` 忘了做四舍五入，`19.999` 元这种金额会因为浮点误差被截断成 `1999` 分而不是 `2000` 分；`StripePaymentB` 又用了不同的写法。两处转换逻辑各写各的，只要有一处少了 `round()` 或者进制换算写错，交易金额就会出现难以复现的对不上账问题。Adapter 把这段转换逻辑收敛到一个类里，只需要写对一次、测对一次。
+
 ### 结构
 
 ```
@@ -92,6 +117,43 @@ def checkout(gateway: PaymentGateway, amount: float) -> str:
 
 - 「基础能力 + 可选增强」，增强可任意组合
 - 用继承会导致子类爆炸（见 OOP 咖啡例子）
+
+### 不用Decorator会怎样
+
+```python
+class CoffeeBad:
+    def __init__(
+        self,
+        has_milk: bool = False,
+        has_sugar: bool = False,
+        has_extra_shot: bool = False,
+    ) -> None:
+        self.has_milk = has_milk
+        self.has_sugar = has_sugar
+        self.has_extra_shot = has_extra_shot
+
+    def cost(self) -> float:
+        price = 10.0
+        if self.has_milk:
+            price += 2.0
+        if self.has_sugar:
+            price += 1.0
+        if self.has_extra_shot:
+            price += 3.0
+        return price
+
+    def desc(self) -> str:
+        d = "Espresso"
+        if self.has_milk:
+            d += " +Milk"
+        if self.has_sugar:
+            d += " +Sugar"
+        if self.has_extra_shot:
+            d += " +Shot"
+        return d
+```
+
+加一种新配料（比如摩卡酱），就要在构造函数里加一个新的布尔参数，还要在 `cost()` 和 `desc()` 里各加一个新的 `if` 分支——两个方法必须保持同步更新，容易漏改一处。配料一多，构造函数的参数列表和两个方法里的 `if` 分支会同步爆炸式增长，而且大部分组合根本用不上（有人只想要"糖+摩卡酱"不要奶，构造函数却要求把三个参数都摆出来选）。Decorator 把每种配料做成一层独立的包装，配料数量增加只是多一个装饰器类，不用改任何已有类。
 
 ### 结构
 
@@ -180,6 +242,26 @@ assert order.cost() == 13.0
 - 做一件事要调 5 个服务、记一堆顺序
 - 希望调用方只看到 `place_order()`
 
+### 不用Facade会怎样
+
+```python
+class WebCheckout:
+    def place_order(self, user: str, sku: str, amount: float) -> None:
+        Inventory().reserve(sku, 1)
+        Payment().charge(user, amount)
+        Shipping().schedule(user, sku)
+
+
+class MobileCheckout:
+    def place_order(self, user: str, sku: str, amount: float) -> None:
+        # 从 WebCheckout 复制过来，但顺序被改动了：先扣款，再占库存
+        Payment().charge(user, amount)
+        Inventory().reserve(sku, 1)
+        Shipping().schedule(user, sku)
+```
+
+Web 端和移动端各自实现了一遍"下单"的调用顺序。`MobileCheckout` 里顺序反了：如果这时候库存其实已经不够，`Web` 端会在 `reserve` 失败时提前退出、不会真的扣款；但 `Mobile` 端因为先执行了 `charge`，等发现没货时用户已经被扣了钱，还得额外走一次退款流程。两处下单逻辑各自维护，只要有一处的调用顺序写错，就会出现这种资损风险。用 `OrderFacade.place_order()` 统一编排后，所有入口共用同一套正确顺序，不会出现"两个入口行为不一致"的情况。
+
 ### Python 代码
 
 ```python
@@ -235,6 +317,22 @@ class OrderFacade:
 
 - 真正对象创建贵，先占位
 - 调用前后要统一做鉴权/日志/限流
+
+### 不用Proxy会怎样
+
+```python
+class GalleryBad:
+    """一次性把所有图片都真实加载，不管用户会不会翻到最后一张。"""
+
+    def __init__(self, paths: list[str]) -> None:
+        self._images = [RealImage(p) for p in paths]  # 1000 张图片,1000 次昂贵加载
+
+
+gallery = GalleryBad([f"photo_{i}.jpg" for i in range(1000)])
+# 还没显示任何一张图，构造 GalleryBad 就已经把 1000 次磁盘加载全跑完了
+```
+
+哪怕用户一张图都没翻到，构造 `GalleryBad` 时就要为全部 1000 张图片各付一次加载成本；如果用户只看了前 3 张就退出页面，后面 997 次加载完全是浪费的时间和内存。`ImageProxy` 把"真正加载"推迟到第一次调用 `display()` 才发生，没被用到的图片永远不会付出加载成本。
 
 ### 与 Decorator 区别
 
@@ -314,6 +412,42 @@ class AuthImageProxy(Image):
 ### 信号
 
 - 部分-整体层次：目录/文件、菜单/菜单项、部门/员工
+
+### 不用Composite会怎样
+
+```python
+class FileLeafBad:
+    def __init__(self, name: str, nbytes: int) -> None:
+        self.name = name
+        self.nbytes = nbytes
+
+
+class DirectoryBad:
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self.children: list[object] = []
+
+
+def total_size_bad(node: object) -> int:
+    if isinstance(node, FileLeafBad):
+        return node.nbytes
+    elif isinstance(node, DirectoryBad):
+        return sum(total_size_bad(c) for c in node.children)
+    raise TypeError("未知节点类型")
+
+
+def display_bad(node: object, indent: int = 0) -> None:
+    if isinstance(node, FileLeafBad):
+        print("  " * indent + f"- {node.name}")
+    elif isinstance(node, DirectoryBad):
+        print("  " * indent + f"[{node.name}]")
+        for c in node.children:
+            display_bad(c, indent + 1)
+    else:
+        raise TypeError("未知节点类型")
+```
+
+`total_size_bad` 和 `display_bad` 各写了一遍 `isinstance` 判断链。以后再加一种 `SymlinkNode` 节点类型，这两个函数、以及未来任何一个新写的"遍历文件树"的函数，都要记得同步加一个 `elif` 分支——漏掉一处就会在运行时抛 `TypeError`，或者悄悄漏算了某一类节点的大小却不报错。Composite 让 `FileLeaf` 和 `Directory` 实现同一个接口，新增操作只需要在这个接口里加一个方法，不用在调用方到处加分支。
 
 ### 结构
 

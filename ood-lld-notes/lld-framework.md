@@ -204,8 +204,6 @@ def fee(hours: int, kind: str) -> float:
 
 ---
 
-本系列案例章是本框架的完整演示。
-
 下一篇：[案例：停车场](case-parking-lot.md)
 
 ---

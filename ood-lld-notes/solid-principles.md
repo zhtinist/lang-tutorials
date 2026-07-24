@@ -14,8 +14,6 @@
 | I | Interface Segregation | 不要强迫客户端依赖用不到的方法 |
 | D | Dependency Inversion | 依赖抽象，不要依赖具体实现 |
 
-下面每节：**意图 → 反例 → 正例 → 口诀**。
-
 ---
 
 ## 二、SRP · 单一职责原则
@@ -42,6 +40,20 @@ class UserServiceBad:
         # 打审计日志
         print(f"AUDIT create {email}")
 ```
+
+```python
+def send_welcome_email(email: str) -> None:
+    raise TimeoutError("SMTP 超时")  # 假设邮件服务这次超时了
+
+
+class UserServiceBad2:
+    def create_user(self, email: str) -> None:
+        print(f"INSERT user {email}")   # 用户已经成功写入数据库
+        send_welcome_email(email)        # 这里抛出异常
+        print(f"AUDIT create {email}")   # 这一行永远不会被执行到
+```
+
+写库、发邮件、记审计日志三件事绑在同一个方法里，其中任何一步出错都会连累另外两步。这里 SMTP 超时的异常本该只影响"发欢迎邮件"这一件次要的事，却因为写在同一个方法里，把调用方对`create_user` 的整体调用直接打断——调用方看到的是"建号失败"的异常，但其实用户已经写进数据库了，审计日志这一步也被跳过、以后查不到这条创建记录。拆成 `UserService` + `EmailSender` + `Auditor` 之后，`EmailSender` 出错不会波及 `UserRepository.save()` 已经完成的部分。
 
 ### 正例
 
@@ -107,6 +119,8 @@ def discount_bad(customer_type: str, price: float) -> float:
     # 每加一种客户，都要改这个函数
     raise ValueError(customer_type)
 ```
+
+新增一种客户类型时，工程师要在 `discount_bad` 这同一个函数里插入新的 `elif`。如果不小心把已有的 `elif customer_type == "vip"` 那一行顺手改动了一下（比如复制粘贴时误改了返回值），`vip` 客户的折扣就会被新逻辑覆盖掉——而这个改动是在做"新增 svip"这个完全不相关的需求时引入的。测试如果只覆盖了新增的 svip 场景，没有重新跑一遍所有老客户类型的回归用例，这个错误就会被放过直接上线。`Checkout` 依赖 `DiscountPolicy` 接口后，新增 `SvipDiscount` 是一个全新的类，不会碰到 `VipDiscount` 已经写好并测试过的代码。
 
 ### 正例：策略扩展
 
@@ -195,6 +209,8 @@ def enlarge_width(rect: Rectangle) -> None:
     assert rect._h == old_h  # Square 会失败
 ```
 
+如果 `enlarge_width` 是某个批量调整报表列宽功能的一部分，一旦传入的 `Rectangle` 列表里混入了一个 `Square` 实例，这一列的宽高就会被同步改乱，报表在这一列上出现错误的版式——而这个 bug 只有在数据里恰好出现了 `Square` 时才会触发，代码审查阶段很难被发现，因为 `Square(Rectangle)` 这行继承声明本身看起来完全合理。
+
 ### 正例：取消错误继承，用共同抽象
 
 ```python
@@ -257,6 +273,15 @@ class Robot(WorkerBad):
     def eat(self) -> None:
         raise NotImplementedError("机器人不吃饭")  # 被迫实现
 ```
+
+```python
+workers: list[WorkerBad] = [Robot(), Robot()]
+for w in workers:
+    w.work()
+    w.eat()  # 循环到第一个 Robot 就在这里抛出 NotImplementedError
+```
+
+如果这段代码原本是想批量巡检所有 `Worker` 的工作状态，一旦遍历到 `Robot`，`eat()` 抛出的 `NotImplementedError` 会让整个循环直接中断——不仅这一台 Robot 没检查完，后面排在它之后的所有 worker 都不会被处理到。拆成 `Workable` / `Eatable` 两个小接口后，`Robot` 只实现 `Workable`，巡检代码只需要遍历 `Workable`，天然不会调用到 `Robot` 没有的 `eat()`。
 
 ### 正例
 
@@ -321,6 +346,8 @@ class OrderServiceBad:
         self._repo.save(order_id)
 ```
 
+如果团队决定把数据库从 MySQL 换成 PostgreSQL，或者只是想在单元测试里不真的连数据库，`OrderServiceBad.__init__` 里 `self._repo = MySQLOrderRepo()` 这一行把具体实现焊死在了构造函数内部——测试 `place()` 的业务逻辑时也必须先启动一个真实的 MySQL、清空数据、再断言，每条测试都又慢又脆弱。`OrderService` 改成接收 `OrderRepository` 接口之后，测试时注入 `InMemoryOrderRepo` 即可，不用连真实数据库。
+
 ### 正例
 
 ```python
@@ -369,7 +396,7 @@ class OrderService:
 | 5 | 高层是否 `new` 了具体基础设施类？ | DIP |
 | 6 | 继承树是否可用组合 + 接口代替？ | 组合优先 |
 
-### 和设计模式的关系（预告）
+### 和设计模式的关系
 
 | 原则 | 常搭模式 |
 |------|----------|

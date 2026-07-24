@@ -99,104 +99,78 @@
 <a href="../go/index.html">Go</a>
 <a href="../algo/index.html">算法笔记</a>
 <a href="../architecture/index.html">架构设计</a>
-<a href="../oodlld/index.html">OOD/LLD</a>
-<a class="topnav-lang" href="#" onclick="switchLang();return false;" title="切换语言:中文 / English">🌐 <span class="lp on">中文</span><span class="sep">/</span><span class="lp">EN</span></a></div></div><script>function switchLang(){var p=location.pathname,en=p.indexOf('/en/')>-1,n=en?p.replace('/en/','/zh/'):p.replace('/zh/','/en/');try{localStorage.setItem('lang',en?'zh':'en')}catch(e){}location.href=n;}</script>
+<a href="../oodlld/index.html">OOD/LLD</a></div></div>
 <div class="wrap">
 <nav id="TOC" role="doc-toc">
 <ul>
 <li><a href="#变量与内存模型" id="toc-变量与内存模型">变量与内存模型
 ⭐</a>
 <ul>
-<li><a href="#一先会用变量怎么赋值"
-id="toc-一先会用变量怎么赋值">一、先会用：变量怎么赋值</a></li>
-<li><a href="#二开始深入变量不是盒子是名签"
-id="toc-二开始深入变量不是盒子是名签">二、开始深入：变量不是盒子，是名签</a></li>
-<li><a href="#三a-b-到底拷贝了什么" id="toc-三a-b-到底拷贝了什么">三、a
-= b 到底拷贝了什么</a></li>
-<li><a href="#四引用计数谁在指着我"
-id="toc-四引用计数谁在指着我">四、引用计数：谁在指着我</a></li>
-<li><a href="#五可变-vs-不可变决定一切别名行为"
-id="toc-五可变-vs-不可变决定一切别名行为">五、可变 vs
-不可变：决定一切别名行为</a></li>
-<li><a href="#六小整数缓存与字符串驻留"
-id="toc-六小整数缓存与字符串驻留">六、小整数缓存与字符串驻留</a></li>
-<li><a href="#七命名空间即字典但局部变量是-fast-locals"
-id="toc-七命名空间即字典但局部变量是-fast-locals">七、命名空间即字典，但局部变量是
+<li><a href="#一变量不是盒子是名签"
+id="toc-一变量不是盒子是名签">一、变量不是盒子,是名签</a></li>
+<li><a href="#二a-b-到底拷贝了什么"
+id="toc-二a-b-到底拷贝了什么">二、<code>a = b</code>
+到底拷贝了什么</a></li>
+<li><a href="#三引用计数谁在指着我"
+id="toc-三引用计数谁在指着我">三、引用计数:谁在指着我</a></li>
+<li><a href="#四可变-vs-不可变决定别名行为的分界线"
+id="toc-四可变-vs-不可变决定别名行为的分界线">四、可变 vs
+不可变:决定别名行为的分界线</a></li>
+<li><a href="#五小整数缓存与字符串驻留"
+id="toc-五小整数缓存与字符串驻留">五、小整数缓存与字符串驻留</a></li>
+<li><a href="#六命名空间即字典但局部变量是-fast-locals"
+id="toc-六命名空间即字典但局部变量是-fast-locals">六、命名空间即字典,但局部变量是
 fast locals</a></li>
-<li><a href="#八浅拷贝-vs-深拷贝" id="toc-八浅拷贝-vs-深拷贝">八、浅拷贝
+<li><a href="#七浅拷贝-vs-深拷贝" id="toc-七浅拷贝-vs-深拷贝">七、浅拷贝
 vs 深拷贝</a></li>
-<li><a href="#九可变默认参数陷阱预告"
-id="toc-九可变默认参数陷阱预告">九、可变默认参数陷阱（预告）</a></li>
-<li><a href="#十小结" id="toc-十小结">十、小结</a></li>
+<li><a href="#八可变默认参数陷阱"
+id="toc-八可变默认参数陷阱">八、可变默认参数陷阱</a></li>
+<li><a href="#小结" id="toc-小结">小结</a></li>
 </ul></li>
 </ul>
 </nav>
 <h1 id="变量与内存模型">变量与内存模型 ⭐</h1>
-<p>这是全书最重要的一章。如果你只读一章，读这章。</p>
-<p>对 C/C++ 工程师来说，Python 90%
-的”灵异事件”——改了一个列表另一个跟着变、函数里改了参数外面也变、默认参数记住了上次的值——根源都是同一件事：<strong>Python
-的变量不是内存槽，而是名字到堆对象的引用绑定。</strong>
-一旦这个模型在你脑中扎根，一切诡异都变得可预测。</p>
-<p><strong>本章先给你一段”变量怎么赋值”的最基础用法——这部分你可能已经会了；然后从第二节开始进入本书最核心的底层模型</strong>，我们会用
+<p>对 C/C++ 工程师来说,Python
+大部分”灵异事件”——改了一个列表另一个跟着变、函数里改了参数外面也变、默认参数记住了上次的值——根源都是同一件事:<strong>Python
+的变量不是内存槽,而是名字到堆对象的引用绑定。</strong>
+这个模型一旦确立,后面所有看似诡异的行为都变得可预测,本章用
 <code>id()</code>、<code>is</code>、<code>sys.getrefcount</code>
-反复做实证，多画内存图。</p>
-<hr />
-<h2 id="一先会用变量怎么赋值">一、先会用：变量怎么赋值</h2>
-<p>Python 里给变量赋值，不需要像 C 那样先声明类型，直接写：</p>
-<div class="sourceCode" id="cb1"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>x <span class="op">=</span> <span class="dv">3</span></span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(x)          <span class="co"># 3</span></span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>x <span class="op">=</span> <span class="st">&quot;hello&quot;</span>       <span class="co"># 重新赋值，甚至换了&quot;类型&quot;也没问题</span></span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(x)          <span class="co"># hello</span></span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>a, b <span class="op">=</span> <span class="dv">1</span>, <span class="dv">2</span>       <span class="co"># 一行同时给两个变量赋值</span></span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a, b)       <span class="co"># 1 2</span></span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>y <span class="op">=</span> x             <span class="co"># 把 x 现在的值&quot;给&quot; y</span></span>
-<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(y)          <span class="co"># hello</span></span></code></pre></div>
-<p>这些操作你可能已经很熟了：赋值、重新赋值、一行赋多个值。但
-<code>y = x</code> 这一行，在 Python
-里到底发生了什么——是把值拷贝了一份给
-y，还是别的什么？这正是本章要彻底讲清楚的问题。下面开始进入底层。</p>
-<hr />
-<h2
-id="二开始深入变量不是盒子是名签">二、开始深入：变量不是盒子，是名签</h2>
-<p>C 的心智模型是”盒子”：<code>int x</code>
-就是一块命名的内存，<code>x = 3</code> 往盒子里塞值，<code>x = 5</code>
-覆盖它。变量<strong>就是</strong>那块内存。</p>
-<p>Python 完全不是。回顾 <a
-href="01-运行模型.html">第01章</a>：所有值都是堆上的
-<code>PyObject</code>。变量只是<strong>命名空间里的一个名字</strong>，绑定到某个堆对象上。你可以把它想成一个”贴在对象上的便利贴”，或者——用你熟悉的话说——<strong>变量是一个持有对象地址的指针，但你永远不能对它取地址、也做不了指针算术</strong>。</p>
-<pre><code>C 的模型：变量即内存         Python 的模型：名字指向堆对象
+反复做实证并配合内存图讲透它。</p>
+<h2 id="一变量不是盒子是名签">一、变量不是盒子,是名签</h2>
+<p>C 的心智模型是”盒子”:<code>int x</code>
+就是一块命名的内存,<code>x = 3</code> 往盒子里塞值,<code>x = 5</code>
+覆盖它,变量<strong>就是</strong>那块内存。</p>
+<p>Python 完全不是。回顾<a
+href="01-运行模型.html">「运行模型」</a>:所有值都是堆上的
+<code>PyObject</code>。变量只是<strong>命名空间里的一个名字</strong>,绑定到某个堆对象上——可以把它想成”贴在对象上的便利贴”,或者说<strong>变量是一个持有对象地址的指针,但你永远不能对它取地址、也做不了指针算术</strong>。</p>
+<pre><code>C 的模型:变量即内存         Python 的模型:名字指向堆对象
 ┌─────────┐                名字 x         堆
 │  x: 3   │  ← 盒子即值     ┌────┐        ┌──────────────┐
 └─────────┘                │ ●──┼──────► │ int 对象: 3  │
                            └────┘        └──────────────┘
                            便利贴          真正的值在这</code></pre>
-<p><code>x = 3</code> 的准确读法不是”把 3 存进 x”，而是”<strong>让名字 x
-绑定到那个表示 3 的对象</strong>”。这个区别是本章一切的地基。</p>
-<h3 id="用-id-观察对象身份">用 id() 观察对象身份</h3>
-<p><code>id(obj)</code> 返回对象的身份标识；<strong>在 CPython
-中它就是对象的内存地址</strong>（语言只保证同一生命周期内唯一且恒定，地址是实现细节）。它就是你想要的
-<code>&amp;</code>——只不过是只读的、针对对象而非变量的。</p>
+<p><strong>为什么 Python 要选这种”名字绑定”模型而不是 C
+的”内存槽”模型</strong>:根源仍在动态类型——C 里 <code>int x</code>
+一旦声明,这块内存的大小和解释方式(4
+字节、按补码整数读)在编译期就定死了,变量和它存的值天然是同一回事。Python
+里同一个名字可以先后指向
+<code>int</code>、<code>str</code>、任意自定义对象,这些类型的大小、内部结构完全不同,不可能让一个固定大小的”盒子”去装任意类型的值——必须让变量只存一个统一大小的东西(指针),真正的数据和类型信息留在被指向的堆对象里。名字绑定模型是动态类型在内存层面的必然实现方式,不是随意的设计偏好。</p>
+<p><code>id(obj)</code> 返回对象的身份标识,<strong>在 CPython
+中就是对象的内存地址</strong>(语言只保证同一生命周期内唯一且恒定,地址是实现细节)。它相当于
+<code>&amp;</code>,只不过是只读的、针对对象而非变量的:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>x <span class="op">=</span> <span class="dv">3</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">id</span>(x))   <span class="co"># 例如 4310721234,就是那个 int 对象的堆地址</span></span></code></pre></div>
+<h2 id="二a-b-到底拷贝了什么">二、<code>a = b</code> 到底拷贝了什么</h2>
 <div class="sourceCode" id="cb3"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>x <span class="op">=</span> <span class="dv">3</span></span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">id</span>(x))   <span class="co"># 例如 4310721234，就是那个 int 对象的堆地址</span></span></code></pre></div>
-<h2 id="三a-b-到底拷贝了什么">三、a = b 到底拷贝了什么</h2>
-<p>看这段，先猜结果：</p>
-<div class="sourceCode" id="cb4"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> [<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>]</span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> a</span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>b.append(<span class="dv">4</span>)</span>
-<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a)        <span class="co"># ???</span></span></code></pre></div>
-<p>答案是 <code>[1, 2, 3, 4]</code>。C++
-工程师第一反应是”<code>b = a</code> 不是拷了一份吗？改 b 怎么动了
-a？”</p>
-<p>因为 <code>b = a</code>
-<strong>既不拷贝对象，也不拷贝数据，只拷贝了那个指针值</strong>。执行后，<code>a</code>
-和 <code>b</code>
-是贴在<strong>同一个堆对象</strong>上的两张便利贴。</p>
+class="sourceCode python"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> [<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>]</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> a</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>b.append(<span class="dv">4</span>)</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a)        <span class="co"># [1, 2, 3, 4]</span></span></code></pre></div>
+<p>C++ 工程师的第一反应通常是”<code>b = a</code> 不是拷了一份吗?改 b
+怎么动了 a?“——因为 <code>b = a</code>
+<strong>既不拷贝对象,也不拷贝数据,只拷贝了那个指针值</strong>。执行后,<code>a</code>
+和 <code>b</code> 是贴在<strong>同一个堆对象</strong>上的两张便利贴:</p>
 <pre><code>a = [1, 2, 3]
 b = a
 
@@ -207,193 +181,179 @@ b = a
                └──┼──┼──┼─────────────┘
                   ▼  ▼  ▼
                   1  2  3   (各自也是堆上的 int 对象)</code></pre>
-<p><code>b.append(4)</code> 是通过 b 找到那个 list
-对象，<strong>原地修改</strong>它。a 指向的是同一个对象，所以从 a
+<p><code>b.append(4)</code> 通过 b 找到那个 list
+对象、<strong>原地修改</strong>它;a 指向同一对象,从 a
 看过去当然也变了。这不是拷贝语义的
-bug，是<strong>别名（aliasing）</strong>——两个名字是同一对象的两个别名。</p>
-<p>类比 C++：<code>b = a</code> 更像
-<code>int* b = a;</code>（拷贝指针），而绝不是
-<code>std::vector&lt;int&gt; b = a;</code>（拷贝构造，深拷贝一份）。Python
-的赋值<strong>永远是”拷贝引用”</strong>，从不调用什么拷贝构造函数。</p>
-<h3 id="用-is-id-证明别名">用 is / == / id 证明别名</h3>
-<ul>
-<li><code>==</code> 比较<strong>值</strong>是否相等（调用
-<code>__eq__</code>）。</li>
-<li><code>is</code> 比较<strong>是否同一个对象</strong>（比较
-<code>id</code>），等价于 C 的 <code>a == b</code> 比较两个指针。</li>
-</ul>
-<div class="sourceCode" id="cb6"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> [<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>]</span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> a</span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>c <span class="op">=</span> [<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>]          <span class="co"># 另建一个内容相同的列表</span></span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a <span class="op">==</span> b)          <span class="co"># True，值相等</span></span>
-<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a <span class="kw">is</span> b)          <span class="co"># True，同一对象（别名）</span></span>
-<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">id</span>(a) <span class="op">==</span> <span class="bu">id</span>(b))  <span class="co"># True</span></span>
-<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a <span class="op">==</span> c)          <span class="co"># True，值相等</span></span>
-<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a <span class="kw">is</span> c)          <span class="co"># False！不同对象</span></span>
-<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">id</span>(a), <span class="bu">id</span>(c))    <span class="co"># 两个不同地址</span></span></code></pre></div>
-<p><code>a is b</code> 为真而 <code>a is c</code>
-为假，白纸黑字证明：<code>b = a</code> 制造了别名，而
-<code>c = [1,2,3]</code> 是全新对象。判断”是不是同一个东西”用
-<code>is</code>，“值一不一样”用 <code>==</code>。（<code>is None</code>
-的惯用法正来自这里——<code>None</code> 是单例，比身份最合适。）</p>
-<h2 id="四引用计数谁在指着我">四、引用计数：谁在指着我</h2>
-<p>回顾 <a href="01-运行模型.html">第01章</a>：每个
+bug,是<strong>别名(aliasing)</strong>——两个名字是同一对象的两个别名。类比
+C++:<code>b = a</code> 更像 <code>int* b = a;</code>(拷贝指针),而绝不是
+<code>std::vector&lt;int&gt; b = a;</code>(拷贝构造)。<strong>Python
+的赋值永远是”拷贝引用”,从不调用拷贝构造函数</strong>——这背后是一个明确的设计取舍:如果赋值默认做深拷贝,任何一次简单的
+<code>b = a</code> 在 a
+是大对象时都会隐含一次昂贵的整体复制,而多数场景下程序员真正需要的只是”给这个对象再起一个名字”;Python
+把”廉价、总是 O(1)“作为赋值语义的基本承诺,需要真正复制时必须显式调用
+<code>copy</code>/<code>deepcopy</code>(见第八节)——代价前置在语义设计里说清楚,好过默认行为里藏着不确定的性能开销。</p>
+<p><code>==</code> 比较<strong>值</strong>是否相等(调用
+<code>__eq__</code>);<code>is</code>
+比较<strong>是否同一个对象</strong>(比较 <code>id</code>),等价于 C
+的两个指针比较:</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> [<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>]</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> a</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>c <span class="op">=</span> [<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>]          <span class="co"># 另建一个内容相同的列表</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a <span class="op">==</span> b)          <span class="co"># True,值相等</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a <span class="kw">is</span> b)          <span class="co"># True,同一对象(别名)</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a <span class="op">==</span> c)          <span class="co"># True,值相等</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a <span class="kw">is</span> c)          <span class="co"># False,不同对象</span></span></code></pre></div>
+<p><code>a is b</code> 为真而 <code>a is c</code> 为假,证明
+<code>b = a</code> 制造了别名,而 <code>c = [1,2,3]</code>
+是全新对象。判断”是不是同一个东西”用 <code>is</code>,“值一不一样”用
+<code>==</code>(<code>is None</code>
+的惯用法正来自这里——<code>None</code> 是单例,身份比较既准确又免去调用
+<code>__eq__</code> 的开销)。</p>
+<h2 id="三引用计数谁在指着我">三、引用计数:谁在指着我</h2>
+<p>回顾<a href="01-运行模型.html">「运行模型」</a>:每个
 <code>PyObject</code> 头里有
-<code>ob_refcnt</code>。每多一个名字/容器指向它就 +1，少一个就
--1，归零立即回收（CPython
-的主要内存管理机制，另有循环垃圾回收器处理引用环，见 <a
-href="09-错误处理与资源管理.html">第09章</a>）。这就是 Python 版的”自动
-free”——你不用 <code>free</code>，引用计数替你做。</p>
+<code>ob_refcnt</code>。每多一个名字/容器指向它就 +1,少一个就
+-1,归零立即回收(CPython
+的主要内存管理机制,循环引用另有垃圾回收器处理,见<a
+href="09-错误处理与资源管理.html">「错误处理与资源管理」</a>)。</p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sys</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>x <span class="op">=</span> <span class="bu">object</span>()</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.getrefcount(x))   <span class="co"># 例如 2</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>y <span class="op">=</span> x                        <span class="co"># 多一个引用</span></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.getrefcount(x))   <span class="co"># 3</span></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a><span class="kw">del</span> y                        <span class="co"># 去掉一个引用(del 解除名字绑定,不是删对象!)</span></span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.getrefcount(x))   <span class="co"># 2 回落</span></span></code></pre></div>
+<p><code>sys.getrefcount(x)</code> 的结果总比直觉多 1,因为把
+<code>x</code>
+作为实参传给函数这个动作本身又临时加了一次引用。<code>del y</code>
+删除的是<strong>名字绑定</strong>,不是对象——对象在 refcnt
+归零时才真正释放,这跟 C++ 的 <code>delete</code>
+语义完全不同,<code>del</code>
+更像”松开这只手”,最后一只手松开对象才没。</p>
+<p><strong>为什么 CPython 选引用计数作为主要回收机制,而不是像 Java/Go
+那样纯用追踪式
+GC</strong>:引用计数的核心优势是<strong>确定性</strong>——对象在最后一个引用消失的那一刻立即释放,内存占用曲线平滑,不需要专门的
+GC 暂停去扫描整个堆;这对 1990 年代内存普遍紧张、且 Python
+从一开始就要和大量 C 扩展打交道的场景很重要,C 扩展可以直接用
+<code>Py_INCREF</code>/<code>Py_DECREF</code>
+管理引用而不必理解一个复杂的追踪式收集器。代价是显而易见的:引用计数本身有维护开销(几乎每次赋值、传参都要修改计数),且<strong>无法处理循环引用</strong>(两个对象互相引用,谁的计数都不会真正归零),CPython
+因此在引用计数之上又叠加了一个专门检测循环的分代垃圾回收器作为补丁,两者共同工作而非二选一。</p>
+<h2 id="四可变-vs-不可变决定别名行为的分界线">四、可变 vs
+不可变:决定别名行为的分界线</h2>
 <div class="sourceCode" id="cb7"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sys</span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>x <span class="op">=</span> <span class="bu">object</span>()</span>
-<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.getrefcount(x))   <span class="co"># 例如 2</span></span>
-<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>y <span class="op">=</span> x                        <span class="co"># 多一个引用</span></span>
-<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.getrefcount(x))   <span class="co"># 3</span></span>
-<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a><span class="kw">del</span> y                        <span class="co"># 去掉一个引用（del 解除名字绑定，不是删对象！）</span></span>
-<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.getrefcount(x))   <span class="co"># 2 回落</span></span></code></pre></div>
-<p>两个关键点： 1. <code>sys.getrefcount(x)</code>
-的结果<strong>总比你直觉多 1</strong>，因为把 <code>x</code>
-作为实参传给函数这个动作本身又临时加了一次引用。 2. <code>del y</code>
-<strong>删除的是名字绑定</strong>，不是对象。对象在 refcnt
-归零时才真正释放。这跟 C++ 的 <code>delete</code>
-语义完全不同——<code>del</code>
-更像”松开这只手”，最后一只手松开对象才没。</p>
-<pre><code>del 的语义                  refcnt 归零才回收
-名字 y ──╳ (解绑)           object ← 只剩 x 指着，refcnt=1，还活着
-名字 x ─────► object        当 x 也 del，refcnt=0 → 立即 free</code></pre>
-<h2 id="五可变-vs-不可变决定一切别名行为">五、可变 vs
-不可变：决定一切别名行为</h2>
-<p>现在回到那个”改 b 动
-a”的问题。为什么下面这段<strong>没有</strong>同样的”问题”？</p>
-<div class="sourceCode" id="cb9"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> <span class="dv">1</span></span>
-<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> a</span>
-<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> b <span class="op">+</span> <span class="dv">1</span></span>
-<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a, b)     <span class="co"># 1 2   —— a 没变！</span></span></code></pre></div>
-<p>区别在于：list 是<strong>可变（mutable）</strong>的，int
-是<strong>不可变（immutable）</strong>的。</p>
+class="sourceCode python"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> <span class="dv">1</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> a</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> b <span class="op">+</span> <span class="dv">1</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a, b)     <span class="co"># 1 2 —— a 没变</span></span></code></pre></div>
+<p>为什么这段没有”改 b 动 a”的问题?区别在于:list
+是<strong>可变(mutable)</strong>的,int
+是<strong>不可变(immutable)</strong>的。</p>
 <ul>
-<li><strong>可变对象</strong>（list、dict、set、以及大多数自定义类实例）：可以原地修改内容。<code>b.append(4)</code>、<code>b[0] = 9</code>
-改的是对象本身，所有别名都看得到。</li>
-<li><strong>不可变对象</strong>（int、float、str、tuple、bool、frozenset、None）：内容不能改。任何”修改”操作其实是<strong>造一个新对象</strong>并让名字改指过去。</li>
+<li><strong>可变对象</strong>(list、dict、set、大多数自定义类实例):可以原地修改内容,<code>b.append(4)</code>、<code>b[0] = 9</code>
+改的是对象本身,所有别名都看得到。</li>
+<li><strong>不可变对象</strong>(int、float、str、tuple、bool、frozenset、None):内容不能改,任何”修改”操作其实是<strong>造一个新对象</strong>并让名字改指过去。</li>
 </ul>
-<p><code>b = b + 1</code> 的底层：<code>b + 1</code>
-求出一个<strong>新的</strong> int 对象 <code>2</code>，然后
-<code>b =</code> 让名字 b 改绑到这个新对象。原来那个 <code>1</code>
-对象纹丝没动，a 还指着它。</p>
+<p><code>b = b + 1</code> 的底层:<code>b + 1</code>
+求出一个<strong>新的</strong> int 对象 <code>2</code>,<code>b =</code>
+让名字 b 改绑到这个新对象;原来那个 <code>1</code> 对象纹丝没动,a
+还指着它:</p>
 <pre><code>a = 1; b = a                b = b + 1
 
  a ─┐                        a ────► [ int 1 ]   ← a 仍指旧对象
     ├──► [ int 1 ]           b ────► [ int 2 ]   ← b 改指新对象
  b ─┘                        (新分配的对象)</code></pre>
-<p>对比可变对象的原地修改：</p>
+<p><strong>为什么 Python
+要设计出”不可变对象”这个类别,而不是让一切都可变(更符合”一切皆对象、变量只是引用”的统一模型)</strong>:不可变性带来三个具体好处,值得为它牺牲”万物统一可变”的简洁性——第一,不可变对象天然可以安全共享,多个名字指向同一个
+<code>int</code>/<code>str</code>
+对象不需要担心某处代码悄悄改了它,这是小整数缓存、字符串驻留(见第六节)这类共享优化能安全存在的前提;第二,不可变对象可以被安全地用作
+<code>dict</code> 键、放进
+<code>set</code>(可变对象的哈希值如果随内容变化,放进哈希表后内容一变就找不到了,Python
+索性禁止可变类型作为默认可哈希);第三,函数式编程里”传进去的值不会被意外修改”这一心智负担被免除。代价是需要修改内容时必须构造新对象,这在频繁拼接字符串这类场景下有实打实的性能开销(需要用
+<code>list</code>/<code>StringBuilder</code> 式的可变容器规避,见<a
+href="07-复合数据结构.html">「复合数据结构」</a>)。</p>
+<p>对比可变对象的原地修改:</p>
 <pre><code>a = [1,2,3]; b = a          b.append(4)
 
  a ─┐                        a ─┐
     ├──► [1,2,3]                ├──► [1,2,3,4]   ← 同一对象被改
  b ─┘                        b ─┘                  两个名字都看到变化</code></pre>
-<p><strong>核心规律</strong>： -
-对可变对象做<strong>原地修改</strong>（<code>append</code>/<code>b[0]=</code>/<code>.sort()</code>），影响所有别名。
-- 对任何对象做<strong>重新绑定</strong>（<code>b = ...</code>），只改 b
-这个名字的指向，不影响别人。 -
-不可变对象没有”原地修改”这条路，所以它们的别名永远安全——这也是为什么”用不可变类型更省心”。</p>
-<p>一个坑：<code>+=</code> 对可变和不可变行为不同。<code>b += [4]</code>
-对 list 是原地扩展（等价
-<code>extend</code>，影响别名）；<code>b += 1</code> 对 int
-是重新绑定（不影响别名）。因为可变对象实现了原地版的
-<code>__iadd__</code>，不可变的退回 <code>b = b + 1</code>。</p>
-<p>眼见为实——同样是
-<code>+=</code>，别名跟不跟随取决于对象可变与否：</p>
+<p>核心规律:对可变对象做<strong>原地修改</strong>影响所有别名;对任何对象做<strong>重新绑定</strong>(<code>b = ...</code>)只改
+b 这个名字的指向;不可变对象没有”原地修改”这条路,别名永远安全。</p>
+<p>一个坑:<code>+=</code> 对可变和不可变行为不同。<code>b += [4]</code>
+对 list 是原地扩展(等价
+<code>extend</code>,影响别名);<code>b += 1</code> 对 int
+是重新绑定(不影响别名)。原因是可变对象实现了原地版的
+<code>__iadd__</code>,不可变对象没有实现、<code>+=</code> 退回普通的
+<code>b = b + 1</code>:</p>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> [<span class="dv">1</span>, <span class="dv">2</span>]</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> a</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>a <span class="op">+=</span> [<span class="dv">3</span>]        <span class="co"># list 的 += 是原地扩展(__iadd__),还是同一对象</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(b)        <span class="co"># [1, 2, 3]   别名 b 跟着变</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> a <span class="op">+</span> [<span class="dv">4</span>]     <span class="co"># + 造一个新 list,再把 a 重新绑定过去</span></span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(b)        <span class="co"># [1, 2, 3]   b 不跟随了</span></span></code></pre></div>
+<h2 id="五小整数缓存与字符串驻留">五、小整数缓存与字符串驻留</h2>
+<p>这两个是 CPython 的实现细节,不是语言语义,但用 <code>is</code>
+时一定会撞见。</p>
+<p>CPython 启动时预先创建 <code>-5</code> 到 <code>256</code>
+的所有整数对象并缓存复用,这个范围内相同的值是<strong>同一个对象</strong>:</p>
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> <span class="dv">100</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> <span class="dv">100</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a <span class="kw">is</span> b)      <span class="co"># True,都指向缓存里那个唯一的 100 对象</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>m <span class="op">=</span> <span class="bu">int</span>(<span class="st">&quot;257&quot;</span>)</span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>n <span class="op">=</span> <span class="bu">int</span>(<span class="st">&quot;257&quot;</span>)</span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(m <span class="kw">is</span> n)      <span class="co"># False,两次 int() 各自在堆上新建了一个 257 对象</span></span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(m <span class="op">==</span> n)      <span class="co"># True,值当然相等</span></span></code></pre></div>
+<p><strong>为什么要做这个缓存</strong>:小整数在实际代码里用得极频繁(循环计数、索引、布尔判断的底层都是小整数),预先建好、永久复用,避免了对同一个常用值反复分配释放对象的开销——这是拿一小块常驻内存换运行时避免大量重复分配的典型时间换空间。范围
+<code>[-5, 256]</code> 是 CPython
+写死的实现选择,别的实现或版本可能不同,<strong>判断数值相等永远用
+<code>==</code>,绝不用 <code>is</code></strong>,<code>is</code>
+只是碰巧对小整数”能用”,出了范围就会给出误导性的 <code>False</code>。</p>
+<p>字符串驻留(interning)同理:CPython
+把某些字符串(尤其是看起来像标识符的字面量)驻留到一张全局表里,相同内容共享同一对象,这样字典查键、标识符比较能先比指针(<code>is</code>)快速判等,而不必逐字符比较内容:</p>
 <div class="sourceCode" id="cb12"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> [<span class="dv">1</span>, <span class="dv">2</span>]</span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> a</span>
-<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>a <span class="op">+=</span> [<span class="dv">3</span>]        <span class="co"># list 的 += 是原地扩展(__iadd__),还是同一对象</span></span>
-<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(b)        <span class="co"># [1, 2, 3]   别名 b 跟着变</span></span>
-<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> a <span class="op">+</span> [<span class="dv">4</span>]     <span class="co"># + 造一个新 list,再把 a 重新绑定过去</span></span>
-<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(b)        <span class="co"># [1, 2, 3]   b 不跟随了——a 已指向别处</span></span></code></pre></div>
-<h2 id="六小整数缓存与字符串驻留">六、小整数缓存与字符串驻留</h2>
-<p>这两个是纯 <strong>CPython 实现细节</strong>，但你用 <code>is</code>
-玩的时候一定会撞见，不讲清会一头雾水。</p>
-<h3 id="小整数缓存--5-256">小整数缓存 [-5, 256]</h3>
-<p>CPython 启动时预先创建好 <code>-5</code> 到 <code>256</code>
-的所有整数对象并缓存复用。所以这个范围内相同的值是<strong>同一个对象</strong>：</p>
-<div class="sourceCode" id="cb13"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> <span class="dv">100</span></span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> <span class="dv">100</span></span>
-<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a <span class="kw">is</span> b)      <span class="co"># True！都指向缓存里那个唯一的 100 对象</span></span>
-<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>x <span class="op">=</span> <span class="dv">257</span></span>
-<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>y <span class="op">=</span> <span class="dv">257</span></span>
-<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(x <span class="kw">is</span> y)      <span class="co"># True！——但这不是靠小整数缓存</span></span>
-<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a><span class="co"># 在同一编译单元里，字面量 257 在字节码的 co_consts 常量表中只存一份，</span></span>
-<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a><span class="co"># x、y 复用同一个常量对象，所以哪怕 257 超出 [-5, 256] 缓存范围，x is y 仍是 True。</span></span>
-<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a><span class="co"># 要真正演示“超出缓存就各自新建”，得让对象在运行时构造、绕开 co_consts 复用：</span></span>
-<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a>m <span class="op">=</span> <span class="bu">int</span>(<span class="st">&quot;257&quot;</span>)</span>
-<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a>n <span class="op">=</span> <span class="bu">int</span>(<span class="st">&quot;257&quot;</span>)</span>
-<span id="cb13-14"><a href="#cb13-14" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(m <span class="kw">is</span> n)      <span class="co"># False！两次 int() 各自在堆上新建了一个 257 对象</span></span>
-<span id="cb13-15"><a href="#cb13-15" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(m <span class="op">==</span> n)      <span class="co"># True，值当然相等</span></span></code></pre></div>
-<p>为什么缓存？小整数用得极频繁，预建好避免反复分配释放，省内存省时间。范围
-<code>[-5, 256]</code> 是写死的实现选择，别的实现或版本可能不同。</p>
-<blockquote>
-<p>教训：<strong>判断数值相等永远用 <code>==</code>，绝不用
-<code>is</code>。</strong> <code>is</code>
-碰巧对小整数”能用”，一出范围就骗你。</p>
-</blockquote>
-<h3 id="字符串驻留interning">字符串驻留（interning）</h3>
-<p>CPython
-会把某些字符串（尤其是看起来像标识符的字面量、编译期常量）<strong>驻留</strong>到一张全局表里，相同内容共享同一对象——这样比较标识符、字典查键时能先比指针（<code>is</code>）快速判等。</p>
-<div class="sourceCode" id="cb14"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> <span class="st">&quot;hello&quot;</span></span>
-<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> <span class="st">&quot;hello&quot;</span></span>
-<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a <span class="kw">is</span> b)      <span class="co"># 通常 True，被驻留了</span></span>
-<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>s <span class="op">=</span> <span class="st">&quot;hello world!&quot;</span></span>
-<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>t <span class="op">=</span> <span class="st">&quot;hello world!&quot;</span></span>
-<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(s <span class="kw">is</span> t)      <span class="co"># True——但同样是“同一编译单元里两个相同字面量共享一个 co_consts 常量”，</span></span>
-<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a>                   <span class="co"># 并不代表运行时把它 intern 了；含空格/标点的串默认不会被自动驻留</span></span>
-<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a><span class="co"># 运行时构造、绕开字面量常量复用，才看得到“内容相同但不是同一对象”：</span></span>
-<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a>u <span class="op">=</span> <span class="st">&quot;hello world!&quot;</span>.upper().lower()</span>
-<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a>v <span class="op">=</span> <span class="st">&quot;hello world!&quot;</span>.upper().lower()</span>
-<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(u <span class="kw">is</span> v)      <span class="co"># 通常 False</span></span>
-<span id="cb14-14"><a href="#cb14-14" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-15"><a href="#cb14-15" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sys</span>
-<span id="cb14-16"><a href="#cb14-16" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.<span class="bu">intern</span>(u) <span class="kw">is</span> sys.<span class="bu">intern</span>(v))   <span class="co"># True——手动 intern 后共享同一对象</span></span></code></pre></div>
-<p>驻留是优化，触发条件依版本和上下文而变，<strong>永远不要依赖它</strong>。同样：字符串判等用
-<code>==</code>。</p>
+class="sourceCode python"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> <span class="st">&quot;hello&quot;</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> <span class="st">&quot;hello&quot;</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a <span class="kw">is</span> b)      <span class="co"># 通常 True,被驻留了</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sys</span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>u <span class="op">=</span> <span class="st">&quot;hello world!&quot;</span>.upper().lower()</span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>v <span class="op">=</span> <span class="st">&quot;hello world!&quot;</span>.upper().lower()</span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(u <span class="kw">is</span> v)                              <span class="co"># 通常 False,运行时构造,未驻留</span></span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.<span class="bu">intern</span>(u) <span class="kw">is</span> sys.<span class="bu">intern</span>(v))      <span class="co"># True,手动 intern 后共享同一对象</span></span></code></pre></div>
+<p>驻留的触发条件依版本和上下文而变,<strong>永远不要依赖它</strong>,同样只用
+<code>==</code> 判等。</p>
 <h2
-id="七命名空间即字典但局部变量是-fast-locals">七、命名空间即字典，但局部变量是
+id="六命名空间即字典但局部变量是-fast-locals">六、命名空间即字典,但局部变量是
 fast locals</h2>
-<p>你可能听过”Python
-的命名空间就是字典（dict）“。基本对：模块的全局命名空间、对象的属性，底层确实是
-dict（key 是名字字符串，value 是对象引用）。</p>
-<div class="sourceCode" id="cb15"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>x <span class="op">=</span> <span class="dv">10</span></span>
-<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">globals</span>()[<span class="st">&quot;x&quot;</span>])    <span class="co"># 10，全局命名空间就是个 dict</span></span></code></pre></div>
-<p>但<strong>函数内的局部变量是个重要例外，这正是底层优化点</strong>。CPython
-编译函数时，能静态数出局部变量有几个、各是谁，于是把它们放进一个<strong>定长数组</strong>（“fast
-locals”），按<strong>下标</strong>访问，而不是每次去 dict
-里按字符串查。回顾 <a href="01-运行模型.html">第01章</a> 里
-<code>dis</code> 看到的 <code>LOAD_FAST</code>：</p>
-<div class="sourceCode" id="cb16"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> dis</span>
-<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>g <span class="op">=</span> <span class="dv">1</span></span>
-<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> f(a):</span>
-<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>    b <span class="op">=</span> a <span class="op">+</span> g       <span class="co"># a、b 是局部（fast），g 是全局</span></span>
-<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> b</span>
-<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>dis.dis(f)</span></code></pre></div>
-<p>本机 3.14 实测输出：</p>
+<p>模块的全局命名空间、对象的属性,底层确实是 dict(key 是名字字符串,value
+是对象引用):</p>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>x <span class="op">=</span> <span class="dv">10</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">globals</span>()[<span class="st">&quot;x&quot;</span>])    <span class="co"># 10,全局命名空间就是个 dict</span></span></code></pre></div>
+<p>但函数内的局部变量是个重要例外。CPython
+编译函数时能静态数出局部变量有几个、各是谁,于是把它们放进一个<strong>定长数组</strong>(“fast
+locals”),按下标访问,而不是每次去 dict 里按字符串查——回顾<a
+href="01-运行模型.html">「运行模型」</a>里 <code>dis</code> 看到的
+<code>LOAD_FAST</code>:</p>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> dis</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>g <span class="op">=</span> <span class="dv">1</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> f(a):</span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>    b <span class="op">=</span> a <span class="op">+</span> g       <span class="co"># a、b 是局部(fast),g 是全局</span></span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> b</span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a>dis.dis(f)</span></code></pre></div>
 <pre><code>  4           RESUME                   0
 
   5           LOAD_FAST_BORROW         0 (a)
@@ -403,53 +363,39 @@ class="sourceCode python"><code class="sourceCode python"><span id="cb16-1"><a h
 
   6           LOAD_FAST_BORROW         1 (b)
               RETURN_VALUE</code></pre>
-<p>（<code>LOAD_FAST_BORROW</code> 是 3.14
-对读取局部变量的优化变体——“借用”引用、免去 refcnt
-增减，本质仍是按数组下标取局部；写入仍是
-<code>STORE_FAST</code>，全局仍是 <code>LOAD_GLOBAL</code>。）</p>
-<p>关键指令对比： - <code>LOAD_FAST 0 (a)</code> /
-<code>STORE_FAST 1 (b)</code>：局部变量走<strong>数组下标</strong>，O(1)，无哈希、无字符串比较。快。
-- <code>LOAD_GLOBAL 1 (g)</code>：全局变量走 <strong>dict
-查找</strong>（先本模块 globals 再 builtins），慢些。</p>
-<pre><code>函数 f 的栈帧（frame）
-┌───────────────────────────┐
-│ fast locals 数组:          │
-│   [0] a ──► 对象           │  ← LOAD_FAST 0，按下标取，快
-│   [1] b ──► 对象           │
-├───────────────────────────┤
-│ 求值栈 (value stack)       │  ← 字节码运算用（见第01章栈式虚拟机）
-└───────────────────────────┘
-        全局 g 在模块的 globals dict 里，LOAD_GLOBAL 查字典</code></pre>
-<p>这解释了一个常见的性能技巧：热循环里把频繁访问的全局/属性用局部变量”缓存”一下，就是把
-<code>LOAD_GLOBAL</code>（查字典）换成
-<code>LOAD_FAST</code>（查数组）。也解释了函数内为什么读写全局要
+<p>(<code>LOAD_FAST_BORROW</code> 是 3.14
+对读取局部变量的优化变体,“借用”引用免去 refcnt
+增减,本质仍按数组下标取局部;全局仍是 <code>LOAD_GLOBAL</code>。)</p>
+<p><code>LOAD_FAST</code>/<code>STORE_FAST</code>
+走数组下标,O(1),无哈希、无字符串比较;<code>LOAD_GLOBAL</code> 走 dict
+查找(先本模块 globals 再
+builtins),开销明显更大。<strong>为什么函数局部变量要单独优化成数组、而不是像全局命名空间一样统一用
+dict</strong>:函数体在编译期是静态已知的——一个函数用到哪些局部变量名、总共几个,编译器扫一遍源码就能确定,不会在运行期动态增减(不像模块全局或对象属性可以在运行时任意添加新名字)。既然名字集合编译期已经固定,就没有必要每次访问都付出字典查找的哈希计算和字符串比较代价,直接分配一个定长数组、把每个名字编译期映射到一个固定下标即可——这是”能在编译期确定的信息,就不要留到运行期重新计算”这一优化原则的具体体现,而模块全局命名空间无法做这个优化,因为它必须支持运行时动态增删名字(比如
+<code>exec</code> 或者动态 <code>import</code>)。</p>
+<p>这解释了一个常见性能技巧:热循环里把频繁访问的全局/属性用局部变量”缓存”一下,就是把
+<code>LOAD_GLOBAL</code>(查字典)换成
+<code>LOAD_FAST</code>(查数组)。也解释了函数内为什么读写全局要
 <code>global</code>
-声明——编译器靠”函数里有没有对该名字赋值”来决定把它当局部还是全局。作用域与栈帧的完整故事见
-<a href="06-函数与调用栈.html">第06章</a>。</p>
-<blockquote>
-<p>注意区分：局部变量用 fast locals 数组是 <strong>CPython
-实现</strong>；“函数有独立作用域”是语言语义。</p>
-</blockquote>
-<h2 id="八浅拷贝-vs-深拷贝">八、浅拷贝 vs 深拷贝</h2>
-<p>既然 <code>b = a</code> 只拷指针，那想真拷一份怎么办？用
-<code>copy</code>
-模块。但要分清<strong>浅</strong>和<strong>深</strong>——这跟 C++
-里”拷贝构造是浅还是深、要不要写自己的深拷贝”是同一个问题。</p>
-<div class="sourceCode" id="cb19"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> copy</span>
-<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>original <span class="op">=</span> [[<span class="dv">1</span>, <span class="dv">2</span>], [<span class="dv">3</span>, <span class="dv">4</span>]]</span>
-<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a>alias    <span class="op">=</span> original                 <span class="co"># 别名，同一对象</span></span>
-<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a>shallow  <span class="op">=</span> copy.copy(original)      <span class="co"># 浅拷贝：新外层，内层元素仍共享</span></span>
-<span id="cb19-7"><a href="#cb19-7" aria-hidden="true" tabindex="-1"></a>deep     <span class="op">=</span> copy.deepcopy(original)  <span class="co"># 深拷贝：递归复制所有层</span></span>
-<span id="cb19-8"><a href="#cb19-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb19-9"><a href="#cb19-9" aria-hidden="true" tabindex="-1"></a>original[<span class="dv">0</span>].append(<span class="dv">99</span>)              <span class="co"># 修改内层第一个子列表</span></span>
-<span id="cb19-10"><a href="#cb19-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb19-11"><a href="#cb19-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(alias)    <span class="co"># [[1, 2, 99], [3, 4]]   跟着变（就是同一对象）</span></span>
-<span id="cb19-12"><a href="#cb19-12" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(shallow)  <span class="co"># [[1, 2, 99], [3, 4]]   跟着变！内层是共享的</span></span>
-<span id="cb19-13"><a href="#cb19-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(deep)     <span class="co"># [[1, 2], [3, 4]]       独立，没变</span></span></code></pre></div>
-<p>内存图：</p>
+声明——编译器靠”函数里有没有对该名字赋值”决定把它当局部还是全局,这个决定在编译期就要做出,无法拖到运行期看情况而定。完整故事见<a
+href="06-函数与调用栈.html">「函数与调用栈」</a>。</p>
+<h2 id="七浅拷贝-vs-深拷贝">七、浅拷贝 vs 深拷贝</h2>
+<p><code>b = a</code> 只拷指针,真想拷一份数据要用 <code>copy</code>
+模块,且要分清浅拷贝和深拷贝——这与 C++
+里”拷贝构造是浅是深、要不要自己写深拷贝”是同一个问题:</p>
+<div class="sourceCode" id="cb16"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> copy</span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>original <span class="op">=</span> [[<span class="dv">1</span>, <span class="dv">2</span>], [<span class="dv">3</span>, <span class="dv">4</span>]]</span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>alias    <span class="op">=</span> original                 <span class="co"># 别名,同一对象</span></span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>shallow  <span class="op">=</span> copy.copy(original)      <span class="co"># 浅拷贝:新外层,内层元素仍共享</span></span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>deep     <span class="op">=</span> copy.deepcopy(original)  <span class="co"># 深拷贝:递归复制所有层</span></span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a>original[<span class="dv">0</span>].append(<span class="dv">99</span>)</span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(alias)    <span class="co"># [[1, 2, 99], [3, 4]]   跟着变(同一对象)</span></span>
+<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(shallow)  <span class="co"># [[1, 2, 99], [3, 4]]   跟着变,内层是共享的</span></span>
+<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(deep)     <span class="co"># [[1, 2], [3, 4]]       独立,没变</span></span></code></pre></div>
 <pre><code>original ─► [ ●, ● ]            外层 list
               │  │
               ▼  ▼
@@ -458,64 +404,58 @@ class="sourceCode python"><code class="sourceCode python"><span id="cb19-1"><a h
 shallow = copy.copy(original):
 shallow ─► [ ●, ● ]  ← 新的外层对象
              │  │
-             └──┴──► 指向同样的 [1,2] 和 [3,4]  （内层没复制！）
+             └──┴──► 指向同样的 [1,2] 和 [3,4]  (内层没复制)
 
 deep = copy.deepcopy(original):
 deep ─► [ ●, ● ]  ← 新外层
           │  │
           ▼  ▼
-       [1,2]&#39;[3,4]&#39;  ← 连内层也是新对象，完全独立</code></pre>
+       [1,2]&#39;[3,4]&#39;  ← 连内层也是新对象,完全独立</code></pre>
+<p><strong>为什么默认的浅拷贝只复制一层,而不是干脆总是深拷贝更安全</strong>:嵌套结构可能任意深,盲目深拷贝对大型嵌套对象(比如一棵大树或图)代价很高,而且深拷贝要求正确处理循环引用(对象自己引用自己),实现更复杂;浅拷贝把”要拷贝到多深”这个决定权交还给调用者——大多数场景下容器本身需要独立、但里面装的对象继续共享是可以接受的(比如复制一个”指针列表”,指针指向的内容本来就该共享)。这是典型的”提供一个廉价的默认操作,昂贵的操作必须显式请求”的设计惯例,与前面”赋值默认拷引用而非深拷贝”是同一条原则。</p>
+<p>其他造浅拷贝的常见写法:<code>list(x)</code>、<code>x[:]</code>、<code>dict(x)</code>、<code>x.copy()</code>,都和
+<code>copy.copy</code> 一样是浅的;要完全独立必须
+<code>deepcopy</code>,它有递归遍历和额外分配的成本,不应无脑使用。</p>
+<h2 id="八可变默认参数陷阱">八、可变默认参数陷阱</h2>
+<p>有了本章的模型,可以理解 Python 最著名的坑之一:</p>
+<div class="sourceCode" id="cb18"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> add_item(item, bucket<span class="op">=</span>[]):    <span class="co"># 危险:默认值 [] 只创建一次</span></span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>    bucket.append(item)</span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> bucket</span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(add_item(<span class="dv">1</span>))   <span class="co"># [1]</span></span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(add_item(<span class="dv">2</span>))   <span class="co"># [1, 2]   可能期望 [2],但它记住了上次</span></span></code></pre></div>
+<p>原因:默认值 <code>[]</code> 是在 <code>def</code>
+<strong>执行时创建一次</strong>的一个可变对象,被函数对象一直持有;每次不传
+<code>bucket</code> 都复用同一个 list,原地 <code>append</code>
+自然累积。这是”可变对象 + 别名 +
+只创建一次”三者合流的必然结果——<code>def</code>
+语句本身是运行期执行的一条语句(见<a
+href="01-运行模型.html">「运行模型」</a>第三节),默认值表达式只在这条
+<code>def</code>
+语句执行的那一刻求值一次,而不是每次调用函数时重新求值,这个设计的合理性和完整机制留到<a
+href="06-函数与调用栈.html">「函数与调用栈」</a>展开。</p>
+<h2 id="小结">小结</h2>
 <ul>
-<li><strong>浅拷贝</strong>：只新建最外层容器，里面装的还是<strong>原来那些对象的引用</strong>。改内层可变元素，浅拷贝也受影响。</li>
-<li><strong>深拷贝</strong>：递归地把每一层都复制成新对象，彻底独立（还能正确处理循环引用）。</li>
+<li>变量是名字到堆对象的引用绑定,不是内存盒子——这是动态类型必然导致的内存模型,而非任意选择。</li>
+<li><code>a = b</code>
+只拷贝引用,从不拷贝对象或数据,结果是别名;<code>is</code>/<code>id()</code>
+判断是否同一对象,<code>==</code> 判断值是否相等。</li>
+<li>引用计数(<code>ob_refcnt</code>)是 CPython 换取”确定性回收”和”C
+扩展易于集成”的选择,代价是需要额外的循环垃圾回收器打补丁;<code>del</code>
+解绑名字而非删对象。</li>
+<li>可变与不可变的分界决定别名行为:不可变性是为共享安全、可哈希、心智负担低这三个目标换来的,代价是修改内容必须造新对象。</li>
+<li>小整数缓存、字符串驻留是 CPython
+用一小块常驻内存换避免重复分配的实现优化,不是语言保证,判等只用
+<code>==</code>。</li>
+<li>函数局部变量用 fast locals 数组而非
+dict,是”编译期已知的信息不留到运行期重算”的具体体现;模块全局命名空间因为要支持运行期动态增删名字,无法做同样的优化。</li>
+<li>浅拷贝只复制一层是”默认操作廉价、深操作显式请求”这一惯例的体现;可变默认参数陷阱是”def
+语句只执行一次、默认值只求值一次”的直接推论。</li>
 </ul>
-<p>其他造浅拷贝的常见写法：<code>list(x)</code>、<code>x[:]</code>、<code>dict(x)</code>、<code>x.copy()</code>。它们和
-<code>copy.copy</code> 一样都是浅的。要完全独立必须
-<code>deepcopy</code>。深拷贝有成本（递归 + 分配），别无脑用。</p>
-<h2 id="九可变默认参数陷阱预告">九、可变默认参数陷阱（预告）</h2>
-<p>有了本章的模型，你现在能理解一个 Python 最著名的坑长什么样：</p>
-<div class="sourceCode" id="cb21"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> add_item(item, bucket<span class="op">=</span>[]):    <span class="co"># 危险！默认值 [] 只创建一次</span></span>
-<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a>    bucket.append(item)</span>
-<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> bucket</span>
-<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(add_item(<span class="dv">1</span>))   <span class="co"># [1]</span></span>
-<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(add_item(<span class="dv">2</span>))   <span class="co"># [1, 2]  ← 你可能期望 [2]，但它记住了上次！</span></span></code></pre></div>
-<p>原因就是本章讲的：默认值 <code>[]</code> 是在 <code>def</code>
-执行时<strong>创建一次的一个可变对象</strong>，被函数对象一直持有；每次不传
-<code>bucket</code> 都复用<strong>同一个 list</strong>，原地 append
-自然累积。这是”可变对象 + 别名 + 只创建一次”三者合流的必然结果。</p>
-<p>正确写法和完整机制（默认值存在哪、<code>def</code> 何时求值）留到 <a
-href="06-函数与调用栈.html">第06章</a>
-展开——但你现在已经看懂它为什么会这样了，这正是本章模型的威力。</p>
-<h2 id="十小结">十、小结</h2>
-<ul>
-<li><strong>用法层面</strong>：赋值 <code>x = 值</code>
-不用声明类型；<code>y = x</code> 语法上就是一次普通赋值。</li>
-<li><strong>底层层面</strong>（把这几条刻进肌肉）：
-<ol type="1">
-<li><strong>变量是名字到堆对象的引用绑定</strong>，不是内存盒子；类比只读、不能算术的指针。</li>
-<li><strong><code>a = b</code>
-只拷贝引用（指针值）</strong>，从不拷贝对象或数据；结果是别名。用
-<code>is</code>/<code>id()</code> 可证明是同一对象，<code>==</code>
-只比值。</li>
-<li><strong>引用计数</strong>（<code>ob_refcnt</code>）管回收，<code>sys.getrefcount</code>
-可观测（结果多 1）；<code>del</code> 解绑名字而非删对象。</li>
-<li><strong>可变 vs
-不可变决定别名行为</strong>：原地修改可变对象影响所有别名；重新绑定只动当前名字；不可变对象的”修改”都是造新对象。</li>
-<li><strong>小整数 <code>[-5,256]</code> 缓存、字符串驻留</strong>是
-CPython 优化——判等一律用 <code>==</code>，别用 <code>is</code>。</li>
-<li>命名空间是 dict，但<strong>函数局部变量用 fast locals
-数组</strong>（<code>LOAD_FAST</code>），是重要性能点。</li>
-<li><code>copy.copy</code> 浅、<code>copy.deepcopy</code>
-深；<code>b=a</code>/切片/<code>list()</code> 都只是浅层。</li>
-<li>可变默认参数陷阱是本章模型的直接推论，细节见 <a
-href="06-函数与调用栈.html">第06章</a>。</li>
-</ol></li>
-</ul>
-<p><a href="02-基础语法.html">← 上一章：基础语法</a> · <a
+<hr />
+<p><a href="02-基础语法.html">← 上一章:基础语法</a> · <a
 href="index.html">返回目录</a> · <a
-href="04-数据类型.html">下一章：数据类型</a> →</p>
+href="04-数据类型.html">下一章:数据类型</a> →</p>
 </div>
 </body>
 </html>

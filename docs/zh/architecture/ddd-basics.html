@@ -99,8 +99,7 @@
 <a href="../go/index.html">Go</a>
 <a href="../algo/index.html">算法笔记</a>
 <a href="../architecture/index.html" style="color:var(--accent-dark);font-weight:700">架构设计</a>
-<a href="../oodlld/index.html">OOD/LLD</a>
-<a class="topnav-lang" href="#" onclick="switchLang();return false;" title="切换语言:中文 / English">🌐 <span class="lp on">中文</span><span class="sep">/</span><span class="lp">EN</span></a></div></div><script>function switchLang(){var p=location.pathname,en=p.indexOf('/en/')>-1,n=en?p.replace('/en/','/zh/'):p.replace('/zh/','/en/');try{localStorage.setItem('lang',en?'zh':'en')}catch(e){}location.href=n;}</script>
+<a href="../oodlld/index.html">OOD/LLD</a></div></div>
 <div class="wrap">
 <nav id="TOC" role="doc-toc">
 <ul>
@@ -211,6 +210,11 @@ Language)</h2>
 </tbody>
 </table>
 <p>统一语言是<strong>活的</strong>：术语变了，代码与测试命名应跟着变，而不是靠口头翻译层。</p>
+<p>反例：产品经理在需求文档里写「保单进入宽限期后仍可补缴」，工程师把这句话翻译成代码里的
+<code>status = 3</code>；半年后新来的同事要修一个宽限期相关的
+bug，翻遍代码只看到一堆 <code>if status == 3</code>，既不知道 3
+代表什么业务含义，也不敢确定改动会不会影响到「已失效」（说不定也是某个数字）的判断逻辑，只能回头去找产品经理或翻会议记录确认——这一趟来回就是「翻译损耗」的具体样子。如果代码里直接是
+<code>status == PolicyStatus.GRACE_PERIOD</code>，业务人员和工程师对着屏幕就能核对，不需要额外的翻译环节。</p>
 <hr />
 <h2 id="四限界上下文-bounded-context">四、限界上下文 (Bounded
 Context)</h2>
@@ -230,6 +234,11 @@ ACL、共享内核需极谨慎）<br />
 </li>
 <li>上下文边界是微服务拆分的重要候选（见下文）</li>
 </ol>
+<p>反例：如果销售团队和履约团队图省事，共用同一张 <code>Order</code>
+数据库表和同一个 <code>Order</code>
+类——销售团队眼里的「订单」在客户下单那一刻就该存在，字段以「报价、优惠、成交价」为主；履约团队眼里的「订单」要等支付确认后才该出现，字段以「仓库、物流单号、发货状态」为主。两边对着同一张表加字段、改状态枚举，销售团队上一个需求可能刚好把履约团队依赖的某个状态值语义改掉，导致发货逻辑莫名出错。拆成两个限界上下文、各自维护
+<code>Order</code>（销售）和
+<code>FulfillmentOrder</code>（履约）、之间用事件显式集成，两边就能各自演进而不互相绊倒。</p>
 <hr />
 <h2 id="五战术积木">五、战术积木</h2>
 <h3 id="实体-entity">5.1 实体 (Entity)</h3>
@@ -264,6 +273,11 @@ class="sourceCode python"><code class="sourceCode python"><span id="cb3-1"><a hr
 <p>设计问题：聚合太大 → 并发冲突多；太小 →
 跨聚合事务变多。按<strong>不变式</strong>划边界，而非按「方便
 join」。</p>
+<p>例如把「客户」也塞进 <code>Order</code>
+这个聚合（一个订单对象里直接嵌套整个客户对象），会导致两个毫不相干的操作——「用户改自己的收货地址」和「另一个人查看这笔订单详情」——都要对同一个聚合加锁，高峰期两个操作互相等待，这是「聚合太大」。反过来，如果把
+<code>OrderLine</code>（订单里的每一行商品）都各自设计成独立聚合，那么「提交订单」这一个操作就要跨好几个聚合分别开事务、分别保证一致——一旦其中一步失败，回滚会很麻烦，这是「聚合太小」。判断标准是「哪些字段必须在同一个事务里一起保持正确」：订单总金额必须和订单行金额之和一致，这条不变式决定了
+<code>OrderLine</code> 应该在 <code>Order</code>
+聚合内部，而客户信息只需要引用客户 ID，不必打包进同一个聚合。</p>
 <h3 id="仓储-repository">5.4 仓储 (Repository)</h3>
 <p>对聚合根提供「类似集合」的持久化抽象：<code>get</code> /
 <code>save</code> / 按条件查找。<br />

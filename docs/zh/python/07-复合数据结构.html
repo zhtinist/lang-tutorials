@@ -99,114 +99,44 @@
 <a href="../go/index.html">Go</a>
 <a href="../algo/index.html">算法笔记</a>
 <a href="../architecture/index.html">架构设计</a>
-<a href="../oodlld/index.html">OOD/LLD</a>
-<a class="topnav-lang" href="#" onclick="switchLang();return false;" title="切换语言:中文 / English">🌐 <span class="lp on">中文</span><span class="sep">/</span><span class="lp">EN</span></a></div></div><script>function switchLang(){var p=location.pathname,en=p.indexOf('/en/')>-1,n=en?p.replace('/en/','/zh/'):p.replace('/zh/','/en/');try{localStorage.setItem('lang',en?'zh':'en')}catch(e){}location.href=n;}</script>
+<a href="../oodlld/index.html">OOD/LLD</a></div></div>
 <div class="wrap">
 <nav id="TOC" role="doc-toc">
 <ul>
 <li><a href="#复合数据结构的内部实现"
 id="toc-复合数据结构的内部实现">复合数据结构的内部实现</a>
 <ul>
-<li><a href="#先会用list-dict-tuple-set-速览"
-id="toc-先会用list-dict-tuple-set-速览">0. 先会用:list / dict / tuple /
-set 速览</a></li>
-<li><a href="#开始深入指针数组-vs-值数组"
-id="toc-开始深入指针数组-vs-值数组">1. 开始深入:指针数组 vs
-值数组</a></li>
-<li><a href="#list指向-pyobject-的指针的动态数组"
-id="toc-list指向-pyobject-的指针的动态数组">2. <code>list</code>:指向
-PyObject 的指针的动态数组</a></li>
-<li><a href="#tuple不可变的定长数组" id="toc-tuple不可变的定长数组">3.
-<code>tuple</code>:不可变的定长数组</a></li>
-<li><a href="#dictcpython-的紧凑字典" id="toc-dictcpython-的紧凑字典">4.
-<code>dict</code>:CPython 的紧凑字典</a></li>
-<li><a href="#set-与-frozenset" id="toc-set-与-frozenset">5.
-<code>set</code> 与 <code>frozenset</code></a></li>
-<li><a href="#collections.deque分块双向链表"
-id="toc-collections.deque分块双向链表">6.
-<code>collections.deque</code>:分块双向链表</a></li>
-<li><a href="#全景复杂度对照表" id="toc-全景复杂度对照表">7.
-全景复杂度对照表</a></li>
-<li><a href="#与-c-的内存模型对照小结"
-id="toc-与-c-的内存模型对照小结">8. 与 C 的内存模型对照小结</a></li>
+<li><a href="#一指针数组-vs-值数组"
+id="toc-一指针数组-vs-值数组">一、指针数组 vs 值数组</a></li>
+<li><a href="#二list为什么是动态数组而不是链表"
+id="toc-二list为什么是动态数组而不是链表">二、<code>list</code>:为什么是动态数组而不是链表</a></li>
+<li><a href="#三tuple不可变的定长记录"
+id="toc-三tuple不可变的定长记录">三、<code>tuple</code>:不可变的定长记录</a></li>
+<li><a href="#四dict紧凑数组-索引表如何在保序的同时保持哈希表本质"
+id="toc-四dict紧凑数组-索引表如何在保序的同时保持哈希表本质">四、<code>dict</code>:紧凑数组
++ 索引表如何在保序的同时保持哈希表本质</a></li>
+<li><a href="#五set-与-frozenset"
+id="toc-五set-与-frozenset">五、<code>set</code> 与
+<code>frozenset</code></a></li>
+<li><a href="#六collections.deque分块双向链表"
+id="toc-六collections.deque分块双向链表">六、<code>collections.deque</code>:分块双向链表</a></li>
+<li><a href="#七全景复杂度对照表"
+id="toc-七全景复杂度对照表">七、全景复杂度对照表</a></li>
+<li><a href="#八与-c-的内存模型对照小结"
+id="toc-八与-c-的内存模型对照小结">八、与 C 的内存模型对照小结</a></li>
 <li><a href="#小结" id="toc-小结">小结</a></li>
 </ul></li>
 </ul>
 </nav>
 <h1 id="复合数据结构的内部实现">复合数据结构的内部实现</h1>
-<p>本章讲 Python
-最常用的几种”容器”——<code>list</code>、<code>tuple</code>、<code>dict</code>、<code>set</code>、<code>deque</code>。<strong>先讲每种容器怎么创建、怎么增删查改、有哪些常用方法——不需要任何底层知识就能看懂;再讲它们在
-CPython 里到底是什么数据结构,和 C
-的数组、结构体、哈希表逐一对照。</strong>
-只想会用的话,读每节的「怎么用」就够;想搞懂内存布局和复杂度,再往下看「底层与
-C 对比」。</p>
-<blockquote>
-<p>贯穿全书的一条:<a
-href="03-变量与内存模型.html">见「变量与内存模型」</a>,Python
-的容器里装的从来不是”值”,而是<strong>指向 <code>PyObject</code>
-的指针</strong>。这一点会在本章”底层”部分反复出现,决定了容器的内存布局、拷贝语义和复杂度。</p>
-</blockquote>
-<hr />
-<h2 id="先会用list-dict-tuple-set-速览">0. 先会用:list / dict / tuple /
-set 速览</h2>
-<h3
-id="list有序可变最常用的容器"><code>list</code>:有序、可变,最常用的容器</h3>
-<div class="sourceCode" id="cb1"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>fruits <span class="op">=</span> [<span class="st">&quot;apple&quot;</span>, <span class="st">&quot;banana&quot;</span>, <span class="st">&quot;cherry&quot;</span>]</span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>fruits.append(<span class="st">&quot;date&quot;</span>)           <span class="co"># 末尾追加</span></span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(fruits)                   <span class="co"># [&#39;apple&#39;, &#39;banana&#39;, &#39;cherry&#39;, &#39;date&#39;]</span></span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>fruits.insert(<span class="dv">1</span>, <span class="st">&quot;kiwi&quot;</span>)        <span class="co"># 在下标 1 处插入</span></span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(fruits)                   <span class="co"># [&#39;apple&#39;, &#39;kiwi&#39;, &#39;banana&#39;, &#39;cherry&#39;, &#39;date&#39;]</span></span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>fruits.remove(<span class="st">&quot;banana&quot;</span>)         <span class="co"># 按值删除(删第一个匹配项)</span></span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(fruits)                   <span class="co"># [&#39;apple&#39;, &#39;kiwi&#39;, &#39;cherry&#39;, &#39;date&#39;]</span></span>
-<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>last <span class="op">=</span> fruits.pop()             <span class="co"># 弹出并返回末尾元素</span></span>
-<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(last, fruits)             <span class="co"># date [&#39;apple&#39;, &#39;kiwi&#39;, &#39;cherry&#39;]</span></span>
-<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(fruits[<span class="dv">0</span>], fruits[<span class="op">-</span><span class="dv">1</span>])    <span class="co"># apple cherry  —— 正数/负数下标</span></span>
-<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(fruits[<span class="dv">1</span>:<span class="dv">3</span>])              <span class="co"># [&#39;kiwi&#39;, &#39;cherry&#39;]  —— 切片</span></span>
-<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">len</span>(fruits))              <span class="co"># 3</span></span>
-<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">&quot;apple&quot;</span> <span class="kw">in</span> fruits)        <span class="co"># True</span></span></code></pre></div>
-<h3 id="dict键值对映射"><code>dict</code>:键值对映射</h3>
-<div class="sourceCode" id="cb2"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>person <span class="op">=</span> {<span class="st">&quot;name&quot;</span>: <span class="st">&quot;Alice&quot;</span>, <span class="st">&quot;age&quot;</span>: <span class="dv">30</span>}</span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(person[<span class="st">&quot;name&quot;</span>])           <span class="co"># Alice —— 按键取值</span></span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>person[<span class="st">&quot;age&quot;</span>] <span class="op">=</span> <span class="dv">31</span>              <span class="co"># 更新已有键</span></span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>person[<span class="st">&quot;city&quot;</span>] <span class="op">=</span> <span class="st">&quot;Boston&quot;</span>       <span class="co"># 新增键</span></span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(person)                   <span class="co"># {&#39;name&#39;: &#39;Alice&#39;, &#39;age&#39;: 31, &#39;city&#39;: &#39;Boston&#39;}</span></span>
-<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="kw">del</span> person[<span class="st">&quot;city&quot;</span>]              <span class="co"># 删除键</span></span>
-<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(person)                   <span class="co"># {&#39;name&#39;: &#39;Alice&#39;, &#39;age&#39;: 31}</span></span>
-<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(person.get(<span class="st">&quot;job&quot;</span>, <span class="st">&quot;unknown&quot;</span>))  <span class="co"># unknown —— 键不存在时给默认值,不抛异常</span></span>
-<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> k, v <span class="kw">in</span> person.items():     <span class="co"># 遍历键值对</span></span>
-<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(k, v)</span>
-<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a><span class="co"># name Alice</span></span>
-<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a><span class="co"># age 31</span></span></code></pre></div>
-<h3 id="tuple有序不可变"><code>tuple</code>:有序、不可变</h3>
-<div class="sourceCode" id="cb3"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>point <span class="op">=</span> (<span class="dv">3</span>, <span class="dv">4</span>)</span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>x, y <span class="op">=</span> point                    <span class="co"># 解包</span></span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(x, y)                     <span class="co"># 3 4</span></span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(point[<span class="dv">0</span>])                 <span class="co"># 3</span></span>
-<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="co"># point[0] = 9                  # TypeError:tuple 不能修改</span></span></code></pre></div>
-<h3
-id="set无序去重支持集合运算"><code>set</code>:无序、去重、支持集合运算</h3>
-<div class="sourceCode" id="cb4"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> {<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>}</span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>a.add(<span class="dv">4</span>)</span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>a.remove(<span class="dv">2</span>)</span>
-<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a)                        <span class="co"># {1, 3, 4}</span></span>
-<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> {<span class="dv">3</span>, <span class="dv">4</span>, <span class="dv">5</span>}</span>
-<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a <span class="op">|</span> b)                    <span class="co"># {1, 3, 4, 5}  并集</span></span>
-<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a <span class="op">&amp;</span> b)                    <span class="co"># {3, 4}        交集</span></span></code></pre></div>
-<p>这些是日常写代码用得最多的操作。下面逐个容器展开——<strong>先用法,后底层</strong>。</p>
-<hr />
-<h2 id="开始深入指针数组-vs-值数组">1. 开始深入:指针数组 vs 值数组</h2>
-<p>从这一节起进入「底层」。要理解后面每种容器的内存布局,先建立一个直觉对比。</p>
+<p>本章讲
+<code>list</code>、<code>tuple</code>、<code>dict</code>、<code>set</code>、<code>deque</code>
+这几种最常用容器在 CPython 里的内部结构,和 C
+的数组、结构体、哈希表逐一对照,重点是每处实现选择解决了什么问题、放弃了什么。<a
+href="03-变量与内存模型.html">「变量与内存模型」</a>确立的前提贯穿全文:Python
+容器里存的从来不是”值”本身,而是指向 <code>PyObject</code>
+的指针——这一点决定了下面每种容器的内存布局、拷贝语义与复杂度。</p>
+<h2 id="一指针数组-vs-值数组">一、指针数组 vs 值数组</h2>
 <p>C 的数组 <code>int a[4] = {1,2,3,4}</code> 在内存里是这样的:</p>
 <pre><code>a:  [ 1 ][ 2 ][ 3 ][ 4 ]        // 16 字节,值连续存放,cache 友好
      ^0   ^4   ^8   ^12</code></pre>
@@ -222,74 +152,82 @@ class="sourceCode python"><code class="sourceCode python"><span id="cb4-1"><a hr
                             v      v      v      v
                           PyLong PyLong PyLong PyLong
                            (1)    (2)    (3)    (4)   ← 各自在堆上,还可能被别处共享</code></pre>
-<p>所以 Python 的 list
-是<strong>“指针的数组”</strong>,不是”值的数组”。这一个图能解释本章几乎所有现象。记住它,下面每种容器的”底层”小节都会用到。</p>
-<hr />
-<h2 id="list指向-pyobject-的指针的动态数组">2. <code>list</code>:指向
-PyObject 的指针的动态数组</h2>
-<h3 id="怎么用">怎么用</h3>
-<p>上面「先会用」已经覆盖了
-<code>append</code>/<code>insert</code>/<code>remove</code>/<code>pop</code>/索引/切片。再补几个常用方法:</p>
-<div class="sourceCode" id="cb7"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>nums <span class="op">=</span> [<span class="dv">3</span>, <span class="dv">1</span>, <span class="dv">2</span>]</span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>nums.extend([<span class="dv">9</span>, <span class="dv">8</span>])    <span class="co"># 把另一个可迭代对象的元素逐个追加</span></span>
-<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(nums)             <span class="co"># [3, 1, 2, 9, 8]</span></span>
-<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>nums.sort()              <span class="co"># 原地排序</span></span>
-<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(nums)              <span class="co"># [1, 2, 3, 8, 9]</span></span>
-<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(nums.index(<span class="dv">8</span>))    <span class="co"># 3 —— 第一个等于 8 的下标</span></span>
-<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(nums.count(<span class="dv">2</span>))    <span class="co"># 1 —— 出现次数</span></span>
-<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>nums.reverse()            <span class="co"># 原地反转</span></span>
-<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(nums)              <span class="co"># [9, 8, 3, 2, 1]</span></span></code></pre></div>
-<h3 id="底层与-c-对比">底层与 C 对比</h3>
-<h4 id="内存布局">内存布局</h4>
+<p>Python 的 list
+是”指针的数组”,不是”值的数组”。这不是随意的实现,而是”一切皆对象、变量即引用”这一运行模型(<a
+href="01-运行模型.html">见「运行模型」</a>)在容器层面的必然延伸——数组的每个槽位必须是统一大小,才能用
+<code>ob_item[i]</code>
+这种固定步长直接算地址;<code>int</code>、<code>str</code>、自定义实例的大小完全不同,数组唯一能统一存放的东西就是”指向它们的指针”。这个结论贯穿本章:每次访问元素都多一次指针解引用,拷贝容器默认只拷指针不拷内容,同一个数组里可以混装任意不同类型的元素(因为槽位里存的只是统一大小的指针,类型差异被推到了被指向的对象那一侧)。</p>
+<h2
+id="二list为什么是动态数组而不是链表">二、<code>list</code>:为什么是动态数组而不是链表</h2>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>fruits <span class="op">=</span> [<span class="st">&quot;apple&quot;</span>, <span class="st">&quot;banana&quot;</span>, <span class="st">&quot;cherry&quot;</span>]</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>fruits.append(<span class="st">&quot;date&quot;</span>)           <span class="co"># 末尾追加</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>fruits.insert(<span class="dv">1</span>, <span class="st">&quot;kiwi&quot;</span>)        <span class="co"># 在下标 1 处插入</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>fruits.remove(<span class="st">&quot;banana&quot;</span>)         <span class="co"># 按值删除(删第一个匹配项)</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>last <span class="op">=</span> fruits.pop()             <span class="co"># 弹出并返回末尾元素</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(fruits[<span class="dv">0</span>], fruits[<span class="op">-</span><span class="dv">1</span>])    <span class="co"># apple kiwi   —— 正数/负数下标</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(fruits[<span class="dv">1</span>:<span class="dv">3</span>])              <span class="co"># [&#39;kiwi&#39;, &#39;cherry&#39;]  —— 切片</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">&quot;apple&quot;</span> <span class="kw">in</span> fruits, <span class="bu">len</span>(fruits))   <span class="co"># True 3</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>nums <span class="op">=</span> [<span class="dv">3</span>, <span class="dv">1</span>, <span class="dv">2</span>]</span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>nums.extend([<span class="dv">9</span>, <span class="dv">8</span>])      <span class="co"># 把另一个可迭代对象的元素逐个追加</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>nums.sort()               <span class="co"># 原地排序</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(nums)               <span class="co"># [1, 2, 3, 8, 9]</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(nums.index(<span class="dv">8</span>), nums.count(<span class="dv">2</span>))     <span class="co"># 3 1</span></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>nums.reverse()</span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(nums)               <span class="co"># [9, 8, 3, 2, 1]</span></span></code></pre></div>
 <p>CPython 中 list 的结构体(简化自
 <code>Include/cpython/listobject.h</code>):</p>
-<div class="sourceCode" id="cb8"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="kw">typedef</span> <span class="kw">struct</span> <span class="op">{</span></span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>    PyObject_VAR_HEAD          <span class="co">// 含 ob_refcnt、ob_type、ob_size(=len)</span></span>
-<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    PyObject <span class="op">**</span>ob_item<span class="op">;</span>        <span class="co">// 指向一块单独分配的指针数组</span></span>
-<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>    Py_ssize_t allocated<span class="op">;</span>      <span class="co">// 已分配的容量(容量 &gt;= ob_size)</span></span>
-<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> PyListObject<span class="op">;</span></span></code></pre></div>
-<p>关键点:</p>
-<ul>
-<li>list 对象本身是固定大小的头部;真正的元素指针存在
-<code>ob_item</code>
-指向的<strong>另一块堆内存</strong>里。这是两次分配(list 头 +
+<div class="sourceCode" id="cb4"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">typedef</span> <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    PyObject_VAR_HEAD          <span class="co">// 含 ob_refcnt、ob_type、ob_size(=len)</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    PyObject <span class="op">**</span>ob_item<span class="op">;</span>        <span class="co">// 指向一块单独分配的指针数组</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    Py_ssize_t allocated<span class="op">;</span>      <span class="co">// 已分配的容量(容量 &gt;= ob_size)</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> PyListObject<span class="op">;</span></span></code></pre></div>
+<p>list 对象本身是固定大小的头部,真正的元素指针存在 <code>ob_item</code>
+指向的<strong>另一块堆内存</strong>里——这是两次分配(list 头 +
 指针数组),类似 C++ 里 <code>std::vector</code> 的 <code>vector</code>
-对象和它 <code>new[]</code> 出来的缓冲区分离。</li>
-<li><code>ob_size</code> 是当前长度
-<code>len(lst)</code>;<code>allocated</code>
-是缓冲区能容纳的指针个数。二者关系恒为
+对象和它 <code>new[]</code> 出来的缓冲区分离。<code>ob_size</code>
+是当前长度,<code>allocated</code> 是缓冲区能容纳的指针个数,恒有
 <code>allocated &gt;= ob_size</code>,中间的空槽是为了 append
-不用每次都重新分配。</li>
-<li>每个元素占 <code>ob_item</code> 里的一个指针位(64 位平台上 8
-字节),指向真正的对象。<strong>元素对象本身不在数组里</strong>。</li>
-</ul>
+不用每次都重新分配。</p>
+<p><strong>为什么用连续的指针数组而不是链表</strong>(每个节点存一个元素和
+<code>next</code> 指针,理论上中间插入删除是
+O(1)):这是对”哪种操作更常见”的一个判断,而不是任意选择。实际代码里按下标随机访问(<code>lst[i]</code>)、遍历、尾部追加是压倒性高频的操作,在中间任意位置插入删除相对少见。数组把随机访问做到
+O(1)——<code>ob_item + i</code> 直接算地址;链表的随机访问是
+O(n)——必须从头沿指针一步步走到第 i
+个节点。如果选链表,牺牲的是几乎所有代码都在用的操作,换来的只是一个用得少得多的操作变快,这笔账在通用容器的默认实现里明显不划算。链表还有一个经常被忽视的代价:每个节点是一次独立的堆分配,元素在内存里彼此不相邻,遍历时
+cache miss
+远比连续数组频繁,而现实中”遍历”几乎是任何容器都逃不掉的操作。真正需要”两端
+O(1)“这个特性时,标准库把它做成了一个专门的类型(<a
+href="#六collections.deque分块双向链表"><code>collections.deque</code></a>,见后文),而不是让
+list 本身承担这个权衡。</p>
 <p>对照 <code>std::vector&lt;T&gt;</code>:vector 直接把 <code>T</code>
 的值连续存放(<code>T=int</code> 就是连续的 int)。Python list
-永远存指针,哪怕全是小整数,也要经过一次指针解引用才能拿到值。这就是为什么数值计算要用
+永远存指针,哪怕全是小整数,也要经过一次指针解引用才能拿到值——这就是为什么数值计算要用
 <code>numpy</code>(<a
 href="12-常用第三方库.html">见「常用第三方库」</a>):numpy 的 ndarray
 才是真正连续存值的 C 数组。</p>
-<h4 id="over-allocation-扩容策略">over-allocation 扩容策略</h4>
 <p>append 时若 <code>ob_size == allocated</code>,需要扩容。CPython
 不是简单翻倍,而是用一个温和的增长公式(<code>list_resize</code>,简化):</p>
-<div class="sourceCode" id="cb9"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="co">/* 现行 CPython list_resize:多分配约 1/8,再向上对齐到 4 的倍数 */</span></span>
-<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>new_allocated <span class="op">=</span> <span class="op">(</span>new_size <span class="op">+</span> <span class="op">(</span>new_size <span class="op">&gt;&gt;</span> <span class="dv">3</span><span class="op">)</span> <span class="op">+</span> <span class="dv">6</span><span class="op">)</span> <span class="op">&amp;</span> <span class="op">~</span><span class="dv">3</span><span class="op">;</span></span></code></pre></div>
-<p>即大约多分配 <strong>1/8</strong> 再加一个小常数并对齐。实测(CPython
-3.14)<code>allocated</code> 增长序列是:</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co">/* 现行 CPython list_resize:多分配约 1/8,再向上对齐到 4 的倍数 */</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>new_allocated <span class="op">=</span> <span class="op">(</span>new_size <span class="op">+</span> <span class="op">(</span>new_size <span class="op">&gt;&gt;</span> <span class="dv">3</span><span class="op">)</span> <span class="op">+</span> <span class="dv">6</span><span class="op">)</span> <span class="op">&amp;</span> <span class="op">~</span><span class="dv">3</span><span class="op">;</span></span></code></pre></div>
+<p>实测(在 3.9.6 上用 <code>sys.getsizeof</code> 反推,64 位平台 list
+头占 56 字节、每指针 8 字节)<code>allocated</code> 的增长序列是:</p>
 <pre><code>0, 4, 8, 16, 24, 32, 40, 52, 64, 76, 92, 108, 128, ...</code></pre>
-<p>对比 C++ <code>std::vector</code> 常见的 1.5x 或 2x 增长。CPython 用
-1/8 是在”内存浪费”和”重分配次数”之间取的折中,因为它假设 list
-的典型用法追加量不会特别夸张。</p>
-<p><strong>扩容时发生了什么</strong>:调用 <code>realloc</code> 给
-<code>ob_item</code>
-换一块更大的内存,把旧的指针数组按位拷贝过去(只拷指针,不拷元素对象,也不动引用计数)。元素对象原地不动,别处对它们的引用依然有效。</p>
+<p>对比 C++ <code>std::vector</code> 常见的 1.5x 或 2x 增长,CPython
+只多分配约
+<strong>1/8</strong>。这是”内存浪费”和”重分配次数”之间的另一层取舍:翻倍增长重分配次数更少,但每次浪费的空间可能高达已用空间的一倍;1/8
+增长把浪费压得更低,代价是同样数量的元素需要更多次
+<code>realloc</code>——CPython 押注 list
+的典型追加量不会特别夸张,愿意多付出几次 realloc 换取更省内存。扩容时调用
+<code>realloc</code>
+换一块更大内存,把旧的指针数组按位拷贝过去(只拷指针,不拷元素对象,也不动引用计数),元素对象原地不动,别处对它们的引用依然有效:</p>
 <pre><code>append 触发扩容:
 旧:  ob_item -&gt; [p0][p1][p2][p3]                (allocated=4, size=4)
      realloc 到新缓冲区(allocated=8):
 新:  ob_item -&gt; [p0][p1][p2][p3][p4][ ][ ][ ]    (size=5)
      元素对象 (对应 p0..p4) 全程没动</code></pre>
-<h4 id="各操作复杂度与原因">各操作复杂度与原因</h4>
+<p>各操作复杂度与原因:</p>
 <table>
 <colgroup>
 <col style="width: 26%" />
@@ -351,99 +289,100 @@ href="12-常用第三方库.html">见「常用第三方库」</a>):numpy 的 nda
 </tr>
 </tbody>
 </table>
-<p>关于摊还 O(1):n 次 append
-总的拷贝成本是所有扩容拷贝之和,因增长是几何级数,总和为 O(n),平摊到每次即
-O(1)。这和 <code>std::vector::push_back</code> 的分析完全一样。</p>
-<h4 id="浅拷贝一个必须记住的陷阱">浅拷贝:一个必须记住的陷阱</h4>
+<p>这张表就是上面那个设计取舍的量化版本:随机访问和尾部操作是
+O(1),中间插入删除是 O(n)——list 把复杂度预算优先分配给了前者。摊还 O(1)
+的证明和 <code>std::vector::push_back</code> 完全一样:n 次 append
+的总拷贝成本是所有扩容拷贝之和,因增长是几何级数,总和为 O(n),平摊到每次即
+O(1)。</p>
 <p><code>lst2 = lst[:]</code>、<code>list(lst)</code>、<code>copy.copy(lst)</code>
-都是<strong>浅拷贝</strong>:新建一个 list
-头和新的指针数组,但指针指向的是<strong>同一批元素对象</strong>。</p>
-<div class="sourceCode" id="cb12"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> [[<span class="dv">1</span>, <span class="dv">2</span>], [<span class="dv">3</span>, <span class="dv">4</span>]]</span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> a[:]              <span class="co"># 浅拷贝</span></span>
-<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>b[<span class="dv">0</span>].append(<span class="dv">99</span>)       <span class="co"># 修改的是共享的内层 list</span></span>
-<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a)              <span class="co"># [[1, 2, 99], [3, 4]]  —— a 也变了!</span></span></code></pre></div>
+都是浅拷贝:新建一个 list
+头和新的指针数组,但指针指向的是同一批元素对象。</p>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> [[<span class="dv">1</span>, <span class="dv">2</span>], [<span class="dv">3</span>, <span class="dv">4</span>]]</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> a[:]              <span class="co"># 浅拷贝</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>b[<span class="dv">0</span>].append(<span class="dv">99</span>)       <span class="co"># 修改的是共享的内层 list</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a)              <span class="co"># [[1, 2, 99], [3, 4]]  —— a 也变了!</span></span></code></pre></div>
 <pre><code>a.ob_item -&gt; [p0][p1]
                 \    \
                  v    v
              [1,2,99] [3,4]      ← 内层对象只有一份
                  ^    ^
 b.ob_item -&gt; [p0][p1]            ← b 是新数组,但指针指向同一内层对象</code></pre>
-<p>要彻底隔离得用
-<code>copy.deepcopy</code>,它会递归重建每一层对象。这与 C++ 的”浅拷贝 vs
-深拷贝”是同一个问题,只是 Python 默认到处都是引用,更容易踩到。</p>
-<hr />
-<h2 id="tuple不可变的定长数组">3.
-<code>tuple</code>:不可变的定长数组</h2>
-<h3 id="怎么用-1">怎么用</h3>
-<p>「先会用」已经展示了创建、索引、解包。再强调一点:tuple
-一旦创建就不能改变元素指向,但如果元素本身是可变对象,那个元素的内容还是能变:</p>
-<div class="sourceCode" id="cb14"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>t <span class="op">=</span> (<span class="dv">1</span>, [<span class="dv">2</span>, <span class="dv">3</span>])</span>
-<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>t[<span class="dv">1</span>].append(<span class="dv">4</span>)     <span class="co"># OK,改的是内层 list</span></span>
-<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(t)            <span class="co"># (1, [2, 3, 4])</span></span>
-<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a><span class="co"># t[1] = [9]        # TypeError:不能改 tuple 的槽位</span></span></code></pre></div>
-<p>异构、固定的”记录”用 tuple(类似 C 的
-<code>struct</code>,但按位置而非按名字);同构、需要增删的”集合”用
-list。想要带名字的字段,见 <a
-href="11-标准库算法.html"><code>namedtuple</code></a>。</p>
-<h3 id="底层与-c-对比-1">底层与 C 对比</h3>
+<p>要彻底隔离得用 <code>copy.deepcopy</code>,它递归重建每一层对象。这与
+<a
+href="03-变量与内存模型.html">「变量与内存模型」</a>里”赋值只拷引用、浅拷贝只复制一层”是同一条设计原则在容器上的体现:廉价操作作为默认,昂贵操作必须显式请求。</p>
+<h2
+id="三tuple不可变的定长记录">三、<code>tuple</code>:不可变的定长记录</h2>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>point <span class="op">=</span> (<span class="dv">3</span>, <span class="dv">4</span>)</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>x, y <span class="op">=</span> point                    <span class="co"># 解包</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(point[<span class="dv">0</span>])                 <span class="co"># 3</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="co"># point[0] = 9                  # TypeError:tuple 不能修改</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>t <span class="op">=</span> (<span class="dv">1</span>, [<span class="dv">2</span>, <span class="dv">3</span>])</span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>t[<span class="dv">1</span>].append(<span class="dv">4</span>)     <span class="co"># OK,改的是内层 list</span></span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(t)            <span class="co"># (1, [2, 3, 4])</span></span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a><span class="co"># t[1] = [9]        # TypeError:不能改 tuple 的槽位</span></span></code></pre></div>
+<p>tuple 存在的意义不只是”不可变的 list”。list
+表达的是同构、变长的<strong>集合</strong>,下标只是位置,元素类型通常一致;tuple
+表达的是异构、定长的<strong>记录</strong>(record),下标对应固定含义的字段——<code>(x, y)</code>
+里下标 0 永远是 x、下标 1 永远是 y,和 C 的
+<code>struct { int x; int y; }</code>
+是同一个语义,只是按位置而非按名字访问。这是两种不同的设计意图,不可变性是用来强化”这是个定长记录,不该在这插入删除元素”这一语义的手段,而不是它存在的唯一理由。想要带名字的字段而不是纯位置,见
+<a href="11-标准库算法.html"><code>namedtuple</code></a>。</p>
+<p><strong>为什么 tuple 不可变这件事还能让它当 dict 的 key、放进
+set</strong>:<a
+href="03-变量与内存模型.html">「变量与内存模型」</a>已经论证过,不可变性带来的好处之一正是”可以安全用作
+dict 键”。哈希表的正确性依赖一个前提:key
+的哈希值在它存活期间必须保持不变,因为哈希值决定了 key
+在表内的物理位置,以后查找时还要用同一个哈希值把它找回来。如果 tuple
+可变,某个元素被改了之后哈希值会跟着变,而这个 key
+早已经按旧哈希值存进了表的某个槽位——新旧哈希值对应的槽位对不上,这个 key
+实际上就”丢”在表里,再也查不到。list 允许原地修改,所以语言干脆不给它定义
+<code>__hash__</code>,禁止作 key,而不是留一个”能用但一改内容就出诡异
+bug”的陷阱。tuple
+只有在所有元素都可哈希时才可哈希(哈希值由元素哈希组合而成),这也是为什么
+<code>(1, [2, 3])</code> 这种含 list 的 tuple 不能作 dict 键。</p>
 <p>tuple 的结构体(<code>PyTupleObject</code>)比 list
 更简单——它把指针数组<strong>内联</strong>在对象尾部,而不是单独分配:</p>
-<div class="sourceCode" id="cb15"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="kw">typedef</span> <span class="kw">struct</span> <span class="op">{</span></span>
-<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>    PyObject_VAR_HEAD</span>
-<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>    PyObject <span class="op">*</span>ob_item<span class="op">[</span><span class="dv">1</span><span class="op">];</span>   <span class="co">// 变长尾部数组,创建时一次分配好,永不改变</span></span>
-<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> PyTupleObject<span class="op">;</span></span></code></pre></div>
-<p>区别与后果:</p>
-<ul>
-<li>没有 <code>allocated</code>
-字段,长度创建后固定。<strong>一次分配</strong>(对象头和元素指针数组在同一块内存里),比
-list 少一次分配、少一层间接,内存更紧凑。类似 C 里的柔性数组成员(flexible
-array member)。</li>
-<li>不可变指的是”元素指针数组不可变”——你不能改 <code>t[0]</code>
-指向别的对象。上面的例子已经验证:改的是内层 list 的内容,不是 tuple
-本身的槽位。</li>
-<li>因为(在元素都可哈希时)tuple 可哈希,所以能作 <code>dict</code> 的 key
-或 <code>set</code> 的元素;list 不行。见下文哈希部分。</li>
-<li>CPython 对小 tuple 有<strong>空闲链表(free
-list)</strong>缓存,频繁创建销毁小 tuple 时能复用内存块,减少 malloc
-压力。</li>
-</ul>
-<hr />
-<h2 id="dictcpython-的紧凑字典">4. <code>dict</code>:CPython
-的紧凑字典</h2>
+<div class="sourceCode" id="cb11"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="kw">typedef</span> <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>    PyObject_VAR_HEAD</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>    PyObject <span class="op">*</span>ob_item<span class="op">[</span><span class="dv">1</span><span class="op">];</span>   <span class="co">// 变长尾部数组,创建时一次分配好,永不改变</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> PyTupleObject<span class="op">;</span></span></code></pre></div>
+<p>没有 <code>allocated</code>
+字段,长度创建后固定,一次分配(对象头和元素指针数组在同一块内存里),比 list
+少一次分配、少一层间接,内存更紧凑——类似 C 里的柔性数组成员(flexible
+array
+member)。这个更紧凑的布局正是”长度固定、永不改变”这个约定换来的:list
+必须留出增长空间、必须能整体 realloc,tuple
+放弃了这些能力,换回了创建成本更低、访问时少一次指针跳转的实现。CPython
+对小 tuple 还有空闲链表(free list)缓存,频繁创建销毁小 tuple
+时能复用内存块,减少 malloc 压力。</p>
+<h2
+id="四dict紧凑数组-索引表如何在保序的同时保持哈希表本质">四、<code>dict</code>:紧凑数组
++ 索引表如何在保序的同时保持哈希表本质</h2>
 <p><code>dict</code> 是 Python
-最核心的数据结构——它不仅是用户的哈希表,还是对象属性(<code>__dict__</code>)、命名空间、关键字参数的底层载体。所以它的实现被反复优化。</p>
-<h3 id="怎么用-2">怎么用</h3>
-<p>「先会用」已经展示了取值、赋值、删除、<code>get</code>。再补几个常用操作:</p>
-<div class="sourceCode" id="cb16"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>d <span class="op">=</span> {<span class="st">&quot;a&quot;</span>: <span class="dv">1</span>, <span class="st">&quot;b&quot;</span>: <span class="dv">2</span>}</span>
-<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>d.update({<span class="st">&quot;b&quot;</span>: <span class="dv">20</span>, <span class="st">&quot;c&quot;</span>: <span class="dv">3</span>})   <span class="co"># 批量更新/新增</span></span>
-<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(d)                      <span class="co"># {&#39;a&#39;: 1, &#39;b&#39;: 20, &#39;c&#39;: 3}</span></span>
-<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(d.pop(<span class="st">&quot;a&quot;</span>))             <span class="co"># 1 —— 删除并返回该键的值</span></span>
-<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(d)                      <span class="co"># {&#39;b&#39;: 20, &#39;c&#39;: 3}</span></span>
-<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(d.setdefault(<span class="st">&quot;z&quot;</span>, <span class="dv">0</span>))   <span class="co"># 键不存在则设为默认值并返回;存在则返回原值</span></span>
-<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(d)                      <span class="co"># {&#39;b&#39;: 20, &#39;c&#39;: 3, &#39;z&#39;: 0}</span></span>
-<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a>squares <span class="op">=</span> {x: x <span class="op">*</span> x <span class="cf">for</span> x <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">5</span>)}   <span class="co"># 字典推导式</span></span>
-<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(squares)                            <span class="co"># {0: 0, 1: 1, 2: 4, 3: 9, 4: 16}</span></span></code></pre></div>
-<h3 id="底层与-c-对比-2">底层与 C 对比</h3>
-<h4 id="哈希表基础与开放寻址">哈希表基础与开放寻址</h4>
+最核心的数据结构——它不仅是用户的哈希表,还是对象属性(<code>__dict__</code>)、模块命名空间、关键字参数的底层载体,因此它的实现被反复优化。</p>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>d <span class="op">=</span> {<span class="st">&quot;a&quot;</span>: <span class="dv">1</span>, <span class="st">&quot;b&quot;</span>: <span class="dv">2</span>}</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>d.update({<span class="st">&quot;b&quot;</span>: <span class="dv">20</span>, <span class="st">&quot;c&quot;</span>: <span class="dv">3</span>})   <span class="co"># 批量更新/新增</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(d.pop(<span class="st">&quot;a&quot;</span>))             <span class="co"># 1 —— 删除并返回该键的值</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(d.setdefault(<span class="st">&quot;z&quot;</span>, <span class="dv">0</span>))   <span class="co"># 键不存在则设为默认值并返回;存在则返回原值</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>squares <span class="op">=</span> {x: x <span class="op">*</span> x <span class="cf">for</span> x <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">5</span>)}   <span class="co"># 字典推导式</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(squares)                            <span class="co"># {0: 0, 1: 1, 2: 4, 3: 9, 4: 16}</span></span></code></pre></div>
 <p>Python dict 用<strong>开放寻址(open
-addressing)</strong>,不是链地址法(chaining)。也就是说,冲突时不在桶里挂链表,而是按一个探测序列去找下一个空槽。所有条目都住在同一块连续数组里,cache
-更友好。</p>
-<ul>
-<li>key 必须<strong>可哈希</strong>:实现了 <code>__hash__</code>
-且哈希值在对象生命周期内不变。不可变内置类型(int/str/tuple/frozenset)可哈希;list/dict/set
-不可哈希(因为它们可变,内容一变哈希就失效,会破坏哈希表)。</li>
-<li>平均查找/插入/删除
-<strong>O(1)</strong>;最坏(大量冲突)O(n),但现实中极少见。</li>
-</ul>
-<h4 id="的紧凑字典为什么保序">3.6+ 的紧凑字典:为什么保序</h4>
+addressing)</strong>,不是链地址法(chaining):冲突时不在桶里挂链表,而是按一个探测序列去找下一个空槽,所有条目都住在同一块连续数组里,cache
+更友好。key 必须<strong>可哈希</strong>——实现了 <code>__hash__</code>
+且哈希值在对象生命周期内不变;不可变内置类型(int/str/tuple/frozenset)可哈希,list/dict/set
+不可哈希,原因与上一节 tuple
+部分完全一致:可变对象的哈希值会随内容漂移,破坏哈希表的正确性。平均查找/插入/删除
+<strong>O(1)</strong>,最坏(大量冲突)O(n),现实中极少见。</p>
 <p>Python 3.6 起 dict 记忆插入顺序(3.7
-起是语言保证)。这不是加了个链表,而是改了数据结构——拆成两个数组:</p>
+起是语言保证)。<strong>为什么这个保证没有靠额外挂一条链表来实现</strong>——比如
+Java 的 <code>LinkedHashMap</code> 就是在普通哈希表的每个 entry
+上再穿一条双向链表记录插入顺序,这个做法需要给每个 entry
+额外存两个指针,遍历时还要沿链表跳,cache 不友好。CPython 3.6
+的紧凑字典换了一个思路:把”哈希定位”和”数据存储”这两件事从同一个数组里拆开,变成两个数组:</p>
 <pre><code>indices(哈希表,存的是到 entries 的下标,可能有空槽 -1):
 +----+----+----+----+----+----+----+----+
 | -1 |  1 | -1 | -1 |  0 | -1 |  2 | -1 |
@@ -455,49 +394,45 @@ entries(紧凑数组,按插入顺序追加,无空洞):
 |   &#39;a&#39;:1   |  &#39;b&#39;:2  |  &#39;c&#39;:3  |
 +---------+--------+---------+
    idx 0      idx 1     idx 2</code></pre>
-<ul>
-<li><strong>稀疏的 <code>indices</code>
-数组</strong>负责哈希定位,里面存的是”到 entries
-的整数下标”,空槽存特殊值。它可以很稀疏(装载因子低),但每个槽只占一个小整数(视表大小
-1/2/4/8 字节),浪费的空间小。</li>
-<li><strong>紧凑的 <code>entries</code>
-数组</strong>按插入顺序连续存放真正的 <code>(hash, key, value)</code>
-三元组,无空洞。遍历 dict 就是顺序扫这个数组 ——
-这就是保序的原因,而且遍历比旧版(遍历稀疏大表)更快。</li>
-<li>相比 3.5 之前”每个槽都存完整 entry”的稀疏大表,紧凑字典节省约
-<strong>20%–25%</strong> 内存。</li>
-</ul>
-<p><strong>实测:dict
-保序,且顺序由”插入”而非”排序”决定</strong>。删除中间的键再重新插入,会追加到末尾;更新已有键则原地改值、顺序不动:</p>
-<div class="sourceCode" id="cb18"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>d <span class="op">=</span> {}</span>
-<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>d[<span class="st">&quot;c&quot;</span>] <span class="op">=</span> <span class="dv">1</span><span class="op">;</span> d[<span class="st">&quot;a&quot;</span>] <span class="op">=</span> <span class="dv">2</span><span class="op">;</span> d[<span class="st">&quot;b&quot;</span>] <span class="op">=</span> <span class="dv">3</span></span>
-<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">list</span>(d))     <span class="co"># [&#39;c&#39;, &#39;a&#39;, &#39;b&#39;]   按插入序,不是排序</span></span>
-<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a><span class="kw">del</span> d[<span class="st">&quot;a&quot;</span>]         <span class="co"># 删掉中间的键</span></span>
-<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>d[<span class="st">&quot;a&quot;</span>] <span class="op">=</span> <span class="dv">9</span>         <span class="co"># 重新插入 —— 追加到 entries 末尾</span></span>
-<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">list</span>(d))     <span class="co"># [&#39;c&#39;, &#39;b&#39;, &#39;a&#39;]</span></span>
-<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>d[<span class="st">&quot;c&quot;</span>] <span class="op">=</span> <span class="dv">100</span>       <span class="co"># 更新已存在的键:原地改 value,顺序不动</span></span>
-<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">list</span>(d))     <span class="co"># [&#39;c&#39;, &#39;b&#39;, &#39;a&#39;]</span></span></code></pre></div>
+<p>稀疏的 <code>indices</code> 数组只负责”给定 key,找到它在 entries
+里的下标”这一件事,可以很稀疏(装载因子低),但每个槽只占一个小整数(视表大小
+1/2/4/8 字节),浪费的空间小;真正的 <code>(hash, key, value)</code>
+三元组集中放进紧凑的 <code>entries</code>
+数组,按插入顺序连续追加、无空洞。遍历字典就是顺序扫这个
+<code>entries</code>
+数组——保序完全是这个物理排列的自然副产品,不需要为它专门维护链表指针,还顺带让遍历本身更快(连续内存扫描
+vs 跳链表)。相比 3.5 之前”每个槽都存完整
+entry”的稀疏大表,这个拆分还额外省了约 <strong>20%–25%</strong>
+内存,是一个”顺便”拿到的收益,不是设计的主要目的。</p>
+<p>实测:dict
+保序,且顺序由”插入”而非”排序”决定。删除中间的键再重新插入,会追加到末尾;更新已有键则原地改值、顺序不动:</p>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>d <span class="op">=</span> {}</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>d[<span class="st">&quot;c&quot;</span>] <span class="op">=</span> <span class="dv">1</span><span class="op">;</span> d[<span class="st">&quot;a&quot;</span>] <span class="op">=</span> <span class="dv">2</span><span class="op">;</span> d[<span class="st">&quot;b&quot;</span>] <span class="op">=</span> <span class="dv">3</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">list</span>(d))     <span class="co"># [&#39;c&#39;, &#39;a&#39;, &#39;b&#39;]   按插入序,不是排序</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a><span class="kw">del</span> d[<span class="st">&quot;a&quot;</span>]         <span class="co"># 删掉中间的键</span></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>d[<span class="st">&quot;a&quot;</span>] <span class="op">=</span> <span class="dv">9</span>         <span class="co"># 重新插入 —— 追加到 entries 末尾</span></span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">list</span>(d))     <span class="co"># [&#39;c&#39;, &#39;b&#39;, &#39;a&#39;]</span></span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>d[<span class="st">&quot;c&quot;</span>] <span class="op">=</span> <span class="dv">100</span>       <span class="co"># 更新已存在的键:原地改 value,顺序不动</span></span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">list</span>(d))     <span class="co"># [&#39;c&#39;, &#39;b&#39;, &#39;a&#39;]</span></span></code></pre></div>
 <p>查找过程:对 key 求哈希 → 取低位作 <code>indices</code> 下标 → 拿到
 entries 下标 → 去 entries 比对 hash 和 key(先比 hash 整数,相等再比
-<code>==</code>,因为哈希可能碰撞)。</p>
-<h4 id="探测序列">探测序列</h4>
-<p>CPython 用一种扰动探测(perturbation
-probing),兼顾散布和局部性(简化逻辑):</p>
-<div class="sourceCode" id="cb19"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>perturb <span class="op">=</span> hash<span class="op">;</span></span>
-<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>i <span class="op">=</span> hash <span class="op">&amp;</span> mask<span class="op">;</span></span>
-<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a><span class="cf">while</span> <span class="op">(</span>slot_used_and_key_differs<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a>    perturb <span class="op">&gt;&gt;=</span> <span class="dv">5</span><span class="op">;</span></span>
-<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a>    i <span class="op">=</span> <span class="op">(</span>i <span class="op">*</span> <span class="dv">5</span> <span class="op">+</span> perturb <span class="op">+</span> <span class="dv">1</span><span class="op">)</span> <span class="op">&amp;</span> mask<span class="op">;</span></span>
-<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
-<p>它不是简单线性探测,而是不断把 hash
-的高位”搅”进来,让探测序列更分散,减少聚集。</p>
-<h4 id="扩容">扩容</h4>
+<code>==</code>,因为哈希可能碰撞)。CPython 用一种扰动探测(perturbation
+probing)找下一个候选槽,而不是简单的线性探测:</p>
+<div class="sourceCode" id="cb15"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>perturb <span class="op">=</span> hash<span class="op">;</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>i <span class="op">=</span> hash <span class="op">&amp;</span> mask<span class="op">;</span></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a><span class="cf">while</span> <span class="op">(</span>slot_used_and_key_differs<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>    perturb <span class="op">&gt;&gt;=</span> <span class="dv">5</span><span class="op">;</span></span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>    i <span class="op">=</span> <span class="op">(</span>i <span class="op">*</span> <span class="dv">5</span> <span class="op">+</span> perturb <span class="op">+</span> <span class="dv">1</span><span class="op">)</span> <span class="op">&amp;</span> mask<span class="op">;</span></span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>简单线性探测(<code>i = i + 1</code>)在装载因子升高时容易产生”聚集”(cluster)——一旦某个区域被占满,后续冲突的
+key
+都得排队探测过这一长串占用的槽,查找退化明显。扰动探测不断把哈希值的高位”搅”进下一个候选位置的计算里,让探测序列更分散,减少聚集,这是拿一点计算开销换取更均匀的探测分布。</p>
 <p>装载因子超过 <strong>2/3</strong>
 时扩容。新表容量取”能容纳当前已用条目 3 倍”的最小的 2 的幂(增长约
-2x–4x)。扩容时<strong>重建 indices 表</strong>(重新散布所有 key),但
-entries 保持插入顺序被搬过去。扩容期间还会顺便清理删除留下的”墓碑”。</p>
-<h4 id="复杂度表">复杂度表</h4>
+2x–4x)。扩容时<strong>重建 indices 表</strong>(重新散布所有
+key,因为表容量变了、每个 key 的哈希对新掩码取模的结果也变了),但 entries
+保持插入顺序被搬过去,扩容期间还会顺便清理删除留下的”墓碑”。</p>
 <table>
 <thead>
 <tr>
@@ -546,52 +481,51 @@ entries 保持插入顺序被搬过去。扩容期间还会顺便清理删除留
 </tr>
 </tbody>
 </table>
-<blockquote>
 <p>与 C++ 对照:<code>std::unordered_map</code>
 是链地址法(每桶挂链表/节点,节点各自 new,cache
 不友好);<code>std::map</code> 是红黑树 O(log n) 且按 key 排序。Python
-dict 更像一个高度优化的开放寻址哈希表,且额外保证插入顺序。</p>
-</blockquote>
-<hr />
-<h2 id="set-与-frozenset">5. <code>set</code> 与
+dict 是一个开放寻址哈希表,并且用”紧凑 entries + 稀疏
+indices”这个拆分额外换到了插入序保证,这在纯粹的开放寻址或链地址实现里都不是自动获得的。</p>
+<h2 id="五set-与-frozenset">五、<code>set</code> 与
 <code>frozenset</code></h2>
-<h3 id="怎么用-3">怎么用</h3>
-<p>「先会用」已经展示了
-<code>add</code>/<code>remove</code>/<code>|</code>/<code>&amp;</code>。集合运算一共四种,再加上不可变版本和推导式:</p>
-<div class="sourceCode" id="cb20"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> {<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>, <span class="dv">4</span>}</span>
-<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> {<span class="dv">3</span>, <span class="dv">4</span>, <span class="dv">5</span>, <span class="dv">6</span>}</span>
-<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a <span class="op">&amp;</span> b)   <span class="co"># {3, 4}              交集</span></span>
-<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a <span class="op">|</span> b)   <span class="co"># {1, 2, 3, 4, 5, 6}  并集</span></span>
-<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a <span class="op">-</span> b)   <span class="co"># {1, 2}              差集(在 a 不在 b)</span></span>
-<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a <span class="op">^</span> b)   <span class="co"># {1, 2, 5, 6}        对称差(恰在其一)</span></span>
-<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a>fs <span class="op">=</span> <span class="bu">frozenset</span>([<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>])    <span class="co"># 不可变集合</span></span>
-<span id="cb20-9"><a href="#cb20-9" aria-hidden="true" tabindex="-1"></a>s <span class="op">=</span> {fs, <span class="bu">frozenset</span>([<span class="dv">4</span>])}     <span class="co"># frozenset 可哈希,能放进另一个 set</span></span>
-<span id="cb20-10"><a href="#cb20-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">len</span>(s))                 <span class="co"># 2</span></span>
-<span id="cb20-11"><a href="#cb20-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb20-12"><a href="#cb20-12" aria-hidden="true" tabindex="-1"></a>sc <span class="op">=</span> {x <span class="op">%</span> <span class="dv">3</span> <span class="cf">for</span> x <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">10</span>)}   <span class="co"># 集合推导式</span></span>
-<span id="cb20-13"><a href="#cb20-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sc)                          <span class="co"># {0, 1, 2}</span></span></code></pre></div>
+<div class="sourceCode" id="cb16"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> {<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>, <span class="dv">4</span>}</span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> {<span class="dv">3</span>, <span class="dv">4</span>, <span class="dv">5</span>, <span class="dv">6</span>}</span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a <span class="op">&amp;</span> b)   <span class="co"># {3, 4}              交集</span></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a <span class="op">|</span> b)   <span class="co"># {1, 2, 3, 4, 5, 6}  并集</span></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a <span class="op">-</span> b)   <span class="co"># {1, 2}              差集(在 a 不在 b)</span></span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a <span class="op">^</span> b)   <span class="co"># {1, 2, 5, 6}        对称差(恰在其一)</span></span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>fs <span class="op">=</span> <span class="bu">frozenset</span>([<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>])    <span class="co"># 不可变集合</span></span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a>s <span class="op">=</span> {fs, <span class="bu">frozenset</span>([<span class="dv">4</span>])}     <span class="co"># frozenset 可哈希,能放进另一个 set</span></span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">len</span>(s))                 <span class="co"># 2</span></span>
+<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a>sc <span class="op">=</span> {x <span class="op">%</span> <span class="dv">3</span> <span class="cf">for</span> x <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">10</span>)}   <span class="co"># 集合推导式</span></span>
+<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sc)                          <span class="co"># {0, 1, 2}</span></span></code></pre></div>
 <p>一个常见用法——用 set 给”是否见过”做去重判断,平均 O(1) 远快于 list 的
 O(n):</p>
-<div class="sourceCode" id="cb21"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>seen <span class="op">=</span> <span class="bu">set</span>()</span>
-<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a>data <span class="op">=</span> [<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">2</span>, <span class="dv">3</span>, <span class="dv">1</span>]</span>
-<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> x <span class="kw">in</span> data:</span>
-<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> x <span class="kw">not</span> <span class="kw">in</span> seen:</span>
-<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a>        seen.add(x)</span>
-<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(seen)   <span class="co"># {1, 2, 3}</span></span></code></pre></div>
-<h3 id="底层与-c-对比-3">底层与 C 对比</h3>
+<div class="sourceCode" id="cb17"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>seen <span class="op">=</span> <span class="bu">set</span>()</span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>data <span class="op">=</span> [<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">2</span>, <span class="dv">3</span>, <span class="dv">1</span>]</span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> x <span class="kw">in</span> data:</span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> x <span class="kw">not</span> <span class="kw">in</span> seen:</span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>        seen.add(x)</span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(seen)   <span class="co"># {1, 2, 3}</span></span></code></pre></div>
 <p><code>set</code> 的实现和 dict 高度相似——本质是”只有 key 没有 value
-的哈希表”,同样开放寻址、同样要求元素可哈希。区别:</p>
-<ul>
-<li>set <strong>不保证顺序</strong>(它没有像 dict 那样引入紧凑 entries
-数组来记录插入序;它用的是更接近传统稀疏表的结构)。别依赖 set
-的迭代顺序。</li>
-<li><code>frozenset</code>
-是不可变版本,因此<strong>它自己可哈希</strong>,可以作为 dict 的 key
-或放进另一个 set(如上面的例子)。</li>
-</ul>
+的哈希表”,同样开放寻址、同样要求元素可哈希。<strong>为什么 set 没有沿用
+dict 那套”indices +
+entries”的拆分</strong>:那套拆分的全部意义在于用紧凑数组的物理顺序换取插入序保证,而
+set
+从语义上就不承诺顺序——它建模的是数学意义上的集合,元素之间没有先后关系,没有必要为一个不需要的保证多付内存和一层间接。所以
+set 用的是更接近传统的稀疏表(entry 直接是 hash + key),不引入 dict
+那套双数组结构。别依赖 set 的迭代顺序,它没有任何保证。</p>
+<p><strong>为什么需要 frozenset</strong>:set
+本身可变,因此不可哈希,不能放进另一个 set 或作 dict 键——这与 tuple/list
+那条规则完全一致。但”需要一个不可变、可哈希的集合”是真实存在的需求,比如把一组标签整体当作缓存的
+key,或者对”集合的集合”去重。<code>frozenset</code>
+就是为这个需求专门开的口子:创建后不能再
+<code>add</code>/<code>remove</code>,因此可以安全地计算并缓存哈希值,能够作为
+dict 的 key 或放进另一个 set(如上面的例子)。</p>
 <table>
 <thead>
 <tr>
@@ -618,33 +552,30 @@ class="sourceCode python"><code class="sourceCode python"><span id="cb21-1"><a h
 </tr>
 </tbody>
 </table>
-<hr />
-<h2 id="collections.deque分块双向链表">6.
-<code>collections.deque</code>:分块双向链表</h2>
-<h3 id="怎么用-4">怎么用</h3>
+<h2
+id="六collections.deque分块双向链表">六、<code>collections.deque</code>:分块双向链表</h2>
 <p><code>list</code> 的头部操作是
 O(n)。当你需要两端都高效增删(队列、滑动窗口),用
 <code>collections.deque</code>——用法和 list 很像,但多了
 <code>appendleft</code>/<code>popleft</code>:</p>
-<div class="sourceCode" id="cb22"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> collections <span class="im">import</span> deque</span>
-<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a>dq <span class="op">=</span> deque([<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>])</span>
-<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a>dq.append(<span class="dv">4</span>)         <span class="co"># 尾部追加</span></span>
-<span id="cb22-5"><a href="#cb22-5" aria-hidden="true" tabindex="-1"></a>dq.appendleft(<span class="dv">0</span>)      <span class="co"># 头部追加</span></span>
-<span id="cb22-6"><a href="#cb22-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(dq)              <span class="co"># deque([0, 1, 2, 3, 4])</span></span>
-<span id="cb22-7"><a href="#cb22-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-8"><a href="#cb22-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(dq.pop())        <span class="co"># 4 —— 弹出尾部</span></span>
-<span id="cb22-9"><a href="#cb22-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(dq.popleft())    <span class="co"># 0 —— 弹出头部</span></span>
-<span id="cb22-10"><a href="#cb22-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(dq)               <span class="co"># deque([1, 2, 3])</span></span></code></pre></div>
+<div class="sourceCode" id="cb18"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> collections <span class="im">import</span> deque</span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>dq <span class="op">=</span> deque([<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>])</span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>dq.append(<span class="dv">4</span>)         <span class="co"># 尾部追加</span></span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>dq.appendleft(<span class="dv">0</span>)      <span class="co"># 头部追加</span></span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(dq.pop())        <span class="co"># 4 —— 弹出尾部</span></span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(dq.popleft())    <span class="co"># 0 —— 弹出头部</span></span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(dq)               <span class="co"># deque([1, 2, 3])</span></span></code></pre></div>
 <p><code>maxlen</code> 参数能做成固定长度的环形缓冲区,常用于”最近 N
 条记录”:</p>
-<div class="sourceCode" id="cb23"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a>recent <span class="op">=</span> deque(maxlen<span class="op">=</span><span class="dv">3</span>)</span>
-<span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> x <span class="kw">in</span> [<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>, <span class="dv">4</span>, <span class="dv">5</span>]:</span>
-<span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a>    recent.append(x)</span>
-<span id="cb23-4"><a href="#cb23-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(recent)   <span class="co"># deque([3, 4, 5], maxlen=3) —— 超出的自动从另一端挤出</span></span></code></pre></div>
-<h3 id="底层与-c-对比-4">底层与 C 对比</h3>
+<div class="sourceCode" id="cb19"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> collections <span class="im">import</span> deque</span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>recent <span class="op">=</span> deque(maxlen<span class="op">=</span><span class="dv">3</span>)</span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> x <span class="kw">in</span> [<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>, <span class="dv">4</span>, <span class="dv">5</span>]:</span>
+<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a>    recent.append(x)</span>
+<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(recent)   <span class="co"># deque([3, 4, 5], maxlen=3) —— 超出的自动从另一端挤出</span></span></code></pre></div>
 <p>它的实现<strong>不是</strong>普通双向链表(那样每个元素一个节点、cache
 极差),而是<strong>分块双向链表(doubly-linked list of fixed-size
 blocks)</strong>:</p>
@@ -654,16 +585,17 @@ blocks)</strong>:</p>
 | next |         |       | next |         |     | next |         |
 +----------------+       +----------------+     +----------------+
    ^ leftblock                                     ^ rightblock</code></pre>
-<ul>
-<li>每个 block 是一个定长(64)的指针数组;block
-之间用前后指针连成双向链表。</li>
-<li>两端
-<code>append</code>/<code>appendleft</code>/<code>pop</code>/<code>popleft</code>
-都是 <strong>O(1)</strong>:在头/尾 block 里挪一个位置,满了就再链一个新
-block。</li>
-<li>代价:随机索引 <code>dq[i]</code> 是 <strong>O(n)</strong>(要沿 block
-链走),因此 deque 不适合随机访问。</li>
-</ul>
+<p><strong>为什么不像标准链表那样每个元素一个节点</strong>:纯链表的每个节点是一次独立的堆分配,元素在内存里彼此不相邻,遍历时
+cache miss 严重,而且每个节点要多存 <code>prev</code>/<code>next</code>
+两个指针,这份开销对小整数这类元素而言占比相当可观。deque
+把若干元素打包进一个固定大小(64)的 block,链表结构只在 block
+这一级存在,block
+内部则是连续数组——相当于”链表套数组”,用更粗的链接粒度换回大部分的 cache
+局部性,同时保留两端 O(1) 增删(在头/尾 block
+里挪一个位置,满了就再链一个新 block,不需要像 list
+那样整体搬移)。代价是随机索引 <code>dq[i]</code> 变成 O(n)(要沿 block
+链走),这是”优化两端、放弃中间随机访问”这个取舍的直接体现——deque
+从设计上就不是给随机访问用的容器。</p>
 <table>
 <thead>
 <tr>
@@ -690,8 +622,7 @@ block。</li>
 </tr>
 </tbody>
 </table>
-<hr />
-<h2 id="全景复杂度对照表">7. 全景复杂度对照表</h2>
+<h2 id="七全景复杂度对照表">七、全景复杂度对照表</h2>
 <table>
 <colgroup>
 <col style="width: 9%" />
@@ -778,8 +709,7 @@ block。</li>
 </tr>
 </tbody>
 </table>
-<hr />
-<h2 id="与-c-的内存模型对照小结">8. 与 C 的内存模型对照小结</h2>
+<h2 id="八与-c-的内存模型对照小结">八、与 C 的内存模型对照小结</h2>
 <table>
 <colgroup>
 <col style="width: 29%" />
@@ -832,25 +762,24 @@ block。</li>
 友好、可向量化的数组,去用 <a
 href="11-标准库算法.html"><code>array</code>/<code>memoryview</code></a>
 或 <a href="12-常用第三方库.html"><code>numpy</code></a>。</p>
-<hr />
 <h2 id="小结">小结</h2>
 <ul>
-<li><strong>用法层面</strong>:<code>list</code> 用
-<code>append</code>/<code>insert</code>/<code>remove</code>/<code>pop</code>/切片增删查改;<code>dict</code>
-用
-<code>[]</code>/<code>get</code>/<code>update</code>/<code>pop</code>/<code>setdefault</code>,<code>for k, v in d.items()</code>
-遍历;<code>tuple</code> 创建后不可变、常用于解包;<code>set</code> 用
-<code>add</code>/<code>remove</code>,支持
-<code>&amp;</code>/<code>|</code>/<code>-</code>/<code>^</code>
-四种集合运算;两端高频增删用 <code>collections.deque</code>。</li>
-<li><strong>底层层面</strong>:<code>list</code> 是指向
-<code>PyObject</code> 的指针动态数组,1/8
-温和扩容,浅拷贝只拷指针不拷元素;<code>tuple</code>
-把指针数组内联在对象尾部,一次分配,不可变;<code>dict</code> 是拆成
-<code>indices</code>(哈希定位)+
-<code>entries</code>(紧凑、保插入序)两个数组的开放寻址哈希表;<code>set</code>
-是没有 value 的哈希表,不保证顺序;<code>deque</code> 是分块双向链表,两端
-O(1)、随机访问 O(n)。</li>
+<li><code>list</code> 是指向 <code>PyObject</code>
+的指针动态数组:选数组而非链表,是因为随机访问和尾部追加远比中间插入删除常见,数组把前者做到
+O(1) 而链表做不到;1/8
+温和扩容在”重分配次数”与”内存浪费”间取折中;浅拷贝只拷指针不拷元素。</li>
+<li><code>tuple</code>
+把指针数组内联在对象尾部、一次分配、不可变;不可变性是它能作 dict
+键的前提——可变对象的哈希值会随内容漂移,破坏哈希表定位,这与第 03
+章的可变性讨论完全呼应。</li>
+<li><code>dict</code> 用”稀疏 indices(哈希定位)+ 紧凑
+entries(数据存储、保插入序)“两个数组实现开放寻址哈希表:保序是紧凑数组物理排列的副产品,不需要像
+Java <code>LinkedHashMap</code> 那样额外挂链表。</li>
+<li><code>set</code> 是没有 value、也不保证顺序的哈希表,因此不需要 dict
+那套双数组结构;<code>frozenset</code>
+为”需要不可变、可哈希的集合”这个真实需求存在。</li>
+<li><code>deque</code> 是分块双向链表:用固定大小的 block
+换回链表结构下的 cache 局部性,两端 O(1)、随机访问 O(n)。</li>
 </ul>
 <p>下一章进入面向对象与类型系统,你会看到 Python 的实例属性默认也是一个
 <code>dict</code>——和本章的哈希表是同一套底层机制。</p>

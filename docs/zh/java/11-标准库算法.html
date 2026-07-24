@@ -99,8 +99,7 @@
 <a href="../go/index.html">Go</a>
 <a href="../algo/index.html">算法笔记</a>
 <a href="../architecture/index.html">架构设计</a>
-<a href="../oodlld/index.html">OOD/LLD</a>
-<a class="topnav-lang" href="#" onclick="switchLang();return false;" title="切换语言:中文 / English">🌐 <span class="lp on">中文</span><span class="sep">/</span><span class="lp">EN</span></a></div></div><script>function switchLang(){var p=location.pathname,en=p.indexOf('/en/')>-1,n=en?p.replace('/en/','/zh/'):p.replace('/zh/','/en/');try{localStorage.setItem('lang',en?'zh':'en')}catch(e){}location.href=n;}</script>
+<a href="../oodlld/index.html">OOD/LLD</a></div></div>
 <div class="wrap">
 <nav id="TOC" role="doc-toc">
 <ul>
@@ -130,11 +129,6 @@ id="toc-treemap-treeset红黑树">TreeMap / TreeSet:红黑树</a></li>
 STL 里。Java 对应的是
 <code>java.util.Collections</code>、<code>Arrays</code>、<code>PriorityQueue</code>、<code>TreeMap</code>,加上函数式的
 Stream API。</p>
-<p><strong>本章每一节都是先给一段能直接照抄运行的代码,把”怎么用”讲清楚,再讲”为什么这么设计、底层怎么实现”。你不需要先懂
-JVM
-内部结构或字节码,跟着每节开头的代码抄改就能开始用这些工具;想搞清楚”为什么
-<code>Arrays.sort</code> 对 <code>int[]</code> 和 <code>Integer[]</code>
-用不同算法”这类问题,再往后看原理段落即可。</strong></p>
 <h2 id="collections-工具类">Collections 工具类</h2>
 <p><code>java.util.Collections</code> 是一堆静态方法,操作
 <code>List</code>/<code>Collection</code>:</p>
@@ -149,13 +143,15 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb1-1"><a href="
 <span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="co">// 不可变视图:返回包装,任何修改抛 UnsupportedOperationException(类比 const 引用,但运行期检查)</span></span>
 <span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="bu">List</span><span class="op">&lt;</span><span class="bu">Integer</span><span class="op">&gt;</span> ro <span class="op">=</span> <span class="bu">Collections</span><span class="op">.</span><span class="fu">unmodifiableList</span><span class="op">(</span>list<span class="op">);</span> <span class="co">// 底层仍指向 list,list 变它也变</span></span>
 <span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="bu">List</span><span class="op">&lt;</span><span class="bu">Integer</span><span class="op">&gt;</span> imm <span class="op">=</span> <span class="bu">List</span><span class="op">.</span><span class="fu">of</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">);</span>            <span class="co">// JDK9+ 真正不可变副本</span></span></code></pre></div>
-<blockquote>
-<p><code>binarySearch</code> 要求 List
-已按同一顺序排序,否则结果未定义。返回负数 <code>-(插入点)-1</code>
-表示未找到,可用于求插入位置。</p>
-</blockquote>
+<p><code>binarySearch</code>
+要求二分查找的前提——数组已经按同一顺序排好——必须由调用者自己保证,标准库不会替你检查。原因很直接:检查”是否已排序”本身是
+O(n) 的,如果每次调用都验证一遍,就抵消了二分查找 O(log n)
+的意义;把这个前提作为契约交给调用者,才能让 <code>binarySearch</code>
+本身保持 O(log
+n)。违反契约(传入未排序数组)不会报错,只会返回一个没有意义的结果。返回负数
+<code>-(插入点)-1</code> 表示未找到,可用于求插入位置。</p>
 <h2 id="arrays.sort两种算法">Arrays.sort:两种算法</h2>
-<p>这是本章重点。<code>Arrays.sort</code>
+<p><code>Arrays.sort</code>
 对<strong>基本类型</strong>和<strong>对象数组</strong>用不同算法,这不是随意为之:</p>
 <div class="sourceCode" id="cb2"><pre
 class="sourceCode java"><code class="sourceCode java"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span><span class="op">[]</span> a <span class="op">=</span> <span class="op">{</span><span class="dv">5</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">8</span><span class="op">,</span> <span class="dv">1</span><span class="op">};</span></span>
@@ -164,7 +160,6 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb2-1"><a href="
 <span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="bu">Integer</span><span class="op">[]</span> b <span class="op">=</span> <span class="op">{</span><span class="dv">5</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">8</span><span class="op">,</span> <span class="dv">1</span><span class="op">};</span></span>
 <span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="bu">Arrays</span><span class="op">.</span><span class="fu">sort</span><span class="op">(</span>b<span class="op">);</span>                    <span class="co">// TimSort(归并变体)</span></span>
 <span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="bu">Arrays</span><span class="op">.</span><span class="fu">sort</span><span class="op">(</span>b<span class="op">,</span> <span class="bu">Comparator</span><span class="op">.</span><span class="fu">reverseOrder</span><span class="op">());</span></span></code></pre></div>
-<h3 id="为何区别对待">为何区别对待</h3>
 <table>
 <thead>
 <tr>
@@ -197,25 +192,24 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb2-1"><a href="
 </tbody>
 </table>
 <p><strong>基本类型用双轴快排的理由</strong>:两个 <code>int</code>
-相等就是同一个值,交换它们无可观测差别,所以<strong>稳定性无意义</strong>。快排原地、缓存友好(顺序访问局部性好),比较是廉价的
-CPU 指令。双轴快排选两个 pivot 把数组分三段,比经典单轴快排<strong>减少约
-5%
+相等就是同一个值,交换它们无可观测差别,所以<strong>稳定性无意义</strong>——这是选择快排的前提条件,而不是快排本身的优点,快排在对象排序里同样快,只是不稳定这一点在基本类型上完全不构成代价。快排原地、缓存友好(顺序访问局部性好),比较是廉价的
+CPU 指令,这意味着”比较次数”在这里不是瓶颈,“访存模式”才是。双轴快排选两个
+pivot 把数组分三段,比经典单轴快排<strong>减少约 5%
 比较</strong>、缓存局部性更好——注意它的<strong>交换次数其实比单轴更多</strong>,优势来自”比较更少
 + 访存友好”,而非”少移动”。</p>
-<p><strong>对象用 TimSort 的理由</strong>: 1.
+<p><strong>对象用 TimSort 的理由</strong>,直接对应上表两个关注点: 1.
 <strong>稳定性</strong>:对象排序常按某字段,相等元素的原相对顺序必须保留(比如先按
 A 排、再按 B 排,B 相等时要维持 A
-的顺序)。快排不稳定,TimSort(归并类)稳定。 2.
-<strong>比较昂贵</strong>:对象比较是方法调用(可能是接口虚调用),TimSort
-在近乎有序的数据上比较次数接近 O(n),而快排最坏
-O(n²)。真实数据常局部有序,TimSort
-识别已有序的”run”并合并,大幅减少比较。</p>
-<blockquote>
+的顺序)。快排在划分过程中会把值相等的元素任意换位,不保证原始顺序,这对基本类型无所谓,对多字段排序的对象却是错误的结果。TimSort(归并类算法天然稳定)满足这个要求。
+2.
+<strong>比较昂贵</strong>:对象比较是方法调用(可能是接口虚调用,还可能内部又比较多个字段),不是一条机器指令能完成的操作,这意味着”减少比较次数”比”减少数据移动次数”更值得优化。TimSort
+利用真实数据常见的局部有序性:扫描出已经有序的片段(“run”),run
+之间做归并而不是重新比较每一对元素,已排序输入下比较次数逼近
+O(n);快排不识别这种结构,最坏情况仍是 O(n²) 次比较。</p>
 <p>TimSort 结合归并排序与插入排序:扫描出递增/递减的 run,短 run
 用二分插入排序扩展到 minrun 长度,再按栈上不变式归并。最坏 O(n log
 n),已有序 O(n)。它需要 O(n)
-辅助空间(归并),而快排原地——对象数组多一层指针间接,缓存本就差,额外空间可接受。</p>
-</blockquote>
+辅助空间(归并),而快排原地——对象数组本身就是一层指针间接(数组存的是引用,不是对象本体),缓存局部性天然不如基本类型数组,这种情况下再多付出一点空间换稳定性和更少比较,是合理的取舍。</p>
 <h2 id="comparable-与-comparator">Comparable 与 Comparator</h2>
 <ul>
 <li><code>Comparable&lt;T&gt;</code>:<strong>自然顺序</strong>,类自己实现
@@ -224,6 +218,11 @@ n),已有序 O(n)。它需要 O(n)
 <li><code>Comparator&lt;T&gt;</code>:<strong>外部策略</strong>,可定义任意多种,类比传给
 <code>std::sort</code> 的仿函数。</li>
 </ul>
+<p>两者并存而非只保留一个,是因为它们回答的是两个不同的问题:“这个类型本身有没有唯一自然的顺序”(比如数值大小、字符串字典序,<code>Comparable</code>
+表达这种类型内建的排序语义),与”我现在这一次想按什么临时规则排”(同一个
+<code>Person</code>
+类型,有的地方想按年龄排,有的地方想按姓名排,这些都不构成”这个类型的自然顺序”,只是调用方的一次性需求,<code>Comparator</code>
+把它表达成一个独立的、可以随时替换的策略对象,而不必侵入类定义)。</p>
 <p>下面例子用到两个可能没见过的语法:<code>record</code> 是 Java 16+
 的简写,一行声明一个只存数据的不可变类(类比 C++
 里一个只有字段、自动生成构造函数和 getter 的
@@ -252,7 +251,9 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb3-1"><a href="
 <code>equals</code> 一致性建议保持(否则
 <code>TreeMap</code>/<code>TreeSet</code> 行为反直觉)。违反传递性会让
 TimSort 抛
-<code>IllegalArgumentException: Comparison method violates its general contract</code>。</p>
+<code>IllegalArgumentException: Comparison method violates its general contract</code>——这不是随意加的检查,而是因为归并排序的正确性证明本身依赖比较关系满足传递性(算法假设”已知
+A ≤ B、B ≤ C 就能推出 A ≤ C”,不再需要重新比较 A 和
+C),一旦这个前提不成立,算法内部的一致性检测会发现矛盾并主动报错,而不是默默输出一个错误但不崩溃的排序结果。</p>
 <p>可运行:先按 <code>name</code> 升序,<code>name</code> 相同再按
 <code>age</code> 降序——<code>thenComparing</code> +
 <code>reversed</code> 声明式组合:</p>
@@ -290,8 +291,17 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb5-1"><a href="
 <span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a><span class="co">// 大顶堆 / 自定义</span></span>
 <span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a><span class="bu">PriorityQueue</span><span class="op">&lt;</span><span class="bu">Integer</span><span class="op">&gt;</span> maxHeap <span class="op">=</span> <span class="kw">new</span> <span class="bu">PriorityQueue</span><span class="op">&lt;&gt;(</span><span class="bu">Comparator</span><span class="op">.</span><span class="fu">reverseOrder</span><span class="op">());</span></span></code></pre></div>
+<p><strong>为什么用堆而不是排序数组或平衡树</strong>:堆解决的问题只有”反复拿最值、反复插入”,不需要”任意位置查找”或”完整有序遍历”这两种能力,这个更窄的需求让它能比通用有序结构更便宜。排序数组能
+O(1)
+取最值,但插入一个新元素要挪动数据、O(n);红黑树(<code>TreeMap</code>/<code>TreeSet</code>)插入和取最值都是
+O(log
+n),看起来和堆一样,但红黑树要维护”任意两个元素之间的相对顺序”这个更强的不变式(为了支持中序遍历得到全序、支持任意
+key 的 floor/ceiling 查询),堆放弃了这个不变式,只维护”父节点 ≤
+子节点”这一条弱得多的性质(不要求兄弟节点之间有序),换来的是插入/删除时只需要沿一条路径上浮或下沉,不需要红黑树那样的变色和旋转维护,常数因子更小、实现更简单。这是”越具体的需求,越能用越便宜的结构满足”的一个直接例子——需要完整有序或任意查找就该用
+<code>TreeMap</code>,只需要反复拿最值就选堆。</p>
 <p>内部 <code>Object[] queue</code>,父子索引关系:节点 <code>i</code>
-的孩子是 <code>2i+1</code>、<code>2i+2</code>。<code>offer</code>
+的孩子是
+<code>2i+1</code>、<code>2i+2</code>(用数组下标运算模拟树形指针,省去每个节点存左右子指针的空间,也让节点在内存里连续排列,缓存友好)。<code>offer</code>
 上浮(siftUp),<code>poll</code> 把末尾元素移到堆顶再下沉(siftDown)。</p>
 <pre><code>数组 [1,3,2,7,4] 表示的堆:
           1(0)
@@ -299,11 +309,12 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb5-1"><a href="
       3(1)     2(2)
       /  \
     7(3) 4(4)</code></pre>
-<p><strong>非线程安全</strong>,也<strong>不保证遍历有序</strong>(只有堆顶有序);要有序遍历得反复
+<p><strong>非线程安全</strong>,也<strong>不保证遍历有序</strong>(只有堆顶有序——这正是上面说的”放弃了任意两元素间的顺序”这一弱不变式的直接后果);要有序遍历得反复
 <code>poll</code>。并发场景用 <code>PriorityBlockingQueue</code>。</p>
 <p>可运行:用大小为 k 的<strong>小顶堆</strong>求 Top-K
 最大值——堆顶恰是这 k 个里最小的,超出就弹掉,单次
-<code>O(log k)</code>:</p>
+<code>O(log k)</code>,这正是利用了堆”只需要知道最值、不需要维护整体顺序”的特性,比对全部数据排序(O(n
+log n))更省:</p>
 <div class="sourceCode" id="cb7"><pre
 class="sourceCode java"><code class="sourceCode java"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.*;</span></span>
 <span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a></span>
@@ -342,7 +353,15 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb8-1"><a href="
 <span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>tm<span class="op">.</span><span class="fu">subMap</span><span class="op">(</span><span class="st">&quot;apple&quot;</span><span class="op">,</span> <span class="st">&quot;cherry&quot;</span><span class="op">);</span></span>
 <span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="dt">var</span> e <span class="op">:</span> tm<span class="op">.</span><span class="fu">entrySet</span><span class="op">())</span> <span class="op">{</span> <span class="op">}</span>  <span class="co">// 按 key 升序遍历</span></span></code></pre></div>
 <p>红黑树的五条性质(节点红/黑、根黑、红节点子黑、任一节点到叶黑高相同等)保证最长路径
-≤ 2× 最短,近似平衡。插入/删除靠变色 + 旋转维持,单次调整 O(log n)。</p>
+≤ 2×
+最短,近似平衡而不要求严格平衡。<strong>为什么选红黑树而不是更严格平衡的
+AVL 树</strong>:AVL 树要求任意节点左右子树高度差
+≤1,查找路径更短、查找更快,但插入和删除后为了维持这个更严格的约束,平均需要更多次旋转来恢复平衡;红黑树放宽约束(允许最长路径达到最短路径的
+2
+倍),换来插入/删除时旋转次数的上界更低(插入最多两次旋转,删除最多三次)。<code>TreeMap</code>
+作为通用关联容器,插入删除和查找都常见,红黑树在”查找稍慢一点点、但增删更便宜”这个折中点上更适合通用场景,这也是
+C++ <code>std::map</code>、Linux 内核调度器等大量选择红黑树而非 AVL
+的共同理由。插入/删除靠变色 + 旋转维持,单次调整 O(log n)。</p>
 <table>
 <thead>
 <tr>
@@ -379,6 +398,10 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb8-1"><a href="
 </tr>
 </tbody>
 </table>
+<p><code>HashMap</code> 用 O(1) 换掉了顺序;<code>TreeMap</code> 用 O(log
+n) 换回顺序和导航能力——选哪个取决于”要不要按 key
+排序或做区间查询”,不需要就用更快的 <code>HashMap</code>,需要就付出 log
+因子换 <code>TreeMap</code> 的导航方法。</p>
 <h2 id="stream-api">Stream API</h2>
 <p>最简单的用法:对一个 <code>List</code> 先筛选、再计数:</p>
 <div class="sourceCode" id="cb9"><pre
@@ -390,8 +413,8 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb9-1"><a href="
 <p><code>集合.stream()</code>
 开启流水线,中间可以链式接任意多个”加工步骤”(这里是
 <code>filter</code>),最后用一个”取结果的操作”(这里是
-<code>count</code>)结束整条链子。记住这个三段式(源 → 中间操作 →
-终止操作),下面的内容都是在这个骨架上展开。</p>
+<code>count</code>)结束整条链子——源、中间操作、终止操作这个三段结构不是随意的
+API 风格选择,下面解释它具体解决什么问题。</p>
 <p>Stream 是<strong>声明式、惰性、可并行</strong>的数据处理管道,类比
 C++20 ranges/views。不是容器,不存数据,是”对数据源的操作描述”。</p>
 <h3 id="惰性与操作分类">惰性与操作分类</h3>
@@ -408,13 +431,32 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb10-1"><a href=
 Stream 可链式。</li>
 <li><strong>终止操作</strong>(<code>collect</code>/<code>forEach</code>/<code>count</code>/<code>reduce</code>/<code>findFirst</code>):触发遍历,执行整条链。</li>
 </ul>
-<p><strong>惰性的意义</strong>:操作<strong>融合</strong>,一个元素流过整条链再取下一个(而非每步都生成完整中间集合),省内存;<code>limit</code>/<code>findFirst</code>
-能<strong>短路</strong>提前结束。</p>
+<p><strong>为什么要分成”惰性中间操作”和”及早求值终止操作”这两类,而不是每个操作都立即执行</strong>:如果
+<code>filter</code>、<code>map</code>
+这类操作都立即求值,每一步都必须产出一个完整的中间集合交给下一步——<code>filter</code>
+先把满足条件的元素收集成一个新 <code>List</code>,再交给 <code>map</code>
+生成第二个新 <code>List</code>,再交给下一个操作……n 步链式操作就要分配 n
+个中间集合,每个都是 O(元素数)
+的内存和一次完整的遍历。这在链条变长或数据量变大时,内存分配和多趟遍历的开销会线性累加。</p>
+<p>Stream
+的设计反过来:中间操作只是把”要做什么”记录成一个函数,并不真正遍历数据,直到终止操作被调用,才会驱动数据<strong>一个元素一个元素地</strong>穿过整条链——同一个元素在同一次”访问”里依次经过
+<code>filter</code> 判断、<code>map</code> 转换、<code>peek</code>
+打印,再取下一个元素重复,整条链只对数据源做<strong>一次遍历</strong>,并且不需要为任何中间步骤分配集合(sorted/distinct
+等需要看到全部数据才能判断的操作是例外,这类操作本身必须缓冲)。这正是”操作融合”(fusion):多个逻辑步骤在执行时被合并成一次遍历里的一系列函数调用,而不是
+n 次遍历 + n 次分配。</p>
+<p>惰性还带来另一个直接收益:<strong>短路</strong>。像
+<code>limit</code>/<code>findFirst</code>
+这类操作一旦拿到需要的结果就能让整条流水线提前停止,不需要处理完整个数据源——如果操作是及早求值的,<code>filter</code>
+已经把所有满足条件的元素都算出来放进集合了,<code>findFirst</code>
+就算只要第一个也已经太迟。</p>
 <div class="sourceCode" id="cb11"><pre
 class="sourceCode java"><code class="sourceCode java"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="co">// 短路:找到第一个就停,不会处理整个流</span></span>
 <span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>Optional<span class="op">&lt;</span><span class="bu">Integer</span><span class="op">&gt;</span> first <span class="op">=</span> Stream<span class="op">.</span><span class="fu">iterate</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> n <span class="op">-&gt;</span> n <span class="op">+</span> <span class="dv">1</span><span class="op">)</span>  <span class="co">// 无限流</span></span>
 <span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span><span class="fu">filter</span><span class="op">(</span>n <span class="op">-&gt;</span> n <span class="op">%</span> <span class="dv">7</span> <span class="op">==</span> <span class="dv">0</span><span class="op">)</span></span>
 <span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span><span class="fu">findFirst</span><span class="op">();</span>   <span class="co">// Optional[7]</span></span></code></pre></div>
+<p>这个例子把惰性的必要性推到极端:数据源是无限流,如果
+<code>filter</code>
+试图及早求值,程序根本不会终止——只有”直到终止操作明确要求某个结果之前,什么都不做”这套惰性机制,才能让”对无限序列做有限次查询”这件事本身可行。</p>
 <h3 id="collectors">Collectors</h3>
 <p>终止操作 <code>collect</code> 把流收集成结果:</p>
 <div class="sourceCode" id="cb12"><pre
@@ -428,6 +470,27 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb12-1"><a href=
 <span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>    words<span class="op">.</span><span class="fu">stream</span><span class="op">().</span><span class="fu">collect</span><span class="op">(</span><span class="fu">partitioningBy</span><span class="op">(</span>s <span class="op">-&gt;</span> s<span class="op">.</span><span class="fu">length</span><span class="op">()</span> <span class="op">&gt;</span> <span class="dv">5</span><span class="op">));</span></span>
 <span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> joined <span class="op">=</span> words<span class="op">.</span><span class="fu">stream</span><span class="op">().</span><span class="fu">collect</span><span class="op">(</span><span class="fu">joining</span><span class="op">(</span><span class="st">&quot;, &quot;</span><span class="op">,</span> <span class="st">&quot;[&quot;</span><span class="op">,</span> <span class="st">&quot;]&quot;</span><span class="op">));</span></span>
 <span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a><span class="bu">Double</span> avg <span class="op">=</span> words<span class="op">.</span><span class="fu">stream</span><span class="op">().</span><span class="fu">collect</span><span class="op">(</span><span class="fu">averagingInt</span><span class="op">(</span><span class="bu">String</span><span class="op">::</span>length<span class="op">));</span></span></code></pre></div>
+<p><strong>为什么 <code>collect</code> 接受一个 <code>Collector</code>
+对象,而不是像
+<code>toList()</code>/<code>toSet()</code>/<code>groupingBy()</code>
+那样直接在 <code>Stream</code>
+接口上开一堆重载方法</strong>:<code>Collector&lt;T,A,R&gt;</code>
+本质上是把”如何归约”打包成三个函数(<code>supplier</code>
+造一个可变的中间容器、<code>accumulator</code>
+把一个元素并入容器、<code>combiner</code>
+把两个并行处理出来的容器合并成一个)加上一个收尾步骤(<code>finisher</code>)。如果改用方法重载,<code>toList</code>、<code>toSet</code>、<code>toMap</code>(带合并函数的重载)、<code>groupingBy</code>(可以嵌套指定”分组之后再怎么收集”的下游收集器)这些组合会迅速爆炸成数十个签名相近却语义不同的重载,而且重载方法之间没有办法互相组合——而
+<code>Collector</code>
+是一个值,可以作为参数传递、可以嵌套(<code>groupingBy(分类函数, 下游 Collector)</code>
+就是把一个 <code>Collector</code> 作为另一个 <code>Collector</code>
+的一部分),<code>collectingAndThen</code>
+可以在任意收集器外面再包一层后处理。这是”把行为封装成可组合的对象”而不是”穷举所有组合的方法名”的设计——组合数是几个正交维度的乘积,封装成对象后只需要为每个维度写一个函数,重载法却要为每个组合都写一个方法。</p>
+<p><code>combiner</code>(合并两个中间容器)存在的意义还不止于此:它是并行流能够工作的前提——数据被拆成若干块,每块各自跑
+<code>supplier</code>+<code>accumulator</code> 产出一个局部结果,最后要靠
+<code>combiner</code>
+把这些局部结果两两合并成一个。方法重载没有天然的地方放这个”合并”步骤,而
+<code>Collector</code> 接口把它作为一等公民,同一个
+<code>Collector</code>
+因此能同时支持串行和并行流,不需要为并行场景另写一套。</p>
 <p>可运行:<code>peek</code> 观察惰性——<code>findFirst</code>
 短路,只拉到第一个匹配就停,不遍历整个流;<code>groupingBy</code>
 按首字母分组:</p>
@@ -461,26 +524,44 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb13-1"><a href=
 <span id="cb13-27"><a href="#cb13-27" aria-hidden="true" tabindex="-1"></a><span class="co">// first b-word = banana</span></span>
 <span id="cb13-28"><a href="#cb13-28" aria-hidden="true" tabindex="-1"></a><span class="co">// --- groupingBy ---</span></span>
 <span id="cb13-29"><a href="#cb13-29" aria-hidden="true" tabindex="-1"></a><span class="co">// {a=[apple, avocado], b=[banana, blueberry], c=[cherry]}</span></span></code></pre></div>
+<p>输出证实了惰性:<code>peek</code> 只打印到 <code>banana</code>
+就停(<code>findFirst</code>
+短路),<code>cherry</code>、<code>avocado</code>、<code>blueberry</code>
+根本没有被访问——如果流是及早求值的,<code>filter</code>
+会先扫完整个列表,<code>peek</code> 应该打印全部 5 个元素。</p>
 <h3 id="并行流">并行流</h3>
 <p><code>parallelStream()</code> 或 <code>.parallel()</code>
 把流拆分,底层用<strong>公共
 ForkJoinPool</strong>(<code>ForkJoinPool.commonPool()</code>,默认线程数
-= CPU 核数-1)分治处理。</p>
+= CPU 核数-1)分治处理。选择 ForkJoinPool
+而非普通线程池,是因为它用<strong>工作窃取(work-stealing)</strong>调度:每个工作线程有自己的任务双端队列,做完自己的任务后去”偷”别的线程队列尾部的任务,不需要中心调度器协调,天然适合”一个大任务被递归拆成大量不均匀子任务”这种分治场景。</p>
 <div class="sourceCode" id="cb14"><pre
 class="sourceCode java"><code class="sourceCode java"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="dt">long</span> sum <span class="op">=</span> LongStream<span class="op">.</span><span class="fu">rangeClosed</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">1_000_000</span><span class="op">)</span></span>
 <span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span><span class="fu">parallel</span><span class="op">()</span></span>
 <span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span><span class="fu">sum</span><span class="op">();</span></span></code></pre></div>
 <p>注意事项: -
 数据源要<strong>易拆分</strong>(数组、<code>ArrayList</code>
-好;<code>LinkedList</code> 差)。 -
+好,支持按下标快速二分;<code>LinkedList</code>
+差,拆分本身要遍历,抵消并行收益)。 -
 操作须<strong>无状态、无副作用</strong>,否则数据竞争(不要在 lambda
 里改共享变量)。 -
-小数据集或廉价操作,并行的拆分/合并/调度开销可能得不偿失。 -
-所有并行流共享同一 commonPool,一个慢任务拖累全局;IO 密集别用它。</p>
+小数据集或廉价操作,并行的拆分/合并/调度开销可能得不偿失——并行流的收益只有在”单元素处理成本
+× 元素数量”显著大于”拆分+调度+合并”的固定开销时才划算。 -
+所有并行流共享同一 commonPool,一个慢任务(尤其是阻塞
+IO)会占住线程拖累全局其他并行流任务;IO 密集场景不要用它。</p>
 <h2 id="optional">Optional</h2>
 <p><code>Optional&lt;T&gt;</code> 表达”可能没有值”,替代裸
 <code>null</code>,强制调用者处理缺失,减少 NPE。类比 C++17
 <code>std::optional</code>(但 Java 的是对象,有堆分配开销)。</p>
+<p><code>Optional</code> 相比”直接返回可能是 <code>null</code> 的
+T”解决的具体问题是:<code>null</code>
+在类型签名上和正常值毫无区别(<code>String getName()</code>
+既可能返回名字,也可能悄悄返回
+<code>null</code>,调用方从签名上看不出来,只能靠文档或经验),调用方一旦忘记判空就是运行时
+NPE,且往往在离”真正缺值”那处代码很远的地方才爆出来。<code>Optional&lt;String&gt;</code>
+把”可能没有值”这个事实写进了方法签名本身,调用方被迫要么显式处理”空”这个分支(<code>orElse</code>/<code>map</code>/<code>ifPresent</code>),要么显式选择
+<code>get()</code>/<code>orElseThrow()</code>
+承担风险——把”这里可能没有值”从一条容易被忽略的隐性约定,变成编译器能看见的类型信息。</p>
 <p>最基础的用法:<code>Optional.of</code>
 包一个确定存在的值,<code>Optional.empty()</code>
 表示确定没有值,<code>isPresent()</code> 判断是哪种情况:</p>
@@ -500,7 +581,11 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb16-1"><a href=
 <span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>opt<span class="op">.</span><span class="fu">ifPresent</span><span class="op">(</span><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">::</span>println<span class="op">);</span></span>
 <span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> u <span class="op">=</span> opt<span class="op">.</span><span class="fu">map</span><span class="op">(</span><span class="bu">String</span><span class="op">::</span>trim<span class="op">).</span><span class="fu">filter</span><span class="op">(</span>x <span class="op">-&gt;</span> <span class="op">!</span>x<span class="op">.</span><span class="fu">isEmpty</span><span class="op">()).</span><span class="fu">orElse</span><span class="op">(</span><span class="st">&quot;-&quot;</span><span class="op">);</span></span>
 <span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>opt<span class="op">.</span><span class="fu">orElseThrow</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="kw">new</span> <span class="bu">IllegalStateException</span><span class="op">(</span><span class="st">&quot;missing&quot;</span><span class="op">));</span></span></code></pre></div>
-<p>用法约定:主要用作<strong>方法返回值</strong>表达”可能无结果”;<strong>不要</strong>用于字段、方法参数或集合元素(徒增开销)。</p>
+<p>用法约定:主要用作<strong>方法返回值</strong>表达”可能无结果”;<strong>不要</strong>用于字段、方法参数或集合元素——这几个场景里
+<code>Optional</code>
+本身也要占一次堆分配,而字段/参数是否可为空通常有别的手段表达(文档、<code>@Nullable</code>
+注解、直接判空),为它们套一层 <code>Optional</code>
+只是徒增一次对象分配和一层解包动作,没有换来签名上的额外清晰度。</p>
 <h2 id="数值工具">数值工具</h2>
 <p>日常用 <code>Math</code> 的静态方法做基本运算;当
 <code>int</code>/<code>long</code>/<code>double</code>
@@ -519,10 +604,17 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb17-1"><a href=
 <span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a><span class="bu">BigDecimal</span> price <span class="op">=</span> <span class="kw">new</span> <span class="bu">BigDecimal</span><span class="op">(</span><span class="st">&quot;0.10&quot;</span><span class="op">);</span>    <span class="co">// 必须用 String 构造,new BigDecimal(0.1) 会带二进制误差</span></span>
 <span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a><span class="bu">BigDecimal</span> total <span class="op">=</span> price<span class="op">.</span><span class="fu">multiply</span><span class="op">(</span><span class="kw">new</span> <span class="bu">BigDecimal</span><span class="op">(</span><span class="st">&quot;3&quot;</span><span class="op">));</span>  <span class="co">// 精确 0.30</span></span>
 <span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="kw">new</span> <span class="bu">BigDecimal</span><span class="op">(</span><span class="st">&quot;0.1&quot;</span><span class="op">).</span><span class="fu">add</span><span class="op">(</span><span class="kw">new</span> <span class="bu">BigDecimal</span><span class="op">(</span><span class="st">&quot;0.2&quot;</span><span class="op">)));</span> <span class="co">// 0.3(double 会是 0.30000000000000004)</span></span>
-<span id="cb17-12"><a href="#cb17-12" aria-hidden="true" tabindex="-1"></a>total <span class="op">=</span> total<span class="op">.</span><span class="fu">setScale</span><span class="op">(</span><span class="dv">2</span><span class="op">,</span> <span class="bu">RoundingMode</span><span class="op">.</span><span class="fu">HALF_UP</span><span class="op">);</span>         <span class="co">// 显式指定舍入</span></span>
-<span id="cb17-13"><a href="#cb17-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-14"><a href="#cb17-14" aria-hidden="true" tabindex="-1"></a><span class="co">// Random:线性同余伪随机;并发用 ThreadLocalRandom;安全场景用 SecureRandom</span></span>
-<span id="cb17-15"><a href="#cb17-15" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> r <span class="op">=</span> ThreadLocalRandom<span class="op">.</span><span class="fu">current</span><span class="op">().</span><span class="fu">nextInt</span><span class="op">(</span><span class="dv">0</span><span class="op">,</span> <span class="dv">100</span><span class="op">);</span></span></code></pre></div>
+<span id="cb17-12"><a href="#cb17-12" aria-hidden="true" tabindex="-1"></a>total <span class="op">=</span> total<span class="op">.</span><span class="fu">setScale</span><span class="op">(</span><span class="dv">2</span><span class="op">,</span> <span class="bu">RoundingMode</span><span class="op">.</span><span class="fu">HALF_UP</span><span class="op">);</span>         <span class="co">// 显式指定舍入</span></span></code></pre></div>
+<p><code>BigDecimal</code> 必须用字符串构造而不是 <code>double</code>
+字面量,原因在浮点数的表示本身:<code>double</code>
+是二进制浮点数,<code>0.1</code>
+这样的十进制小数在二进制里是无限循环小数,只能被近似表示——<code>new BigDecimal(0.1)</code>
+拿到的不是数学意义上的 0.1,而是这个 <code>double</code>
+近似值本身精确对应的二进制小数(展开出一长串非零位),<code>BigDecimal</code>
+只是如实呈现了这个已经存在的误差,并没有引入新误差。用字符串构造则是直接按十进制精确解析,避免了”先转换成有损的二进制浮点数、再转回来”这一步。</p>
+<div class="sourceCode" id="cb18"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Random:线性同余伪随机;并发用 ThreadLocalRandom;安全场景用 SecureRandom</span></span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> r <span class="op">=</span> ThreadLocalRandom<span class="op">.</span><span class="fu">current</span><span class="op">().</span><span class="fu">nextInt</span><span class="op">(</span><span class="dv">0</span><span class="op">,</span> <span class="dv">100</span><span class="op">);</span></span></code></pre></div>
 <blockquote>
 <p><code>BigInteger</code>/<code>BigDecimal</code>
 不可变,频繁运算产生大量临时对象,循环中注意 GC 压力。它们的比较用
@@ -639,7 +731,7 @@ href="07-复合数据结构.html">07-复合数据结构</a>;并行流依赖的
 ForkJoinPool 见 <a href="10-并发模型.html">10-并发模型</a>。</p>
 <h2 id="小结">小结</h2>
 <ul>
-<li><strong>用法层面</strong>:
+<li><strong>用法</strong>:
 <ul>
 <li><code>Collections</code> 是操作
 <code>List</code>/<code>Collection</code>
@@ -673,28 +765,34 @@ ForkJoinPool 见 <a href="10-并发模型.html">10-并发模型</a>。</p>
 必须用字符串构造,比较数值相等要用 <code>compareTo == 0</code> 而不是
 <code>equals</code>。</li>
 </ul></li>
-<li><strong>底层层面</strong>:
+<li><strong>原理</strong>:
 <ul>
 <li><code>Arrays.sort</code>:基本类型用<strong>双轴快排</strong>(相等的值本就无差别,稳定性无意义,原地、缓存友好);对象用
 <strong>TimSort</strong>(归并+插入的混合,识别已排序的 run,保证稳定,最坏
-O(n log n)、已有序数据 O(n),需要 O(n) 辅助空间)。</li>
+O(n log n)、已有序数据 O(n),需要 O(n)
+辅助空间)——两种选择分别对应”比较廉价、访存主导”与”比较昂贵、稳定性刚需”这两种截然不同的成本结构。</li>
 <li><code>Comparator</code>/<code>Comparable</code>
 的契约要求自反、传递、反对称,违反传递性会让 TimSort 直接抛
-<code>IllegalArgumentException</code>。</li>
+<code>IllegalArgumentException</code>,因为归并排序的正确性证明本身依赖比较关系的传递性。</li>
 <li><code>PriorityQueue</code>
 底层是<strong>数组表示的二叉堆</strong>(节点 <code>i</code> 的孩子是
-<code>2i+1</code>/<code>2i+2</code>),<code>offer</code>
+<code>2i+1</code>/<code>2i+2</code>),只维护”父≤子”这一条弱不变式,比红黑树维护更少信息、常数更小,适合”只需反复取最值”的场景;<code>offer</code>
 上浮、<code>poll</code> 下沉,均为 O(log n),非线程安全。</li>
 <li><code>TreeMap</code>
-底层是<strong>红黑树</strong>,靠”根黑、红节点子必黑、任一路径黑高相同”等性质保证近似平衡,所有操作
+底层是<strong>红黑树</strong>,靠”根黑、红节点子必黑、任一路径黑高相同”等性质保证近似平衡(而非
+AVL 那样的严格平衡),用查找路径稍长换取插入删除时更少的旋转次数,所有操作
 O(log n)。</li>
 <li>Stream
-的中间操作全部<strong>惰性</strong>,直到终止操作才真正执行,好处是操作能融合(省内存)且能<strong>短路</strong>(<code>limit</code>/<code>findFirst</code>
-提前结束);并行流靠公共 <code>ForkJoinPool</code>
-分治,要求数据源易拆分、操作无状态无副作用。</li>
+的中间操作全部<strong>惰性</strong>,直到终止操作才真正执行:这避免了每步操作都分配一个中间集合(操作能在一次遍历里融合),且能<strong>短路</strong>(<code>limit</code>/<code>findFirst</code>
+提前结束,这也是处理无限流的前提);<code>Collector</code>
+被设计成”供应—累加—合并—收尾”四个函数打包的对象而非方法重载,是为了让分组、收集策略可以任意组合、可以嵌套,同时天然支持并行流的局部结果合并。并行流靠公共
+<code>ForkJoinPool</code>
+的工作窃取调度分治,要求数据源易拆分、操作无状态无副作用。</li>
 <li><code>BigInteger</code>/<code>BigDecimal</code>
 都是<strong>不可变</strong>对象,每次运算生成新对象,循环里大量使用要留意
-GC 压力。</li>
+GC 压力;<code>BigDecimal</code>
+必须用字符串构造是因为要避免十进制小数先经过 <code>double</code>
+的二进制近似这一步有损转换。</li>
 </ul></li>
 </ul>
 <hr />
