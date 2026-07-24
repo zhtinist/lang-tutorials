@@ -2,20 +2,17 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="zh-CN" xml:lang="zh-CN">
 <head>
   <meta charset="utf-8" />
-  <meta name="generator" content="pandoc 3.10" />
+  <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
   <title>错误处理与垃圾回收</title>
   <style>
     /* Default styles provided by pandoc.
     ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
     */
+    code{white-space: pre-wrap;}
     span.smallcaps{font-variant: small-caps;}
-    div.columns{display: flex; gap: 1.5em;}
-    div.column{flex: auto;}
-    @media screen {
-    div.columns{gap: min(4vw, 1.5em);}
-    div.column{overflow-x: auto;}
-    }
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
     div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
     /* The extra [class] is a hack that increases specificity enough to
        override a similar rule in reveal.js */
@@ -110,6 +107,11 @@
 <li><a href="#错误处理与垃圾回收"
 id="toc-错误处理与垃圾回收">错误处理与垃圾回收</a>
 <ul>
+<li><a href="#先会用errordeferpanicrecover-速览"
+id="toc-先会用errordeferpanicrecover-速览">先会用:error、defer、panic/recover
+速览</a></li>
+<li><a href="#开始深入error-底层是什么"
+id="toc-开始深入error-底层是什么">开始深入:error 底层是什么</a></li>
 <li><a href="#一error-是一个普通接口值"
 id="toc-一error-是一个普通接口值">一、error 是一个普通接口值</a></li>
 <li><a href="#二哨兵错误自定义错误isas"
@@ -127,68 +129,141 @@ id="toc-五垃圾回收gc">五、垃圾回收(GC)</a></li>
 <h1 id="错误处理与垃圾回收">错误处理与垃圾回收</h1>
 <p>Go 没有异常(no exceptions),没有 <code>try/catch</code>,没有析构函数做
 RAII。它把错误当<strong>普通的返回值</strong>处理,把资源清理交给
-<code>defer</code>,把内存回收交给<strong>并发垃圾回收器</strong>。对 C++
+<code>defer</code>,把内存回收交给<strong>并发垃圾回收器</strong>。<strong>本章先讲这三样东西「怎么写、怎么用」——看得懂普通
+Go 代码就够;再讲「底层与 C 对比」——error 接口值到底是什么、panic
+展开时到底发生了什么、GC 怎么并发标记而不长时间停顿。</strong> 对 C++
 程序员来说,这是三处需要重新建立肌肉记忆的地方。</p>
-<h2 id="一error-是一个普通接口值">一、error 是一个普通接口值</h2>
-<p><code>error</code> 不是关键字,就是标准库里一个再普通不过的接口:</p>
-<div class="sourceCode" id="cb1"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> <span class="dt">error</span> <span class="kw">interface</span> <span class="op">{</span></span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    Error<span class="op">()</span> <span class="dt">string</span></span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2
+id="先会用errordeferpanicrecover-速览">先会用:error、defer、panic/recover
+速览</h2>
+<p>不涉及任何底层原理,先看这几样东西怎么写:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="op">(</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;errors&quot;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="op">)</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> divide<span class="op">(</span>a<span class="op">,</span> b <span class="dt">int</span><span class="op">)</span> <span class="op">(</span><span class="dt">int</span><span class="op">,</span> <span class="dt">error</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> b <span class="op">==</span> <span class="dv">0</span> <span class="op">{</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="dv">0</span><span class="op">,</span> errors<span class="op">.</span>New<span class="op">(</span><span class="st">&quot;division by zero&quot;</span><span class="op">)</span> <span class="co">// 构造一个错误</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> a <span class="op">/</span> b<span class="op">,</span> <span class="ot">nil</span> <span class="co">// 第二个返回值 nil 表示&quot;没有错误&quot;</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    result<span class="op">,</span> err <span class="op">:=</span> divide<span class="op">(</span><span class="dv">10</span><span class="op">,</span> <span class="dv">2</span><span class="op">)</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> err <span class="op">!=</span> <span class="ot">nil</span> <span class="op">{</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>        fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;出错:&quot;</span><span class="op">,</span> err<span class="op">)</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span> <span class="cf">else</span> <span class="op">{</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>        fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;结果:&quot;</span><span class="op">,</span> result<span class="op">)</span> <span class="co">// 结果: 5</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>    _<span class="op">,</span> err <span class="op">=</span> divide<span class="op">(</span><span class="dv">10</span><span class="op">,</span> <span class="dv">0</span><span class="op">)</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> err <span class="op">!=</span> <span class="ot">nil</span> <span class="op">{</span></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>        fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;出错:&quot;</span><span class="op">,</span> err<span class="op">)</span> <span class="co">// 出错: division by zero</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>    <span class="co">// defer: 注册一个&quot;函数返回前一定会执行&quot;的调用</span></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>    <span class="cf">defer</span> fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;main 结束前打印&quot;</span><span class="op">)</span></span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;main 正常执行&quot;</span><span class="op">)</span></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>简单总结:</p>
+<ul>
+<li>Go
+函数常常返回两个值:<code>(结果, error)</code>。调用方<strong>必须自己检查</strong>
+<code>if err != nil</code>,错误不会像异常一样自动往上冒泡。</li>
+<li><code>errors.New("...")</code>
+构造一个最简单的错误;<code>err == nil</code> 表示没出错。</li>
+<li><code>defer 语句</code>
+注册一个调用,它会在<strong>函数返回前</strong>执行,不管函数是正常返回还是出错返回——常用来做”打开就要关闭”这类清理工作(比如关文件、解锁)。</li>
+</ul>
+<p>再看
+<code>panic</code>/<code>recover</code>——用于真正意外的情况(比如数组越界、显式触发的严重错误),不是日常错误处理手段:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> mayPanic<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="bu">panic</span><span class="op">(</span><span class="st">&quot;出问题了&quot;</span><span class="op">)</span> <span class="co">// 主动触发 panic</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> safe<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">defer</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> r <span class="op">:=</span> <span class="bu">recover</span><span class="op">();</span> r <span class="op">!=</span> <span class="ot">nil</span> <span class="op">{</span> <span class="co">// recover 只在 defer 里有效</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>            fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;恢复:&quot;</span><span class="op">,</span> r<span class="op">)</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}()</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    mayPanic<span class="op">()</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;这行不会执行&quot;</span><span class="op">)</span> <span class="co">// panic 之后, 函数剩余代码不再运行</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    safe<span class="op">()</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;程序继续运行&quot;</span><span class="op">)</span> <span class="co">// recover 后, main 正常往下走</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>这几个够你写出结构完整的 Go 代码了。下面进入”底层”——error
+在内存里究竟是什么、panic 展开的完整机制、GC 怎么并发工作。</p>
+<h2 id="开始深入error-底层是什么">开始深入:error 底层是什么</h2>
+<p>从这一节起讲底层。要理解 error/panic/GC
+的开销和行为,先记住:<strong><code>error</code>
+不是关键字,它是标准库里一个再普通不过的接口</strong>,和你自己定义的接口没有任何区别。</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> <span class="dt">error</span> <span class="kw">interface</span> <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    Error<span class="op">()</span> <span class="dt">string</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>任何实现了 <code>Error() string</code> 的类型都是一个
 error。它在内存里就是<a
 href="08-面向对象与类型系统.html">第08章讲的接口双字
 <code>iface</code></a>——<code>{itab, data}</code>。返回 error
 不涉及栈展开、不涉及零成本异常表,就是压一个 16
 字节的接口值到返回栈槽,和返回任何其他值一样廉价。</p>
-<h3 id="惯用法多返回值-if-err-nil">惯用法:多返回值 + if err != nil</h3>
-<div class="sourceCode" id="cb2"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>f<span class="op">,</span> err <span class="op">:=</span> os<span class="op">.</span>Open<span class="op">(</span><span class="st">&quot;data.txt&quot;</span><span class="op">)</span></span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> err <span class="op">!=</span> <span class="ot">nil</span> <span class="op">{</span></span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> fmt<span class="op">.</span>Errorf<span class="op">(</span><span class="st">&quot;打开配置失败: %w&quot;</span><span class="op">,</span> err<span class="op">)</span> <span class="co">// 处理或包装后上抛</span></span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="cf">defer</span> f<span class="op">.</span>Close<span class="op">()</span></span>
-<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="co">// 正常路径</span></span></code></pre></div>
-<p>C++ 里错误是”隐式的控制流”(异常自动向上冒泡);Go
-里错误是”显式的数据流”——每一层都要肉眼可见地检查和传递。啰嗦是它被诟病的点,但换来了<strong>控制流完全可见、无隐藏跳转、无栈展开开销</strong>。</p>
-<h3 id="创建错误">创建错误</h3>
-<div class="sourceCode" id="cb3"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>errors<span class="op">.</span>New<span class="op">(</span><span class="st">&quot;something failed&quot;</span><span class="op">)</span>           <span class="co">// 最简单, 返回 *errorString</span></span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Errorf<span class="op">(</span><span class="st">&quot;port %d in use&quot;</span><span class="op">,</span> port<span class="op">)</span>        <span class="co">// 带格式化</span></span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Errorf<span class="op">(</span><span class="st">&quot;read config: %w&quot;</span><span class="op">,</span> err<span class="op">)</span>        <span class="co">// %w 包装底层错误(保留链)</span></span></code></pre></div>
+<h2 id="一error-是一个普通接口值">一、error 是一个普通接口值</h2>
+<h3 id="怎么用">怎么用</h3>
+<p>惯用法是”多返回值 + if err != nil”:</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>f<span class="op">,</span> err <span class="op">:=</span> os<span class="op">.</span>Open<span class="op">(</span><span class="st">&quot;data.txt&quot;</span><span class="op">)</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> err <span class="op">!=</span> <span class="ot">nil</span> <span class="op">{</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> fmt<span class="op">.</span>Errorf<span class="op">(</span><span class="st">&quot;打开配置失败: %w&quot;</span><span class="op">,</span> err<span class="op">)</span> <span class="co">// 处理或包装后上抛</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="cf">defer</span> f<span class="op">.</span>Close<span class="op">()</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="co">// 正常路径</span></span></code></pre></div>
+<p>创建错误的几种方式:</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>errors<span class="op">.</span>New<span class="op">(</span><span class="st">&quot;something failed&quot;</span><span class="op">)</span>           <span class="co">// 最简单, 返回 *errorString</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Errorf<span class="op">(</span><span class="st">&quot;port %d in use&quot;</span><span class="op">,</span> port<span class="op">)</span>        <span class="co">// 带格式化</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Errorf<span class="op">(</span><span class="st">&quot;read config: %w&quot;</span><span class="op">,</span> err<span class="op">)</span>        <span class="co">// %w 包装底层错误(保留链)</span></span></code></pre></div>
 <p><code>%w</code>(wrap)是关键:它把 <code>err</code>
 作为”被包装的原因”嵌进新错误,形成一条错误链,可被后面的
 <code>errors.Is</code>/<code>errors.As</code> 逐层解开。用
 <code>%v</code> 只是把文本拼进去,链就断了。</p>
+<h3 id="底层与-c-对比">底层与 C 对比</h3>
+<p>C++ 里错误是”隐式的控制流”(异常自动向上冒泡);Go
+里错误是”显式的数据流”——每一层都要肉眼可见地检查和传递。啰嗦是它被诟病的点,但换来了<strong>控制流完全可见、无隐藏跳转、无栈展开开销</strong>。</p>
 <h2 id="二哨兵错误自定义错误isas">二、哨兵错误、自定义错误、Is/As</h2>
-<h3 id="哨兵错误sentinel">哨兵错误(sentinel)</h3>
-<p>预定义的、可用 <code>==</code> 或 <code>errors.Is</code>
-比较的错误值:</p>
-<div class="sourceCode" id="cb4"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> ErrNotFound <span class="op">=</span> errors<span class="op">.</span>New<span class="op">(</span><span class="st">&quot;not found&quot;</span><span class="op">)</span></span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> Lookup<span class="op">(</span>k <span class="dt">string</span><span class="op">)</span> <span class="op">(</span><span class="dt">string</span><span class="op">,</span> <span class="dt">error</span><span class="op">)</span> <span class="op">{</span></span>
-<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">// ...</span></span>
-<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="st">&quot;&quot;</span><span class="op">,</span> ErrNotFound</span>
-<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> errors<span class="op">.</span>Is<span class="op">(</span>err<span class="op">,</span> ErrNotFound<span class="op">)</span> <span class="op">{</span> <span class="co">/* 特判 */</span> <span class="op">}</span></span></code></pre></div>
+<h3 id="怎么用-1">怎么用</h3>
+<p><strong>哨兵错误(sentinel)</strong>:预定义的、可用 <code>==</code> 或
+<code>errors.Is</code> 比较的错误值:</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> ErrNotFound <span class="op">=</span> errors<span class="op">.</span>New<span class="op">(</span><span class="st">&quot;not found&quot;</span><span class="op">)</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> Lookup<span class="op">(</span>k <span class="dt">string</span><span class="op">)</span> <span class="op">(</span><span class="dt">string</span><span class="op">,</span> <span class="dt">error</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">// ...</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="st">&quot;&quot;</span><span class="op">,</span> ErrNotFound</span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> errors<span class="op">.</span>Is<span class="op">(</span>err<span class="op">,</span> ErrNotFound<span class="op">)</span> <span class="op">{</span> <span class="co">/* 特判 */</span> <span class="op">}</span></span></code></pre></div>
 <p><strong>为什么用 <code>errors.Is</code> 而不是
 <code>err == ErrNotFound</code></strong>?因为 err 可能被 <code>%w</code>
 包装了好几层,<code>==</code> 只比最外层;<code>errors.Is</code> 会沿着
 <code>%w</code> 链一路 <code>Unwrap</code> 逐层比较。</p>
-<h3 id="自定义错误类型">自定义错误类型</h3>
-<p>想携带结构化信息就定义类型:</p>
-<div class="sourceCode" id="cb5"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> PathError <span class="kw">struct</span> <span class="op">{</span></span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    Op   <span class="dt">string</span></span>
-<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    Path <span class="dt">string</span></span>
-<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    Err  <span class="dt">error</span></span>
-<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>e <span class="op">*</span>PathError<span class="op">)</span> Error<span class="op">()</span> <span class="dt">string</span> <span class="op">{</span></span>
-<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> e<span class="op">.</span>Op <span class="op">+</span> <span class="st">&quot; &quot;</span> <span class="op">+</span> e<span class="op">.</span>Path <span class="op">+</span> <span class="st">&quot;: &quot;</span> <span class="op">+</span> e<span class="op">.</span>Err<span class="op">.</span>Error<span class="op">()</span></span>
-<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>e <span class="op">*</span>PathError<span class="op">)</span> Unwrap<span class="op">()</span> <span class="dt">error</span> <span class="op">{</span> <span class="cf">return</span> e<span class="op">.</span>Err <span class="op">}</span> <span class="co">// 让 Is/As 能穿透</span></span></code></pre></div>
+<p><strong>自定义错误类型</strong>:想携带结构化信息就定义类型:</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> PathError <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    Op   <span class="dt">string</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    Path <span class="dt">string</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    Err  <span class="dt">error</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>e <span class="op">*</span>PathError<span class="op">)</span> Error<span class="op">()</span> <span class="dt">string</span> <span class="op">{</span></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> e<span class="op">.</span>Op <span class="op">+</span> <span class="st">&quot; &quot;</span> <span class="op">+</span> e<span class="op">.</span>Path <span class="op">+</span> <span class="st">&quot;: &quot;</span> <span class="op">+</span> e<span class="op">.</span>Err<span class="op">.</span>Error<span class="op">()</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>e <span class="op">*</span>PathError<span class="op">)</span> Unwrap<span class="op">()</span> <span class="dt">error</span> <span class="op">{</span> <span class="cf">return</span> e<span class="op">.</span>Err <span class="op">}</span> <span class="co">// 让 Is/As 能穿透</span></span></code></pre></div>
 <p><code>errors.As</code> 把链上第一个匹配目标类型的错误取出来:</p>
-<div class="sourceCode" id="cb6"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> pe <span class="op">*</span>PathError</span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> errors<span class="op">.</span>As<span class="op">(</span>err<span class="op">,</span> <span class="op">&amp;</span>pe<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;出错路径:&quot;</span><span class="op">,</span> pe<span class="op">.</span>Path<span class="op">)</span> <span class="co">// 拿到结构化字段</span></span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb8"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> pe <span class="op">*</span>PathError</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> errors<span class="op">.</span>As<span class="op">(</span>err<span class="op">,</span> <span class="op">&amp;</span>pe<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;出错路径:&quot;</span><span class="op">,</span> pe<span class="op">.</span>Path<span class="op">)</span> <span class="co">// 拿到结构化字段</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <table>
 <colgroup>
 <col style="width: 33%" />
@@ -220,42 +295,66 @@ href="08-面向对象与类型系统.html">第08章讲的接口双字
 </tr>
 </tbody>
 </table>
+<h3 id="底层与-c-对比-1">底层与 C 对比</h3>
+<p><code>errors.Is</code>/<code>errors.As</code> 都是沿着
+<code>Unwrap() error</code>
+方法反复往下走的一个循环,不是编译器魔法:每一层若不匹配,就调用它的
+<code>Unwrap()</code> 拿到下一层,直到链尽头(<code>Unwrap</code> 返回
+nil)。<code>errors.Is</code> 默认用 <code>==</code>
+比较,若某类型自己定义了 <code>Is(error) bool</code>
+则优先调用它;<code>errors.As</code>
+则用反射检查链上每一层的动态类型能否赋值给目标指针指向的类型。这条链本质上就是一串通过接口值互相持有的”节点”,和链表遍历没有本质区别。</p>
 <h3 id="可运行w-包装-is-as">可运行:%w 包装 + Is + As</h3>
-<div class="sourceCode" id="cb7"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="op">(</span></span>
-<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;errors&quot;</span></span>
-<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;fmt&quot;</span></span>
-<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a><span class="op">)</span></span>
-<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> ErrNotFound <span class="op">=</span> errors<span class="op">.</span>New<span class="op">(</span><span class="st">&quot;not found&quot;</span><span class="op">)</span></span>
-<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> QueryError <span class="kw">struct</span> <span class="op">{</span></span>
-<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>    Query <span class="dt">string</span></span>
-<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>    Err   <span class="dt">error</span></span>
-<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>e <span class="op">*</span>QueryError<span class="op">)</span> Error<span class="op">()</span> <span class="dt">string</span> <span class="op">{</span> <span class="cf">return</span> e<span class="op">.</span>Query <span class="op">+</span> <span class="st">&quot;: &quot;</span> <span class="op">+</span> e<span class="op">.</span>Err<span class="op">.</span>Error<span class="op">()</span> <span class="op">}</span></span>
-<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>e <span class="op">*</span>QueryError<span class="op">)</span> Unwrap<span class="op">()</span> <span class="dt">error</span> <span class="op">{</span> <span class="cf">return</span> e<span class="op">.</span>Err <span class="op">}</span></span>
-<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> find<span class="op">()</span> <span class="dt">error</span> <span class="op">{</span></span>
-<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a>    qe <span class="op">:=</span> <span class="op">&amp;</span>QueryError<span class="op">{</span>Query<span class="op">:</span> <span class="st">&quot;SELECT&quot;</span><span class="op">,</span> Err<span class="op">:</span> ErrNotFound<span class="op">}</span> <span class="co">// 包住哨兵错误</span></span>
-<span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> fmt<span class="op">.</span>Errorf<span class="op">(</span><span class="st">&quot;db call: %w&quot;</span><span class="op">,</span> qe<span class="op">)</span>                 <span class="co">// 再用 %w 包一层</span></span>
-<span id="cb7-21"><a href="#cb7-21" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb7-22"><a href="#cb7-22" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-23"><a href="#cb7-23" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
-<span id="cb7-24"><a href="#cb7-24" aria-hidden="true" tabindex="-1"></a>    err <span class="op">:=</span> find<span class="op">()</span></span>
-<span id="cb7-25"><a href="#cb7-25" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>err<span class="op">)</span>                         <span class="co">// db call: SELECT: not found</span></span>
-<span id="cb7-26"><a href="#cb7-26" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>errors<span class="op">.</span>Is<span class="op">(</span>err<span class="op">,</span> ErrNotFound<span class="op">))</span> <span class="co">// true   ← 沿整条 %w/Unwrap 链比较</span></span>
-<span id="cb7-27"><a href="#cb7-27" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-28"><a href="#cb7-28" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> qe <span class="op">*</span>QueryError</span>
-<span id="cb7-29"><a href="#cb7-29" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>errors<span class="op">.</span>As<span class="op">(</span>err<span class="op">,</span> <span class="op">&amp;</span>qe<span class="op">),</span> qe<span class="op">.</span>Query<span class="op">)</span> <span class="co">// true SELECT   ← 取出链上的具体类型</span></span>
-<span id="cb7-30"><a href="#cb7-30" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb9"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="op">(</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;errors&quot;</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a><span class="op">)</span></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> ErrNotFound <span class="op">=</span> errors<span class="op">.</span>New<span class="op">(</span><span class="st">&quot;not found&quot;</span><span class="op">)</span></span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> QueryError <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a>    Query <span class="dt">string</span></span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a>    Err   <span class="dt">error</span></span>
+<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb9-14"><a href="#cb9-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-15"><a href="#cb9-15" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>e <span class="op">*</span>QueryError<span class="op">)</span> Error<span class="op">()</span> <span class="dt">string</span> <span class="op">{</span> <span class="cf">return</span> e<span class="op">.</span>Query <span class="op">+</span> <span class="st">&quot;: &quot;</span> <span class="op">+</span> e<span class="op">.</span>Err<span class="op">.</span>Error<span class="op">()</span> <span class="op">}</span></span>
+<span id="cb9-16"><a href="#cb9-16" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>e <span class="op">*</span>QueryError<span class="op">)</span> Unwrap<span class="op">()</span> <span class="dt">error</span> <span class="op">{</span> <span class="cf">return</span> e<span class="op">.</span>Err <span class="op">}</span></span>
+<span id="cb9-17"><a href="#cb9-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-18"><a href="#cb9-18" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> find<span class="op">()</span> <span class="dt">error</span> <span class="op">{</span></span>
+<span id="cb9-19"><a href="#cb9-19" aria-hidden="true" tabindex="-1"></a>    qe <span class="op">:=</span> <span class="op">&amp;</span>QueryError<span class="op">{</span>Query<span class="op">:</span> <span class="st">&quot;SELECT&quot;</span><span class="op">,</span> Err<span class="op">:</span> ErrNotFound<span class="op">}</span> <span class="co">// 包住哨兵错误</span></span>
+<span id="cb9-20"><a href="#cb9-20" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> fmt<span class="op">.</span>Errorf<span class="op">(</span><span class="st">&quot;db call: %w&quot;</span><span class="op">,</span> qe<span class="op">)</span>                 <span class="co">// 再用 %w 包一层</span></span>
+<span id="cb9-21"><a href="#cb9-21" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb9-22"><a href="#cb9-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-23"><a href="#cb9-23" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb9-24"><a href="#cb9-24" aria-hidden="true" tabindex="-1"></a>    err <span class="op">:=</span> find<span class="op">()</span></span>
+<span id="cb9-25"><a href="#cb9-25" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>err<span class="op">)</span>                         <span class="co">// db call: SELECT: not found</span></span>
+<span id="cb9-26"><a href="#cb9-26" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>errors<span class="op">.</span>Is<span class="op">(</span>err<span class="op">,</span> ErrNotFound<span class="op">))</span> <span class="co">// true   ← 沿整条 %w/Unwrap 链比较</span></span>
+<span id="cb9-27"><a href="#cb9-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-28"><a href="#cb9-28" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> qe <span class="op">*</span>QueryError</span>
+<span id="cb9-29"><a href="#cb9-29" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>errors<span class="op">.</span>As<span class="op">(</span>err<span class="op">,</span> <span class="op">&amp;</span>qe<span class="op">),</span> qe<span class="op">.</span>Query<span class="op">)</span> <span class="co">// true SELECT   ← 取出链上的具体类型</span></span>
+<span id="cb9-30"><a href="#cb9-30" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <h2 id="三panic-recover不是异常">三、panic / recover:不是异常</h2>
+<h3 id="怎么用-2">怎么用</h3>
 <p><code>panic</code>
 用于<strong>真正不该发生的程序错误</strong>(数组越界、解引用
-nil、不变量被破坏),不是常规错误处理手段。</p>
-<h3 id="panic-的机制">panic 的机制</h3>
+nil、不变量被破坏),不是常规错误处理手段。<code>recover</code> 只在
+<code>defer</code> 里调用才有效,用来”接住”panic、让程序恢复正常执行:</p>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> safeRun<span class="op">()</span> <span class="op">(</span>err <span class="dt">error</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">defer</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> r <span class="op">:=</span> <span class="bu">recover</span><span class="op">();</span> r <span class="op">!=</span> <span class="ot">nil</span> <span class="op">{</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>            err <span class="op">=</span> fmt<span class="op">.</span>Errorf<span class="op">(</span><span class="st">&quot;recovered: %v&quot;</span><span class="op">,</span> r<span class="op">)</span> <span class="co">// 把 panic 转成 error 返回</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">}()</span></span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>    riskyOperation<span class="op">()</span></span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="ot">nil</span></span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>典型用途:web 服务器的每个请求 handler 外面包一层 recover,单个请求
+panic 不至于拖垮整个进程。<strong>但不要用 panic/recover 模拟 try/catch
+做常规流程控制</strong>——这是反模式,慢且违背 Go 惯例。</p>
+<h3 id="底层与-c-对比-2">底层与 C 对比</h3>
 <p><code>panic(x)</code> 会:立即停止当前函数正常执行 →
 <strong>沿调用栈向上逐层展开(unwind)</strong>,每层执行已注册的
 <code>defer</code> → 若一路没被 <code>recover</code>,到达 goroutine
@@ -268,43 +367,30 @@ main → A() → B() → panic!
         ↑ 执行 main 的 defer(若无 recover)→ 进程崩溃</code></pre>
 <p>这个展开过程会跑 <code>defer</code>,但<strong>没有 C++ 那种基于类型的
 catch 匹配</strong>——recover 抓的是”任意 panic”,不区分类型。</p>
-<h3 id="recover只能在-defer-里">recover:只能在 defer 里</h3>
 <p><code>recover()</code> 只有在 <code>defer</code>
 的函数里直接调用才有效,它会<strong>停止展开</strong>、返回传给 panic
-的值,让程序在当前栈帧恢复正常:</p>
-<div class="sourceCode" id="cb9"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> safeRun<span class="op">()</span> <span class="op">(</span>err <span class="dt">error</span><span class="op">)</span> <span class="op">{</span></span>
-<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">defer</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span></span>
-<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> r <span class="op">:=</span> <span class="bu">recover</span><span class="op">();</span> r <span class="op">!=</span> <span class="ot">nil</span> <span class="op">{</span></span>
-<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>            err <span class="op">=</span> fmt<span class="op">.</span>Errorf<span class="op">(</span><span class="st">&quot;recovered: %v&quot;</span><span class="op">,</span> r<span class="op">)</span> <span class="co">// 把 panic 转成 error 返回</span></span>
-<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
-<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">}()</span></span>
-<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>    riskyOperation<span class="op">()</span></span>
-<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="ot">nil</span></span>
-<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
-<p>典型用途:web 服务器的每个请求 handler 外面包一层 recover,单个请求
-panic 不至于拖垮整个进程。<strong>但不要用 panic/recover 模拟 try/catch
-做常规流程控制</strong>——这是反模式,慢且违背 Go 惯例。</p>
+的值,让程序在当前栈帧恢复正常。</p>
 <p>可运行:把运行时 panic 转成 error:</p>
-<div class="sourceCode" id="cb10"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="st">&quot;fmt&quot;</span></span>
-<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> safeDiv<span class="op">(</span>a<span class="op">,</span> b <span class="dt">int</span><span class="op">)</span> <span class="op">(</span>result <span class="dt">int</span><span class="op">,</span> err <span class="dt">error</span><span class="op">)</span> <span class="op">{</span></span>
-<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">defer</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span></span>
-<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> r <span class="op">:=</span> <span class="bu">recover</span><span class="op">();</span> r <span class="op">!=</span> <span class="ot">nil</span> <span class="op">{</span></span>
-<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>            err <span class="op">=</span> fmt<span class="op">.</span>Errorf<span class="op">(</span><span class="st">&quot;recovered: %v&quot;</span><span class="op">,</span> r<span class="op">)</span> <span class="co">// 把 panic 转成 error 返回</span></span>
-<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
-<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}()</span></span>
-<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> a <span class="op">/</span> b<span class="op">,</span> <span class="ot">nil</span> <span class="co">// b==0 会在 return 完成前触发运行时 panic</span></span>
-<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-14"><a href="#cb10-14" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
-<span id="cb10-15"><a href="#cb10-15" aria-hidden="true" tabindex="-1"></a>    r<span class="op">,</span> err <span class="op">:=</span> safeDiv<span class="op">(</span><span class="dv">10</span><span class="op">,</span> <span class="dv">2</span><span class="op">)</span></span>
-<span id="cb10-16"><a href="#cb10-16" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>r<span class="op">,</span> err<span class="op">)</span> <span class="co">// 5 &lt;nil&gt;</span></span>
-<span id="cb10-17"><a href="#cb10-17" aria-hidden="true" tabindex="-1"></a>    r<span class="op">,</span> err <span class="op">=</span> safeDiv<span class="op">(</span><span class="dv">10</span><span class="op">,</span> <span class="dv">0</span><span class="op">)</span></span>
-<span id="cb10-18"><a href="#cb10-18" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>r<span class="op">,</span> err<span class="op">)</span> <span class="co">// 0 recovered: runtime error: integer divide by zero</span></span>
-<span id="cb10-19"><a href="#cb10-19" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> safeDiv<span class="op">(</span>a<span class="op">,</span> b <span class="dt">int</span><span class="op">)</span> <span class="op">(</span>result <span class="dt">int</span><span class="op">,</span> err <span class="dt">error</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">defer</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> r <span class="op">:=</span> <span class="bu">recover</span><span class="op">();</span> r <span class="op">!=</span> <span class="ot">nil</span> <span class="op">{</span></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>            err <span class="op">=</span> fmt<span class="op">.</span>Errorf<span class="op">(</span><span class="st">&quot;recovered: %v&quot;</span><span class="op">,</span> r<span class="op">)</span> <span class="co">// 把 panic 转成 error 返回</span></span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}()</span></span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> a <span class="op">/</span> b<span class="op">,</span> <span class="ot">nil</span> <span class="co">// b==0 会在 return 完成前触发运行时 panic</span></span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a>    r<span class="op">,</span> err <span class="op">:=</span> safeDiv<span class="op">(</span><span class="dv">10</span><span class="op">,</span> <span class="dv">2</span><span class="op">)</span></span>
+<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>r<span class="op">,</span> err<span class="op">)</span> <span class="co">// 5 &lt;nil&gt;</span></span>
+<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a>    r<span class="op">,</span> err <span class="op">=</span> safeDiv<span class="op">(</span><span class="dv">10</span><span class="op">,</span> <span class="dv">0</span><span class="op">)</span></span>
+<span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>r<span class="op">,</span> err<span class="op">)</span> <span class="co">// 0 recovered: runtime error: integer divide by zero</span></span>
+<span id="cb12-19"><a href="#cb12-19" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>注意 panic 分支里 <code>result</code> 仍是 0:panic 在求值
 <code>a / b</code> 时就触发了,返回值从未被赋值,只有命名返回
 <code>err</code> 在 defer 的 <code>recover</code> 里被设置。</p>
@@ -351,16 +437,26 @@ class="sourceCode go"><code class="sourceCode go"><span id="cb10-1"><a href="#cb
 </tbody>
 </table>
 <h2 id="四资源管理defer-代替-raii">四、资源管理:defer 代替 RAII</h2>
-<p>Go 没有析构函数。资源清理靠 <a
-href="05-控制流.html"><code>defer</code>(见第05章机制)</a>:注册的调用在函数返回前(含
-panic 展开时)按 <strong>后进先出</strong> 执行。</p>
-<div class="sourceCode" id="cb11"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>f<span class="op">,</span> err <span class="op">:=</span> os<span class="op">.</span>Open<span class="op">(</span>name<span class="op">)</span></span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> err <span class="op">!=</span> <span class="ot">nil</span> <span class="op">{</span> <span class="cf">return</span> err <span class="op">}</span></span>
-<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="cf">defer</span> f<span class="op">.</span>Close<span class="op">()</span>           <span class="co">// 无论后面怎么返回/panic, 都会关</span></span>
-<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>mu<span class="op">.</span>Lock<span class="op">()</span></span>
-<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a><span class="cf">defer</span> mu<span class="op">.</span>Unlock<span class="op">()</span>         <span class="co">// 配对加解锁, 防止漏解锁</span></span></code></pre></div>
+<h3 id="怎么用-3">怎么用</h3>
+<p>Go 没有析构函数。资源清理靠
+<code>defer</code>:注册的调用在函数返回前(含 panic 展开时)按
+<strong>后进先出</strong> 执行(<a
+href="05-控制流.html">见第05章机制</a>)。</p>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;开始&quot;</span><span class="op">)</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="cf">defer</span> fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;清理1&quot;</span><span class="op">)</span> <span class="co">// 后进先出: 最后执行</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a><span class="cf">defer</span> fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;清理2&quot;</span><span class="op">)</span> <span class="co">// 先执行</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;结束&quot;</span><span class="op">)</span></span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a><span class="co">// 输出顺序: 开始 结束 清理2 清理1</span></span></code></pre></div>
+<p>实际场景常用来配对”打开/关闭”或”加锁/解锁”:</p>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>f<span class="op">,</span> err <span class="op">:=</span> os<span class="op">.</span>Open<span class="op">(</span>name<span class="op">)</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> err <span class="op">!=</span> <span class="ot">nil</span> <span class="op">{</span> <span class="cf">return</span> err <span class="op">}</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="cf">defer</span> f<span class="op">.</span>Close<span class="op">()</span>           <span class="co">// 无论后面怎么返回/panic, 都会关</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>mu<span class="op">.</span>Lock<span class="op">()</span></span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a><span class="cf">defer</span> mu<span class="op">.</span>Unlock<span class="op">()</span>         <span class="co">// 配对加解锁, 防止漏解锁</span></span></code></pre></div>
+<h3 id="底层与-c-对比-3">底层与 C 对比</h3>
 <p>和 C++ RAII 的差异:RAII
 绑定<strong>对象生命周期/作用域</strong>(离开块即析构);<code>defer</code>
 绑定<strong>函数返回</strong>(不是块级,是函数级!循环里
@@ -372,12 +468,19 @@ class="sourceCode go"><code class="sourceCode go"><span id="cb11-1"><a href="#cb
 defer/显式 Close</strong> 管理文件、锁等确定性资源。</p>
 </blockquote>
 <h2 id="五垃圾回收gc">五、垃圾回收(GC)</h2>
+<h3 id="怎么用-4">怎么用</h3>
 <p>Go 是带 GC 的语言。你不写
 <code>free</code>/<code>delete</code>,不管理生命周期;编译器的<a
 href="03-变量与内存模型.html">逃逸分析(第03章)</a>决定变量在栈还是堆,栈上的随栈帧回收,堆上的由
-GC 回收。</p>
-<h3 id="并发三色标记-清除">并发三色标记-清除</h3>
-<p>Go 的 GC 是<strong>并发的、非移动的、三色标记-清除(tri-color
+GC 回收。日常写业务代码基本不用管
+GC——极少数需要调优的场景,才会用到下面这几个”旋钮”:</p>
+<div class="sourceCode" id="cb15"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>debug<span class="op">.</span>SetGCPercent<span class="op">(</span><span class="dv">200</span><span class="op">)</span> <span class="co">// 调高 → GC 更少、内存占用更高、吞吐更好</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>debug<span class="op">.</span>SetGCPercent<span class="op">(</span><span class="dv">50</span><span class="op">)</span>  <span class="co">// 调低 → GC 更频繁、内存更省</span></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>runtime<span class="op">.</span>GC<span class="op">()</span>            <span class="co">// 手动强制一次(阻塞式, 一般只在测试/特殊场景用)</span></span></code></pre></div>
+<h3 id="底层与-c-对比-4">底层与 C 对比</h3>
+<p><strong>并发三色标记-清除</strong>。Go 的 GC
+是<strong>并发的、非移动的、三色标记-清除(tri-color
 mark-sweep)</strong>,核心目标是<strong>极短的
 STW(stop-the-world)</strong>。</p>
 <p>三色抽象:</p>
@@ -389,8 +492,8 @@ STW(stop-the-world)</strong>。</p>
 <p>流程:从根(栈、全局变量)出发,把根置灰;不断从灰色集合取对象、把它引用的白色对象置灰、自己转黑;直到没有灰色。剩下的白色就是垃圾,清除。<strong>标记阶段与用户
 goroutine 并发运行</strong>(mark workers 用一部分
 CPU),不是长时间停顿。</p>
-<h3 id="写屏障write-barrier">写屏障(write barrier)</h3>
-<p>并发标记的麻烦:用户程序一边改指针,标记一边跑,可能”黑色对象新指向一个白色对象、而唯一指向该白色的灰色引用又被删掉”——白色对象被漏标、被错误回收。</p>
+<p><strong>写屏障(write
+barrier)</strong>。并发标记的麻烦:用户程序一边改指针,标记一边跑,可能”黑色对象新指向一个白色对象、而唯一指向该白色的灰色引用又被删掉”——白色对象被漏标、被错误回收。</p>
 <p>解决办法是<strong>写屏障</strong>:在标记期间,每次指针写操作被编译器插入一小段钩子代码,把涉及的对象重新标灰,保证不漏。Go
 用的是混合写屏障(Dijkstra + Yuasa 混合),使得<strong>栈几乎不需要 STW
 重扫</strong>。写屏障只在 GC 标记阶段激活,平时关闭。</p>
@@ -398,28 +501,23 @@ CPU),不是长时间停顿。</p>
 [极短 STW: 开启写屏障] → [并发标记, 用户程序同时跑, 写屏障保护] →
 [极短 STW: 标记终止] → [并发清除, 与用户程序同时]
 两次 STW 通常都在亚毫秒~毫秒级</code></pre>
-<h3 id="触发时机与-gogc">触发时机与 GOGC</h3>
-<p>GC 由<strong>堆增长比例</strong>驱动,由环境变量/参数
-<code>GOGC</code> 控制(默认 100):</p>
+<p><strong>触发时机与 GOGC</strong>。GC
+由<strong>堆增长比例</strong>驱动,由环境变量/参数 <code>GOGC</code>
+控制(默认 100):</p>
 <blockquote>
 <p>当堆存活量相对上次 GC 后增长到 <code>GOGC%</code>
 时触发下一轮。<code>GOGC=100</code> 表示堆翻倍(增长 100%)就 GC
 一次。</p>
 </blockquote>
-<div class="sourceCode" id="cb13"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>debug<span class="op">.</span>SetGCPercent<span class="op">(</span><span class="dv">200</span><span class="op">)</span> <span class="co">// 调高 → GC 更少、内存占用更高、吞吐更好</span></span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>debug<span class="op">.</span>SetGCPercent<span class="op">(</span><span class="dv">50</span><span class="op">)</span>  <span class="co">// 调低 → GC 更频繁、内存更省</span></span>
-<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>runtime<span class="op">.</span>GC<span class="op">()</span>            <span class="co">// 手动强制一次(阻塞式, 一般只在测试/特殊场景用)</span></span></code></pre></div>
 <p>Go 1.19+ 还提供<strong>软内存上限</strong> <code>GOMEMLIMIT</code> /
 <code>debug.SetMemoryLimit</code>,给容器等内存受限环境兜底。</p>
-<h3 id="关于分代">关于分代</h3>
-<p><strong>Go 目前的 GC 不是分代式的</strong>(no generational
+<p><strong>关于分代</strong>。<strong>Go 目前的 GC
+不是分代式的</strong>(no generational
 GC),也不做压缩/移动(non-moving,所以对象地址稳定,这也是为什么 Go
 里可以放心取地址、和 cgo
 交互相对简单)。历史上社区讨论过分代,但由于逃逸分析已经让大量短命对象留在栈上(相当于廉价的”零代”),分代收益没那么大;实现选择了当前这套低延迟方案。这点会随版本演进,以运行时文档为准。</p>
-<h3 id="内存分配器mcache-mcentral-mspan">内存分配器:mcache / mcentral /
-mspan</h3>
-<p>对象在堆上怎么分配?Go 有一套 <strong>tcmalloc
+<p><strong>内存分配器:mcache / mcentral /
+mspan</strong>。对象在堆上怎么分配?Go 有一套 <strong>tcmalloc
 风格的多级分配器</strong>,核心是<strong>按 size class
 分档</strong>,避免全局锁竞争:</p>
 <pre><code>每个 P(见第10章调度) 有一个 mcache(无锁, 线程本地)
@@ -446,12 +544,26 @@ GC 压力越大</strong>。想优化就减少堆分配——预分配 slice
 href="12-常用第三方库.html">pprof</a> 看分配热点。</p>
 <h2 id="小结">小结</h2>
 <ul>
-<li>error 是接口值,错误处理是显式数据流,不是异常;<code>%w</code> +
-<code>Is</code>/<code>As</code> 组织错误链。</li>
-<li>panic/recover 仅用于真正的异常情形;recover 必须在 defer 中。</li>
-<li>没有 RAII,用 defer 做确定性清理(注意是函数级不是块级)。</li>
-<li>GC 是并发三色标记-清除 + 写屏障,STW 极短,非分代、非移动,由
-GOGC/内存增长驱动;分配器 mcache/mcentral/mspan 多级、P 本地无锁。</li>
+<li><strong>用法层面</strong>:函数用 <code>(结果, error)</code>
+多返回值,调用方 <code>if err != nil</code>
+检查;<code>errors.New</code>/<code>fmt.Errorf</code>
+创建错误,<code>%w</code>
+包装形成错误链,<code>errors.Is</code>/<code>errors.As</code>
+沿链匹配;<code>defer</code>
+注册函数返回前执行的清理动作(后进先出);<code>panic</code>/<code>recover</code>
+只用于真正异常的情形,<code>recover</code> 必须写在 <code>defer</code>
+里。</li>
+<li><strong>底层层面</strong>:<code>error</code> 就是普通接口值,内存里是
+<code>{itab, data}</code>
+两个字,返回它和返回任何值一样廉价,无异常表开销;<code>errors.Is</code>/<code>As</code>
+本质是沿 <code>Unwrap()</code> 链的循环比较/反射匹配;panic
+触发后沿调用栈逐层展开并跑各层 <code>defer</code>,recover
+停止展开,不捕获则进程 <code>exit(2)</code>;<code>defer</code>
+绑定的是函数级而非块级生命周期,和 C++ RAII 的作用域析构不同;GC
+是并发三色标记-清除 + 混合写屏障,STW 压到亚毫秒级,由
+<code>GOGC</code>/堆增长驱动,非分代、非移动;分配器是
+mcache/mcentral/mspan 多级结构,P 本地无锁分配,减少堆分配即可降低 GC
+压力。</li>
 </ul>
 <hr />
 <p><a href="08-面向对象与类型系统.html">← 上一章:面向对象与类型系统</a>

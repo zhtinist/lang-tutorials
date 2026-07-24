@@ -2,20 +2,17 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="zh-CN" xml:lang="zh-CN">
 <head>
   <meta charset="utf-8" />
-  <meta name="generator" content="pandoc 3.10" />
+  <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
   <title>运行模型:编译、链接、运行时</title>
   <style>
     /* Default styles provided by pandoc.
     ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
     */
+    code{white-space: pre-wrap;}
     span.smallcaps{font-variant: small-caps;}
-    div.columns{display: flex; gap: 1.5em;}
-    div.column{flex: auto;}
-    @media screen {
-    div.columns{gap: min(4vw, 1.5em);}
-    div.column{overflow-x: auto;}
-    }
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
     div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
     /* The extra [class] is a hack that increases specificity enough to
        override a similar rule in reveal.js */
@@ -110,27 +107,100 @@
 <li><a href="#运行模型编译链接运行时"
 id="toc-运行模型编译链接运行时">运行模型:编译、链接、运行时</a>
 <ul>
-<li><a href="#一总览go-二进制-你的代码-运行时-标准库静态打包"
-id="toc-一总览go-二进制-你的代码-运行时-标准库静态打包">一、总览:Go
+<li><a href="#一先会用写一个-go-程序跑起来"
+id="toc-一先会用写一个-go-程序跑起来">一、先会用:写一个 Go
+程序、跑起来</a></li>
+<li><a href="#二开始深入二进制里到底封了什么"
+id="toc-二开始深入二进制里到底封了什么">二、开始深入:二进制里到底封了什么</a></li>
+<li><a href="#三总览go-二进制-你的代码-运行时-标准库静态打包"
+id="toc-三总览go-二进制-你的代码-运行时-标准库静态打包">三、总览:Go
 二进制 = 你的代码 + 运行时 + 标准库,静态打包</a></li>
-<li><a href="#二go-build一步到位的原生二进制"
-id="toc-二go-build一步到位的原生二进制">二、<code>go build</code>:一步到位的原生二进制</a></li>
-<li><a href="#三运行时runtime里到底有什么"
-id="toc-三运行时runtime里到底有什么">三、运行时(runtime)里到底有什么</a></li>
-<li><a href="#四为什么-go-编译这么快"
-id="toc-四为什么-go-编译这么快">四、为什么 Go 编译这么快</a></li>
-<li><a href="#五常用命令go-run-build-mod"
-id="toc-五常用命令go-run-build-mod">五、常用命令:<code>go run</code> /
+<li><a href="#四go-build静态链接的真相"
+id="toc-四go-build静态链接的真相">四、<code>go build</code>:静态链接的真相</a></li>
+<li><a href="#五运行时runtime里到底有什么"
+id="toc-五运行时runtime里到底有什么">五、运行时(runtime)里到底有什么</a></li>
+<li><a href="#六为什么-go-编译这么快"
+id="toc-六为什么-go-编译这么快">六、为什么 Go 编译这么快</a></li>
+<li><a href="#七常用命令go-run-build-mod"
+id="toc-七常用命令go-run-build-mod">七、常用命令:<code>go run</code> /
 <code>build</code> / <code>mod</code></a></li>
-<li><a href="#六交叉编译改两个环境变量而已"
-id="toc-六交叉编译改两个环境变量而已">六、交叉编译:改两个环境变量而已</a></li>
-<li><a href="#七与-c-的最终对照单一自足二进制"
-id="toc-七与-c-的最终对照单一自足二进制">七、与 C
+<li><a href="#八交叉编译改两个环境变量而已"
+id="toc-八交叉编译改两个环境变量而已">八、交叉编译:改两个环境变量而已</a></li>
+<li><a href="#九与-c-的最终对照单一自足二进制"
+id="toc-九与-c-的最终对照单一自足二进制">九、与 C
 的最终对照:单一自足二进制</a></li>
+<li><a href="#小结" id="toc-小结">小结</a></li>
 </ul></li>
 </ul>
 </nav>
 <h1 id="运行模型编译链接运行时">运行模型:编译、链接、运行时</h1>
+<p>本章先带你把一个 Go
+程序<strong>写出来、跑起来</strong>——这部分不需要任何底层知识,照着敲就能跑通。跑通之后,我们再回过头问一个
+C/C++
+程序员天然会问的问题:<strong>这个二进制到底是怎么变出来的、跑起来的时候里面装了什么</strong>?只想会用的话,读完第一节就可以跳到下一章;想搞懂”背后发生了什么”、以及它和
+C 的编译-链接-运行模型有何不同,再继续往下看。</p>
+<h2 id="一先会用写一个-go-程序跑起来">一、先会用:写一个 Go
+程序、跑起来</h2>
+<p>不需要知道任何底层原理,你就能按下面几步写出并运行一个 Go 程序。</p>
+<p><strong>第一步:写代码。</strong> 建一个文件
+<code>hello.go</code>:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;hello, world&quot;</span><span class="op">)</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>三行代码分别是:<code>package main</code>
+声明这是一个可执行程序(而不是被别人 import
+的库);<code>import "fmt"</code>
+引入标准库里管格式化输出的包;<code>func main()</code>
+是程序入口,作用等价于 C 的 <code>int main(void)</code>,只是 Go 的
+<code>main</code>
+不接收参数、也不返回值。语法细节下一章逐条讲,这里先照抄能跑通即可。</p>
+<p><strong>第二步:直接运行。</strong> 最省事的方式是
+<code>go run</code>,像跑脚本一样:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="ex">$</span> go run hello.go</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="ex">hello,</span> world</span></code></pre></div>
+<p><strong>第三步:编译出一个真正的可执行文件</strong>,类似 C 的
+<code>gcc -o hello hello.c</code>:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="ex">$</span> go build <span class="at">-o</span> hello hello.go</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="ex">$</span> ./hello</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="ex">hello,</span> world</span></code></pre></div>
+<p><strong>第四步:试一下”并发”。</strong> 在函数调用前加一个
+<code>go</code> 关键字,这次调用就会被丢到后台异步执行,这是 Go
+并发能力的语法入口(先只看语法,行为细节留到本章后半段):</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="op">(</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;time&quot;</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="op">)</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> sayHi<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;你好,来自另一个 goroutine&quot;</span><span class="op">)</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>    <span class="cf">go</span> sayHi<span class="op">()</span>                        <span class="co">// 启动一个 goroutine,不等待它跑完就往下走</span></span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>    time<span class="op">.</span>Sleep<span class="op">(</span>time<span class="op">.</span>Millisecond <span class="op">*</span> <span class="dv">10</span><span class="op">)</span> <span class="co">// 简单粗暴地等一下,让它有机会执行</span></span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;main 结束&quot;</span><span class="op">)</span></span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>运行结果:</p>
+<pre><code>你好,来自另一个 goroutine
+main 结束</code></pre>
+<p><strong>第五步:项目变大时,用 <code>go.mod</code>
+声明一个模块</strong>(单文件 <code>go run</code>/<code>go build</code>
+不需要这一步,但引入依赖、组织多文件项目时需要):</p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="ex">$</span> go mod init example.com/hello</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="ex">go:</span> creating new go.mod: module example.com/hello</span></code></pre></div>
+<p>这几步已经够你开始写代码、跑代码了。下面开始进入底层——同样是这个朴素的
+<code>hello.go</code>,编译出来的二进制里,到底比 C 的版本多装了什么。</p>
+<h2
+id="二开始深入二进制里到底封了什么">二、开始深入:二进制里到底封了什么</h2>
 <p>作为 C/C++
 程序员,你脑子里对”一个程序如何变成能跑的东西”有一套非常清晰的模型:预处理
 → 编译成 <code>.o</code> → 链接(静态或动态)→ 得到 ELF/Mach-O 可执行文件
@@ -138,9 +208,8 @@ id="toc-七与-c-的最终对照单一自足二进制">七、与 C
 <code>main</code>。Go
 的模型和这套既像又不像。相同的是:<strong>最终产物是一个原生机器码可执行文件,没有虚拟机、没有字节码解释器</strong>。不同的是:这个二进制里额外静态链接进了一个<strong>运行时(runtime)</strong>,它在你的
 <code>main</code> 之前就已经跑起来了。</p>
-<p>本章的目标:把 Go 的”编译 → 链接 → 运行”这条链讲清楚,并处处与 C
-的模型对照。</p>
-<h2 id="一总览go-二进制-你的代码-运行时-标准库静态打包">一、总览:Go
+<p>从这里起,本章逐层拆开这个二进制,并处处与 C 的模型对照。</p>
+<h2 id="三总览go-二进制-你的代码-运行时-标准库静态打包">三、总览:Go
 二进制 = 你的代码 + 运行时 + 标准库,静态打包</h2>
 <p>先给结论,一张对照表:</p>
 <table>
@@ -217,12 +286,9 @@ libSystem)</td>
  │  单个/多个线程栈   │         │  多个 goroutine 栈 │  ← 每个约 2KB 起,可增长
  └────────────────────┘         └────────────────────┘</code></pre>
 <h2
-id="二go-build一步到位的原生二进制">二、<code>go build</code>:一步到位的原生二进制</h2>
-<div class="sourceCode" id="cb2"><pre
-class="sourceCode bash"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> build <span class="at">-o</span> hello ./...   <span class="co"># 产出名为 hello 的可执行文件</span></span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="fu">file</span> hello                <span class="co"># Mach-O 64-bit executable / ELF 64-bit</span></span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="ex">./hello</span>                   <span class="co"># 直接运行,无需任何外部依赖</span></span></code></pre></div>
-<p>对 C 程序员最直观的震撼是<strong>默认静态链接</strong>(准确说主要指
+id="四go-build静态链接的真相">四、<code>go build</code>:静态链接的真相</h2>
+<p>前面第一节已经用过 <code>go build</code>。对 C
+程序员更值得深挖的是它<strong>默认静态链接</strong>这件事(准确说主要指
 <strong>Linux + <code>CGO_ENABLED=0</code></strong> 的情形)。写一个纯 Go
 的 <code>hello</code>,在 Linux 上 <code>ldd hello</code> 会告诉你
 <code>not a dynamic executable</code>——它没有链接 libc,连
@@ -239,16 +305,18 @@ MB,因为把运行时和用到的标准库都编进去了。C 的动态链接版
 <code>hello</code> 可能只有几十 KB(但它依赖系统里那几 MB 的 libc)。</li>
 </ul>
 <h3 id="什么时候-go-会动态链接">什么时候 Go 会动态链接?</h3>
-<p>不是绝对静态。两种常见情况会引入动态链接: 1.
-<strong>cgo</strong>:一旦用了 <code>import "C"</code> 调用 C 库(如某些
-<code>net</code>、<code>os/user</code> 的解析路径,或第三方 C
+<p>不是绝对静态。两种常见情况会引入动态链接:</p>
+<ol type="1">
+<li><strong>cgo</strong>:一旦用了 <code>import "C"</code> 调用 C
+库(如某些 <code>net</code>、<code>os/user</code> 的解析路径,或第三方 C
 依赖),就会链接 libc,产生动态依赖。可用 <code>CGO_ENABLED=0</code>
-强制关闭 cgo,回到纯静态。 2. 显式 <code>-linkmode=external</code>
-或链接系统库。</p>
-<div class="sourceCode" id="cb3"><pre
-class="sourceCode bash"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="va">CGO_ENABLED</span><span class="op">=</span>0 <span class="ex">go</span> build <span class="at">-o</span> hello   <span class="co"># 强制纯静态,常用于构建 Docker 镜像</span></span></code></pre></div>
+强制关闭 cgo,回到纯静态。</li>
+<li>显式 <code>-linkmode=external</code> 或链接系统库。</li>
+</ol>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="va">CGO_ENABLED</span><span class="op">=</span>0 <span class="ex">go</span> build <span class="at">-o</span> hello   <span class="co"># 强制纯静态,常用于构建 Docker 镜像</span></span></code></pre></div>
 <h2
-id="三运行时runtime里到底有什么">三、运行时(runtime)里到底有什么</h2>
+id="五运行时runtime里到底有什么">五、运行时(runtime)里到底有什么</h2>
 <p>C 的”运行时”薄到几乎只有 crt0 的引导和 libc
 提供的库函数;控制权很快就交给你的
 <code>main</code>,之后除非你调库,否则没有”背景魔法”。Go 不一样:在你的
@@ -271,32 +339,38 @@ P (processor)  ── 逻辑处理器/调度上下文,数量默认 = GOMAXPROCS(
 href="10-并发模型.html">第 10 章「并发模型」</a>。相比之下,C
 里开一个线程要几 MB 栈 + 内核调度开销,开几千个就吃力;Go 开几十万
 goroutine 稀松平常。</p>
-<p>这一点可以直接用 <code>runtime</code> 包看到:把 P 的数量固定为 2,再开
-1000 个 goroutine,它们全都复用在这 2 个逻辑处理器上:</p>
-<div class="sourceCode" id="cb5"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="op">(</span></span>
-<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;fmt&quot;</span></span>
-<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;runtime&quot;</span></span>
-<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a><span class="op">)</span></span>
-<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
-<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>    runtime<span class="op">.</span>GOMAXPROCS<span class="op">(</span><span class="dv">2</span><span class="op">)</span>              <span class="co">// 把逻辑处理器 P 固定为 2(结果确定)</span></span>
-<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>runtime<span class="op">.</span>GOMAXPROCS<span class="op">(</span><span class="dv">0</span><span class="op">))</span> <span class="co">// 2   (传 0 = 只查询,不修改)</span></span>
-<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>runtime<span class="op">.</span>NumGoroutine<span class="op">())</span> <span class="co">// 1   (目前只有 main 一个 goroutine)</span></span>
-<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>    ch <span class="op">:=</span> <span class="bu">make</span><span class="op">(</span><span class="kw">chan</span> <span class="kw">struct</span><span class="op">{})</span></span>
-<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> i <span class="op">:=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">1000</span><span class="op">;</span> i<span class="op">++</span> <span class="op">{</span></span>
-<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>        <span class="cf">go</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span> <span class="op">&lt;-</span>ch <span class="op">}()</span> <span class="co">// 1000 个 goroutine,全部阻塞在 ch 上等待</span></span>
-<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> runtime<span class="op">.</span>NumGoroutine<span class="op">()</span> <span class="op">&lt;</span> <span class="dv">1001</span> <span class="op">{</span> <span class="co">// 等它们全部被创建出来</span></span>
-<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>        runtime<span class="op">.</span>Gosched<span class="op">()</span></span>
-<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>runtime<span class="op">.</span>NumGoroutine<span class="op">())</span> <span class="co">// 1001 (main + 1000),仅跑在 2 个 OS 线程上</span></span>
-<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a>    <span class="bu">close</span><span class="op">(</span>ch<span class="op">)</span> <span class="co">// 一次性放行</span></span>
-<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>第一节里 <code>go sayHi()</code> 只是语法;这一点可以用
+<code>runtime</code> 包更直接地看到调度器的存在。把 P 的数量固定为
+2,再开 1000 个 goroutine,它们全都复用在这 2 个逻辑处理器上:</p>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="op">(</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;runtime&quot;</span></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a><span class="op">)</span></span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>    runtime<span class="op">.</span>GOMAXPROCS<span class="op">(</span><span class="dv">2</span><span class="op">)</span>              <span class="co">// 把逻辑处理器 P 固定为 2(结果确定)</span></span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>runtime<span class="op">.</span>GOMAXPROCS<span class="op">(</span><span class="dv">0</span><span class="op">))</span> <span class="co">// 2   (传 0 = 只查询,不修改)</span></span>
+<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>runtime<span class="op">.</span>NumGoroutine<span class="op">())</span> <span class="co">// 1   (目前只有 main 一个 goroutine)</span></span>
+<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-14"><a href="#cb10-14" aria-hidden="true" tabindex="-1"></a>    ch <span class="op">:=</span> <span class="bu">make</span><span class="op">(</span><span class="kw">chan</span> <span class="kw">struct</span><span class="op">{})</span></span>
+<span id="cb10-15"><a href="#cb10-15" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> i <span class="op">:=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">1000</span><span class="op">;</span> i<span class="op">++</span> <span class="op">{</span></span>
+<span id="cb10-16"><a href="#cb10-16" aria-hidden="true" tabindex="-1"></a>        <span class="cf">go</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span> <span class="op">&lt;-</span>ch <span class="op">}()</span> <span class="co">// 1000 个 goroutine,全部阻塞在 ch 上等待</span></span>
+<span id="cb10-17"><a href="#cb10-17" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb10-18"><a href="#cb10-18" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> runtime<span class="op">.</span>NumGoroutine<span class="op">()</span> <span class="op">&lt;</span> <span class="dv">1001</span> <span class="op">{</span> <span class="co">// 等它们全部被创建出来</span></span>
+<span id="cb10-19"><a href="#cb10-19" aria-hidden="true" tabindex="-1"></a>        runtime<span class="op">.</span>Gosched<span class="op">()</span></span>
+<span id="cb10-20"><a href="#cb10-20" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb10-21"><a href="#cb10-21" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>runtime<span class="op">.</span>NumGoroutine<span class="op">())</span> <span class="co">// 1001 (main + 1000),仅跑在 2 个 OS 线程上</span></span>
+<span id="cb10-22"><a href="#cb10-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-23"><a href="#cb10-23" aria-hidden="true" tabindex="-1"></a>    <span class="bu">close</span><span class="op">(</span>ch<span class="op">)</span> <span class="co">// 一次性放行</span></span>
+<span id="cb10-24"><a href="#cb10-24" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>运行输出:</p>
+<pre><code>2
+1
+1001</code></pre>
 <p>1001 个 goroutine 挤在 2 个 P 上安然共存——换成 C 的 1:1 线程,开 1000
 个线程光栈就要好几 GB。这就是 M:N 调度的直观体现。</p>
 <h3 id="垃圾回收器gc">2. 垃圾回收器(GC)</h3>
@@ -318,7 +392,7 @@ mheap    ── 全局堆,管理从 OS 申请来的大块内存(span/arena)</cod
 本地的 <code>mcache</code> 拿,不用抢全局锁——这是 Go
 高并发下分配性能好的原因之一。相比 C 的 <code>malloc</code>(通常全局锁或
 arena 锁),Go 的 per-P 缓存天然对多核友好。</p>
-<h2 id="四为什么-go-编译这么快">四、为什么 Go 编译这么快</h2>
+<h2 id="六为什么-go-编译这么快">六、为什么 Go 编译这么快</h2>
 <p>C++
 大工程编译慢到可以去泡咖啡,原因你很清楚:头文件被反复文本包含、模板在每个编译单元里实例化、预处理器展开量巨大、链接期还要做大量符号解析。Go
 在设计上刻意规避了这些:</p>
@@ -337,22 +411,24 @@ export data),而<strong>不需要</strong>递归展开整棵依赖树的源码�
 </ol>
 <p>代价:编译快是以”较厚的运行时 + 较大的二进制 + GC
 开销”换来的,还有语言表达力上的取舍(早期没泛型等)。</p>
-<h2 id="五常用命令go-run-build-mod">五、常用命令:<code>go run</code> /
+<h2 id="七常用命令go-run-build-mod">七、常用命令:<code>go run</code> /
 <code>build</code> / <code>mod</code></h2>
-<div class="sourceCode" id="cb7"><pre
-class="sourceCode bash"><code class="sourceCode bash"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> run main.go        <span class="co"># 编译到临时目录并立即运行(不留下二进制),用于快速试验</span></span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> build ./...        <span class="co"># 编译当前模块所有包,产出可执行文件(有 main 包时)</span></span>
-<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> install ./cmd/foo  <span class="co"># 编译并把二进制装到 $GOBIN(默认 ~/go/bin)</span></span>
-<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> test ./...         <span class="co"># 编译并运行测试</span></span>
-<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> vet ./...          <span class="co"># 静态检查可疑代码</span></span></code></pre></div>
+<p>第一节已经用过
+<code>go run</code>、<code>go build</code>、<code>go mod init</code>。完整的常用命令:</p>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> run main.go        <span class="co"># 编译到临时目录并立即运行(不留下二进制),用于快速试验</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> build ./...        <span class="co"># 编译当前模块所有包,产出可执行文件(有 main 包时)</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> install ./cmd/foo  <span class="co"># 编译并把二进制装到 $GOBIN(默认 ~/go/bin)</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> test ./...         <span class="co"># 编译并运行测试</span></span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> vet ./...          <span class="co"># 静态检查可疑代码</span></span></code></pre></div>
 <p>注意 <code>go run</code>
 <strong>并非解释执行</strong>——它真的先编译成原生码再跑,只是把二进制放临时目录、跑完删掉。它给你的是”脚本般的体验”,不是”脚本的执行方式”。</p>
 <h3 id="go-modules依赖管理">go modules:依赖管理</h3>
 <p>Go 用 <strong>modules</strong> 管理依赖(取代了老的 GOPATH 模式):</p>
-<div class="sourceCode" id="cb8"><pre
-class="sourceCode bash"><code class="sourceCode bash"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> mod init example.com/myapp   <span class="co"># 生成 go.mod,声明模块路径</span></span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> get github.com/foo/bar@v1.2.3 <span class="co"># 添加/升级依赖,写入 go.mod 和 go.sum</span></span>
-<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> mod tidy                      <span class="co"># 增删依赖使之与源码 import 一致</span></span></code></pre></div>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> mod init example.com/myapp   <span class="co"># 生成 go.mod,声明模块路径</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> get github.com/foo/bar@v1.2.3 <span class="co"># 添加/升级依赖,写入 go.mod 和 go.sum</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> mod tidy                      <span class="co"># 增删依赖使之与源码 import 一致</span></span></code></pre></div>
 <ul>
 <li><code>go.mod</code>:声明模块路径、Go 版本、依赖及其版本。</li>
 <li><code>go.sum</code>:记录依赖的哈希校验和,保证可重现构建(类似锁文件)。</li>
@@ -360,21 +436,21 @@ class="sourceCode bash"><code class="sourceCode bash"><span id="cb8-1"><a href="
 <p>依赖会被下载到本地缓存(<code>$GOPATH/pkg/mod</code>),构建时静态编进你的二进制。<strong>没有
 C 那种”运行时去系统找 .so”的问题</strong>——依赖在编译期就固化了。</p>
 <h2
-id="六交叉编译改两个环境变量而已">六、交叉编译:改两个环境变量而已</h2>
+id="八交叉编译改两个环境变量而已">八、交叉编译:改两个环境变量而已</h2>
 <p>C 的交叉编译是出了名的折磨:你得有目标平台的交叉工具链(交叉
 gcc)、目标平台的 libc、sysroot……Go 因为默认不依赖
 libc、且工具链自带所有目标平台的运行时,交叉编译只是设两个环境变量:</p>
-<div class="sourceCode" id="cb9"><pre
-class="sourceCode bash"><code class="sourceCode bash"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 在 macOS/arm64 上,为 Linux/amd64 构建:</span></span>
-<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="va">GOOS</span><span class="op">=</span>linux <span class="va">GOARCH</span><span class="op">=</span>amd64 <span class="ex">go</span> build <span class="at">-o</span> hello-linux-amd64</span>
-<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="co"># 为 Windows 构建:</span></span>
-<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a><span class="va">GOOS</span><span class="op">=</span>windows <span class="va">GOARCH</span><span class="op">=</span>amd64 <span class="ex">go</span> build <span class="at">-o</span> hello.exe</span>
-<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a><span class="co"># 为树莓派 (Linux/arm64) 构建:</span></span>
-<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a><span class="va">GOOS</span><span class="op">=</span>linux <span class="va">GOARCH</span><span class="op">=</span>arm64 <span class="ex">go</span> build <span class="at">-o</span> hello-pi</span>
-<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> tool dist list   <span class="co"># 列出所有支持的 GOOS/GOARCH 组合</span></span></code></pre></div>
+<div class="sourceCode" id="cb15"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 在 macOS/arm64 上,为 Linux/amd64 构建:</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="va">GOOS</span><span class="op">=</span>linux <span class="va">GOARCH</span><span class="op">=</span>amd64 <span class="ex">go</span> build <span class="at">-o</span> hello-linux-amd64</span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a><span class="co"># 为 Windows 构建:</span></span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a><span class="va">GOOS</span><span class="op">=</span>windows <span class="va">GOARCH</span><span class="op">=</span>amd64 <span class="ex">go</span> build <span class="at">-o</span> hello.exe</span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a><span class="co"># 为树莓派 (Linux/arm64) 构建:</span></span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a><span class="va">GOOS</span><span class="op">=</span>linux <span class="va">GOARCH</span><span class="op">=</span>arm64 <span class="ex">go</span> build <span class="at">-o</span> hello-pi</span>
+<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> tool dist list   <span class="co"># 列出所有支持的 GOOS/GOARCH 组合</span></span></code></pre></div>
 <ul>
 <li><code>GOOS</code>:目标操作系统(<code>linux</code>/<code>darwin</code>/<code>windows</code>/<code>freebsd</code>…)。</li>
 <li><code>GOARCH</code>:目标 CPU
@@ -382,7 +458,7 @@ class="sourceCode bash"><code class="sourceCode bash"><span id="cb9-1"><a href="
 </ul>
 <p><strong>前提是纯 Go(<code>CGO_ENABLED=0</code>)</strong>。一旦用了
 cgo,交叉编译就会退化回”需要目标平台 C 交叉工具链”的 C 世界痛苦模式。</p>
-<h2 id="七与-c-的最终对照单一自足二进制">七、与 C
+<h2 id="九与-c-的最终对照单一自足二进制">九、与 C
 的最终对照:单一自足二进制</h2>
 <p>把本章收束成一句话:<strong>Go
 追求的是”一次编译,得到一个自包含、跨机器可拷贝即运行的原生二进制”</strong>。</p>
@@ -397,6 +473,19 @@ JVM 那种运行时深度自省和 JIT 峰值性能。</li>
 为何便宜(调度器 + 可增长小栈)、变量为何有的进堆(逃逸分析 +
 GC)、slice/map 为何不用你释放。下一章我们回到地面,先把 Go 的基础语法与 C
 逐条对照过一遍。</p>
+<h2 id="小结">小结</h2>
+<ul>
+<li><strong>用法层面</strong>:<code>go run file.go</code>
+编译并立即运行;<code>go build -o out file.go</code>
+产出可执行文件;<code>go</code> 关键字放函数调用前即可启动一个后台执行的
+goroutine;多文件/带依赖的项目用 <code>go mod init</code>
+声明模块;<code>GOOS=xxx GOARCH=xxx go build</code> 就能交叉编译。</li>
+<li><strong>底层层面</strong>:Go 二进制 = 你的代码 + 运行时(调度器 + GC
++ 分配器)+ 用到的标准库,静态打包成一个原生机器码文件;默认不依赖 libc(cgo
+除外);GMP 模型让海量 goroutine 复用少量 OS 线程;并发三色标记 GC
+在后台运行;分配器采用 mcache/mcentral/mheap
+多级缓存;没有头文件和模板实例化让编译远快于 C++。</li>
+</ul>
 <hr />
 <p><a href="index.html">← 返回目录</a> · <a
 href="index.html">返回目录</a> · <a

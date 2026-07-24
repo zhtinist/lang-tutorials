@@ -2,20 +2,17 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="zh-CN" xml:lang="zh-CN">
 <head>
   <meta charset="utf-8" />
-  <meta name="generator" content="pandoc 3.10" />
+  <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
   <title>并发模型</title>
   <style>
     /* Default styles provided by pandoc.
     ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
     */
+    code{white-space: pre-wrap;}
     span.smallcaps{font-variant: small-caps;}
-    div.columns{display: flex; gap: 1.5em;}
-    div.column{flex: auto;}
-    @media screen {
-    div.columns{gap: min(4vw, 1.5em);}
-    div.column{overflow-x: auto;}
-    }
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
     div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
     /* The extra [class] is a hack that increases specificity enough to
        override a similar rule in reveal.js */
@@ -109,10 +106,17 @@
 <ul>
 <li><a href="#并发模型" id="toc-并发模型">并发模型</a>
 <ul>
+<li><a href="#先会用开个线程速览"
+id="toc-先会用开个线程速览">先会用:开个线程速览</a></li>
+<li><a href="#开始深入多线程为什么会出问题"
+id="toc-开始深入多线程为什么会出问题">开始深入:多线程为什么会出问题</a></li>
 <li><a href="#线程创建与生命周期"
 id="toc-线程创建与生命周期">线程创建与生命周期</a></li>
 <li><a href="#java-内存模型-jmm" id="toc-java-内存模型-jmm">Java
 内存模型 JMM</a></li>
+<li><a href="#happens-before"
+id="toc-happens-before">happens-before</a></li>
+<li><a href="#指令重排" id="toc-指令重排">指令重排</a></li>
 <li><a href="#volatile" id="toc-volatile">volatile</a></li>
 <li><a href="#synchronized-与对象头"
 id="toc-synchronized-与对象头">synchronized 与对象头</a></li>
@@ -123,52 +127,118 @@ id="toc-java.util.concurrent">java.util.concurrent</a></li>
 <li><a href="#死锁与避免" id="toc-死锁与避免">死锁与避免</a></li>
 <li><a href="#虚拟线程loomjdk21"
 id="toc-虚拟线程loomjdk21">虚拟线程(Loom,JDK21)</a></li>
+<li><a href="#小结" id="toc-小结">小结</a></li>
 </ul></li>
 </ul>
 </nav>
 <h1 id="并发模型">并发模型</h1>
 <p>C/C++ 里并发靠
 <code>std::thread</code>、<code>pthread</code>、原子、<code>memory_order</code>
-手动控制,内存模型是 C++11 的 <code>std::memory_order_*</code>。Java
-把这一整套抽象进 <strong>JMM（Java Memory Model）</strong> 和
-<code>java.util.concurrent</code>。本章讲 JVM 层面线程如何运行、JMM
-到底约束了什么、锁在对象头里如何升级,以及 JDK21 的虚拟线程。</p>
-<h2 id="线程创建与生命周期">线程创建与生命周期</h2>
-<p>Java 的 <code>Thread</code> 在 HotSpot 上默认是 <strong>1:1
-映射到内核线程</strong>(OS thread),与 C++ <code>std::thread</code>
-一样重。创建一个平台线程会 <code>pthread_create</code>,栈默认约
-1MB(<code>-Xss</code> 可调)。</p>
-<p>三种任务载体:</p>
+手动控制。Java 把这一整套抽象进 <strong>JMM(Java Memory Model)</strong>
+和
+<code>java.util.concurrent</code>。<strong>本章依然是先讲「怎么用」——开线程、加锁、用线程池,这些
+API 不需要你懂底层就能直接抄着写;再讲「底层与 C 对比」——JVM
+层面线程怎么映射到内核、JMM 到底约束了什么、锁在对象头里如何升级,以及
+JDK21 的虚拟线程原理。</strong>
+只想能跑起来的话读每节前半段;想弄懂为什么会有数据竞争、为什么要加锁,再看后半段。</p>
+<hr />
+<h2 id="先会用开个线程速览">先会用:开个线程速览</h2>
+<p>开一个线程、等它跑完,是 Java 并发最基础的动作:</p>
 <div class="sourceCode" id="cb1"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// 1. 继承 Thread(不推荐:单继承被占用,任务与线程耦合)</span></span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> MyThread <span class="kw">extends</span> <span class="bu">Thread</span> <span class="op">{</span></span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="at">@Override</span> <span class="kw">public</span> <span class="dt">void</span> <span class="fu">run</span><span class="op">()</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;run in &quot;</span> <span class="op">+</span> <span class="fu">getName</span><span class="op">());</span> <span class="op">}</span></span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="co">// 2. Runnable:无返回、无受检异常</span></span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="bu">Runnable</span> r <span class="op">=</span> <span class="op">()</span> <span class="op">-&gt;</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;runnable&quot;</span><span class="op">);</span></span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="co">// 3. Callable&lt;V&gt;:有返回值 V,可抛受检异常,配合 Future 使用</span></span>
-<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="bu">Callable</span><span class="op">&lt;</span><span class="bu">Integer</span><span class="op">&gt;</span> c <span class="op">=</span> <span class="op">()</span> <span class="op">-&gt;</span> <span class="dv">42</span><span class="op">;</span></span>
-<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> ThreadDemo <span class="op">{</span></span>
-<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="kw">throws</span> <span class="bu">Exception</span> <span class="op">{</span></span>
-<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Thread</span> t1 <span class="op">=</span> <span class="kw">new</span> <span class="fu">MyThread</span><span class="op">();</span></span>
-<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>        t1<span class="op">.</span><span class="fu">start</span><span class="op">();</span>            <span class="co">// start() 触发 pthread_create;直接调 run() 只是普通方法调用,不开线程</span></span>
-<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Thread</span> t2 <span class="op">=</span> <span class="kw">new</span> <span class="bu">Thread</span><span class="op">(</span>r<span class="op">);</span></span>
-<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>        t2<span class="op">.</span><span class="fu">start</span><span class="op">();</span></span>
-<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>        t1<span class="op">.</span><span class="fu">join</span><span class="op">();</span>             <span class="co">// 当前线程阻塞直到 t1 终止,类似 pthread_join</span></span>
-<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>        t2<span class="op">.</span><span class="fu">join</span><span class="op">();</span></span>
-<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+class="sourceCode java"><code class="sourceCode java"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> SimpleThreadDoc <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="kw">throws</span> <span class="bu">InterruptedException</span> <span class="op">{</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Thread</span> t <span class="op">=</span> <span class="kw">new</span> <span class="bu">Thread</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="op">{</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;子线程在跑&quot;</span><span class="op">);</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>        <span class="op">});</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>        t<span class="op">.</span><span class="fu">start</span><span class="op">();</span>     <span class="co">// 启动新线程,异步执行</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>        t<span class="op">.</span><span class="fu">join</span><span class="op">();</span>      <span class="co">// 阻塞当前线程,直到 t 跑完</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;子线程结束,主线程继续&quot;</span><span class="op">);</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="co">// 子线程在跑</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="co">// 子线程结束,主线程继续</span></span></code></pre></div>
+<p><code>new Thread(Runnable)</code> 接一个 lambda
+当作线程要跑的任务;<code>start()</code>
+真正把它扔给系统去异步执行;<code>join()</code>
+则是”等它”——不调用的话主线程可能先于子线程结束。</p>
+<p>如果两个线程会同时改同一个变量,直接改会出错(下一节详细说为什么),但先记住”解法”很简单:把改变量的代码块用
+<code>synchronized</code> 包起来,同一时刻只允许一个线程进入:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> SimpleSyncDemo <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">int</span> counter <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">synchronized</span> <span class="dt">void</span> <span class="fu">increment</span><span class="op">()</span> <span class="op">{</span>   <span class="co">// synchronized 方法:同一时刻只有一个线程能执行它</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>        counter<span class="op">++;</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="kw">throws</span> <span class="bu">InterruptedException</span> <span class="op">{</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Runnable</span> job <span class="op">=</span> <span class="op">()</span> <span class="op">-&gt;</span> <span class="op">{</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">100_000</span><span class="op">;</span> i<span class="op">++)</span> <span class="fu">increment</span><span class="op">();</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>        <span class="op">};</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Thread</span> t1 <span class="op">=</span> <span class="kw">new</span> <span class="bu">Thread</span><span class="op">(</span>job<span class="op">);</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Thread</span> t2 <span class="op">=</span> <span class="kw">new</span> <span class="bu">Thread</span><span class="op">(</span>job<span class="op">);</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>        t1<span class="op">.</span><span class="fu">start</span><span class="op">();</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>        t2<span class="op">.</span><span class="fu">start</span><span class="op">();</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>        t1<span class="op">.</span><span class="fu">join</span><span class="op">();</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>        t2<span class="op">.</span><span class="fu">join</span><span class="op">();</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;counter = &quot;</span> <span class="op">+</span> counter<span class="op">);</span> <span class="co">// 200000,每次运行都一样</span></span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a><span class="co">// counter = 200000</span></span></code></pre></div>
+<p>两个线程各自把 <code>counter</code> 加 10 万次,只要
+<code>increment()</code> 加了 <code>synchronized</code>,结果就总是精确的
+20 万,不会少。至于为什么”不加就可能少”、<code>synchronized</code>
+内部怎么实现的,是下面要讲的内容。</p>
+<p>这些够你写出正确的多线程小程序了。下面开始进入底层——先理解”问题从哪来”,再逐个看每个工具怎么解决它。</p>
+<hr />
+<h2 id="开始深入多线程为什么会出问题">开始深入:多线程为什么会出问题</h2>
+<p>这几节讲的是:<strong>为什么多个线程读写同一个变量会出问题</strong>。不涉及具体
+API 语法,是纯概念,不需要任何预备知识——理解了它们,后面
+<code>volatile</code>、<code>synchronized</code>、<code>Atomic*</code>
+为什么存在也就自然清楚了。</p>
+<h2 id="线程创建与生命周期">线程创建与生命周期</h2>
+<h3 id="怎么用">怎么用</h3>
+<p>创建线程要跑的”任务”,Java 里有三种写法:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co">// 1. 继承 Thread(不推荐:单继承被占用,任务与线程耦合)</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> MyThread <span class="kw">extends</span> <span class="bu">Thread</span> <span class="op">{</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="at">@Override</span> <span class="kw">public</span> <span class="dt">void</span> <span class="fu">run</span><span class="op">()</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;run in &quot;</span> <span class="op">+</span> <span class="fu">getName</span><span class="op">());</span> <span class="op">}</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="co">// 2. Runnable:无返回值、无受检异常,最常用</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="bu">Runnable</span> r <span class="op">=</span> <span class="op">()</span> <span class="op">-&gt;</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;runnable&quot;</span><span class="op">);</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a><span class="co">// 3. Callable&lt;V&gt;:有返回值 V,可抛受检异常,配合 Future 使用(见 java.util.concurrent 一节)</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a><span class="bu">Callable</span><span class="op">&lt;</span><span class="bu">Integer</span><span class="op">&gt;</span> c <span class="op">=</span> <span class="op">()</span> <span class="op">-&gt;</span> <span class="dv">42</span><span class="op">;</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> ThreadDemo <span class="op">{</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="kw">throws</span> <span class="bu">Exception</span> <span class="op">{</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Thread</span> t1 <span class="op">=</span> <span class="kw">new</span> <span class="fu">MyThread</span><span class="op">();</span></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>        t1<span class="op">.</span><span class="fu">start</span><span class="op">();</span>            <span class="co">// start() 让 JVM 新开一个线程去跑 run()</span></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Thread</span> t2 <span class="op">=</span> <span class="kw">new</span> <span class="bu">Thread</span><span class="op">(</span>r<span class="op">);</span></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>        t2<span class="op">.</span><span class="fu">start</span><span class="op">();</span></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>        t1<span class="op">.</span><span class="fu">join</span><span class="op">();</span>             <span class="co">// 当前线程阻塞直到 t1 终止,类似 pthread_join</span></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>        t2<span class="op">.</span><span class="fu">join</span><span class="op">();</span></span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a><span class="co">// 两个线程谁先打印不确定,但 join() 保证 main 一定等它们都跑完再结束</span></span></code></pre></div>
 <blockquote>
-<p>关键区分:<code>start()</code> 让 JVM 新建 OS 线程并回调
-<code>run()</code>;<code>run()</code> 直接调用则在当前线程串行执行。一个
-<code>Thread</code> 对象只能 <code>start()</code> 一次,再调抛
+<p>关键区分:<code>start()</code> 让 JVM 新建一个线程并异步回调
+<code>run()</code>;如果你手滑直接调用
+<code>run()</code>,那只是一次普通的方法调用,代码在当前线程里<strong>同步</strong>执行,根本没有开新线程。一个
+<code>Thread</code> 对象只能 <code>start()</code> 一次,再调第二次会抛
 <code>IllegalThreadStateException</code>。</p>
 </blockquote>
-<h3 id="线程状态机">线程状态机</h3>
-<p><code>Thread.State</code> 六态,与 OS 状态不是一一对应:</p>
+<h3 id="底层与-c-对比">底层与 C 对比</h3>
+<p>Java 的 <code>Thread</code> 在 HotSpot 上默认是 <strong>1:1
+映射到内核线程</strong>(OS thread),与 C++ <code>std::thread</code>
+一样重。调用 <code>start()</code> 会触发一次
+<code>pthread_create</code>,每个线程默认分到约 1MB
+栈空间(<code>-Xss</code>
+可调)。也就是说,<code>new Thread(...).start()</code> 在系统层面的代价,和
+C 里手写 <code>pthread_create</code>
+是同一个数量级——线程不是免费的,开几千个平台线程就会感到吃力(这也是本章最后”虚拟线程”要解决的问题)。</p>
+<p><code>Thread.State</code> 六态,与 OS 的线程状态不是一一对应:</p>
 <pre><code>    NEW --start()--&gt; RUNNABLE &lt;----+
                       |  ^          | notify/超时/锁获得
     进入同步块拿不到锁 |  |          |
@@ -189,7 +259,7 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb1-1"><a href="
 </ul>
 <h2 id="java-内存模型-jmm">Java 内存模型 JMM</h2>
 <p>JMM 是一份<strong>规范</strong>(JLS
-第17章),不是硬件。它定义多线程读写共享变量时,什么值是合法可见的。类比
+第17章),不是硬件。它定义多线程读写共享变量时,什么值是合法可见的——这正是上一节”为什么会出问题”的正式答案。类比
 C++11 内存模型,但 JMM 更早(2004, JSR-133)且默认更强。</p>
 <h3 id="主内存与工作内存">主内存与工作内存</h3>
 <p>JMM 抽象出:每个线程有<strong>工作内存</strong>(working
@@ -247,7 +317,7 @@ CPU 寄存器、store buffer、各级缓存。核心问题:A 改了 <code>x</cod
 <code>volatile</code> 保证 64 位原子。HotSpot 在 64 位 JVM
 上实际都原子,但规范不保证。</p>
 </blockquote>
-<h3 id="happens-before">happens-before</h3>
+<h2 id="happens-before">happens-before</h2>
 <p>JMM 的核心工具。若操作 A happens-before B,则 A 的结果对 B 可见,且 A
 排在 B 前。规则:</p>
 <ol type="1">
@@ -261,38 +331,38 @@ CPU 寄存器、store buffer、各级缓存。核心问题:A 改了 <code>x</cod
 <li><strong>线程终止</strong>:线程内操作 hb 其他线程的
 <code>t.join()</code> 返回。</li>
 </ol>
-<div class="sourceCode" id="cb4"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> a <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="kw">volatile</span> <span class="dt">boolean</span> flag <span class="op">=</span> <span class="kw">false</span><span class="op">;</span></span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="co">// 线程1</span></span>
-<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> <span class="dv">1</span><span class="op">;</span>              <span class="co">// (1)</span></span>
-<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>flag <span class="op">=</span> <span class="kw">true</span><span class="op">;</span>        <span class="co">// (2) volatile 写</span></span>
-<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="co">// 线程2</span></span>
-<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="op">(</span>flag<span class="op">)</span> <span class="op">{</span>         <span class="co">// (3) volatile 读,读到 true 则 (2) hb (3)</span></span>
-<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>    <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>a<span class="op">);</span> <span class="co">// 必然是 1:(1)hb(2)hb(3),传递 ⇒ (1)hb(4)</span></span>
-<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> a <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="kw">volatile</span> <span class="dt">boolean</span> flag <span class="op">=</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="co">// 线程1</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> <span class="dv">1</span><span class="op">;</span>              <span class="co">// (1)</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>flag <span class="op">=</span> <span class="kw">true</span><span class="op">;</span>        <span class="co">// (2) volatile 写</span></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a><span class="co">// 线程2</span></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="op">(</span>flag<span class="op">)</span> <span class="op">{</span>         <span class="co">// (3) volatile 读,读到 true 则 (2) hb (3)</span></span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>    <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>a<span class="op">);</span> <span class="co">// 必然是 1:(1)hb(2)hb(3),传递 ⇒ (1)hb(4)</span></span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>没有 <code>volatile</code>,<code>a</code> 的写可能对线程2不可见,或
 (1)(2) 被重排,线程2看到 <code>flag==true</code> 但
 <code>a==0</code>。</p>
-<h3 id="指令重排">指令重排</h3>
+<h2 id="指令重排">指令重排</h2>
 <p>编译器和 CPU
 为性能会重排指令,只要<strong>单线程语义(as-if-serial)</strong>不变。多线程下就出问题。经典是双重检查锁定(DCL):</p>
-<div class="sourceCode" id="cb5"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Singleton <span class="op">{</span></span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">private</span> <span class="dt">static</span> <span class="kw">volatile</span> Singleton instance<span class="op">;</span> <span class="co">// volatile 不可省</span></span>
-<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> Singleton <span class="fu">getInstance</span><span class="op">()</span> <span class="op">{</span></span>
-<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>instance <span class="op">==</span> <span class="kw">null</span><span class="op">)</span> <span class="op">{</span>                  <span class="co">// 第一次检查(无锁)</span></span>
-<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>            <span class="kw">synchronized</span> <span class="op">(</span>Singleton<span class="op">.</span><span class="fu">class</span><span class="op">)</span> <span class="op">{</span></span>
-<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>                <span class="cf">if</span> <span class="op">(</span>instance <span class="op">==</span> <span class="kw">null</span><span class="op">)</span> <span class="op">{</span>          <span class="co">// 第二次检查</span></span>
-<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>                    instance <span class="op">=</span> <span class="kw">new</span> <span class="fu">Singleton</span><span class="op">();</span>  <span class="co">// 见下方拆解</span></span>
-<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>                <span class="op">}</span></span>
-<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
-<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
-<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> instance<span class="op">;</span></span>
-<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Singleton <span class="op">{</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">private</span> <span class="dt">static</span> <span class="kw">volatile</span> Singleton instance<span class="op">;</span> <span class="co">// volatile 不可省</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> Singleton <span class="fu">getInstance</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>instance <span class="op">==</span> <span class="kw">null</span><span class="op">)</span> <span class="op">{</span>                  <span class="co">// 第一次检查(无锁)</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>            <span class="kw">synchronized</span> <span class="op">(</span>Singleton<span class="op">.</span><span class="fu">class</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>                <span class="cf">if</span> <span class="op">(</span>instance <span class="op">==</span> <span class="kw">null</span><span class="op">)</span> <span class="op">{</span>          <span class="co">// 第二次检查</span></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>                    instance <span class="op">=</span> <span class="kw">new</span> <span class="fu">Singleton</span><span class="op">();</span>  <span class="co">// 见下方拆解</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>                <span class="op">}</span></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> instance<span class="op">;</span></span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p><code>instance = new Singleton()</code> 非原子,分三步:(1) 分配内存
 (2) 调用构造器初始化 (3) 将 <code>instance</code> 指向内存。无
 <code>volatile</code> 时 (2)(3) 可能重排为
@@ -300,6 +370,41 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb5-1"><a href="
 却拿到未初始化的对象。<code>volatile</code>
 禁止此重排(插入内存屏障),这是 JDK5 后 DCL 才正确的原因。</p>
 <h2 id="volatile">volatile</h2>
+<h3 id="怎么用-1">怎么用</h3>
+<p><code>volatile</code>
+最常见的用法是”一写多读的状态标志”——一个线程写,其他线程读,保证读到的是最新值:</p>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> VolatileFlagDemo <span class="op">{</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">volatile</span> <span class="dt">boolean</span> ready <span class="op">=</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">int</span> data <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="kw">throws</span> <span class="bu">InterruptedException</span> <span class="op">{</span></span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Thread</span> writer <span class="op">=</span> <span class="kw">new</span> <span class="bu">Thread</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="op">{</span></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>            data <span class="op">=</span> <span class="dv">42</span><span class="op">;</span>         <span class="co">// 先写普通变量</span></span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>            ready <span class="op">=</span> <span class="kw">true</span><span class="op">;</span>      <span class="co">// 再写 volatile,充当&quot;发布&quot;信号</span></span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a>        <span class="op">});</span></span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Thread</span> reader <span class="op">=</span> <span class="kw">new</span> <span class="bu">Thread</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="op">{</span></span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a>            <span class="cf">while</span> <span class="op">(!</span>ready<span class="op">)</span> <span class="op">{</span>   <span class="co">// 忙等,直到看到 writer 的更新</span></span>
+<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a>                <span class="co">// 自旋</span></span>
+<span id="cb8-13"><a href="#cb8-13" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
+<span id="cb8-14"><a href="#cb8-14" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;data = &quot;</span> <span class="op">+</span> data<span class="op">);</span> <span class="co">// 保证看到 42,而不是 0</span></span>
+<span id="cb8-15"><a href="#cb8-15" aria-hidden="true" tabindex="-1"></a>        <span class="op">});</span></span>
+<span id="cb8-16"><a href="#cb8-16" aria-hidden="true" tabindex="-1"></a>        reader<span class="op">.</span><span class="fu">start</span><span class="op">();</span></span>
+<span id="cb8-17"><a href="#cb8-17" aria-hidden="true" tabindex="-1"></a>        writer<span class="op">.</span><span class="fu">start</span><span class="op">();</span></span>
+<span id="cb8-18"><a href="#cb8-18" aria-hidden="true" tabindex="-1"></a>        writer<span class="op">.</span><span class="fu">join</span><span class="op">();</span></span>
+<span id="cb8-19"><a href="#cb8-19" aria-hidden="true" tabindex="-1"></a>        reader<span class="op">.</span><span class="fu">join</span><span class="op">();</span></span>
+<span id="cb8-20"><a href="#cb8-20" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;done&quot;</span><span class="op">);</span></span>
+<span id="cb8-21"><a href="#cb8-21" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb8-22"><a href="#cb8-22" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb8-23"><a href="#cb8-23" aria-hidden="true" tabindex="-1"></a><span class="co">// data = 42</span></span>
+<span id="cb8-24"><a href="#cb8-24" aria-hidden="true" tabindex="-1"></a><span class="co">// done</span></span></code></pre></div>
+<p>去掉 <code>volatile</code> 的话,<code>reader</code>
+线程理论上可能一直看不到 <code>ready</code> 变成
+<code>true</code>(编译器/JIT 可能把 <code>while (!ready)</code>
+优化成只读一次寄存器),或者看到 <code>ready==true</code> 但
+<code>data</code> 还是 0(重排)。加上 <code>volatile</code>
+后这两个问题都不会发生。</p>
+<h3 id="底层与-c-对比-1">底层与 C 对比</h3>
 <p><code>volatile</code> 提供两个保证,类比 C++ 的 acquire/release
 语义(但不完全等同)——注意 volatile
 变量的<strong>单次读、单次写本身就是原子的</strong>(它甚至让
@@ -314,12 +419,63 @@ fence)配合 CPU
 <li><strong>禁止重排</strong>:写前的操作不能重排到写后,读后的操作不能重排到读前(内存屏障)。</li>
 </ol>
 <p>它<strong>不保证复合操作原子</strong>:</p>
-<div class="sourceCode" id="cb6"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="kw">volatile</span> <span class="dt">int</span> count <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>count<span class="op">++;</span>  <span class="co">// 读-改-写三步,volatile 不能防止两线程都读到同一值后各自 +1 丢更新</span></span></code></pre></div>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">volatile</span> <span class="dt">int</span> count <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">bump</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>    count<span class="op">++;</span>  <span class="co">// 读-改-写三步,volatile 不能防止两线程都读到同一值后各自 +1 丢更新</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>两个线程各对同一个 <code>volatile int count</code> 调用 10 万次
+<code>count++</code>,结果几乎必然小于 20 万——<code>volatile</code>
+保证了每次读写都可见,却挡不住”线程A读到100、线程B也读到100、两者都写回101”这种交叠:</p>
+<pre><code>count = 157682 (expected 200000, usually less)   // 多次运行,结果每次都不同,但总是明显小于 200000</code></pre>
 <p><code>count++</code> 需要 <code>synchronized</code> 或
-<code>AtomicInteger</code>。volatile 适合”一写多读的状态标志”。</p>
+<code>AtomicInteger</code> 才能保证原子。volatile
+适合”一写多读的状态标志”,不适合”多线程都要修改的计数器”。</p>
 <h2 id="synchronized-与对象头">synchronized 与对象头</h2>
+<h3 id="怎么用-2">怎么用</h3>
+<p>前面「先会用」小节已经见过最基本的用法——给方法加
+<code>synchronized</code>,同一时刻只允许一个线程执行它。<code>synchronized</code>
+也可以包一段代码块,并指定锁哪个对象:</p>
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="kw">synchronized</span> <span class="op">(</span>lock<span class="op">)</span> <span class="op">{</span>        <span class="co">// monitorenter 字节码</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 临界区</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span>                            <span class="co">// monitorexit 字节码(异常路径也会 exit)</span></span></code></pre></div>
+<p>配合锁还有
+<code>wait</code>/<code>notify</code>:一个线程在满足某个条件前先”等着”,另一个线程改完条件后”叫醒”它。两者都必须在
+<code>synchronized</code> 块内调用:</p>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> WaitNotifyDemo <span class="op">{</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">final</span> <span class="bu">Object</span> lock <span class="op">=</span> <span class="kw">new</span> <span class="bu">Object</span><span class="op">();</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">boolean</span> condition <span class="op">=</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="kw">throws</span> <span class="bu">InterruptedException</span> <span class="op">{</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Thread</span> waiter <span class="op">=</span> <span class="kw">new</span> <span class="bu">Thread</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="op">{</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>            <span class="kw">synchronized</span> <span class="op">(</span>lock<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>                <span class="cf">while</span> <span class="op">(!</span>condition<span class="op">)</span> <span class="op">{</span>                 <span class="co">// 用 while 而不是 if,防止虚假唤醒</span></span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>                    <span class="cf">try</span> <span class="op">{</span> lock<span class="op">.</span><span class="fu">wait</span><span class="op">();</span> <span class="op">}</span> <span class="cf">catch</span> <span class="op">(</span><span class="bu">InterruptedException</span> e<span class="op">)</span> <span class="op">{</span> <span class="op">}</span></span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>                <span class="op">}</span></span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>                <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;waiter: condition met&quot;</span><span class="op">);</span></span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a>        <span class="op">});</span></span>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a>        waiter<span class="op">.</span><span class="fu">start</span><span class="op">();</span></span>
+<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Thread</span><span class="op">.</span><span class="fu">sleep</span><span class="op">(</span><span class="dv">100</span><span class="op">);</span> <span class="co">// 让 waiter 大概率先进入 wait(不影响正确性,只是让演示更直观)</span></span>
+<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a>        <span class="kw">synchronized</span> <span class="op">(</span>lock<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a>            condition <span class="op">=</span> <span class="kw">true</span><span class="op">;</span></span>
+<span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a>            lock<span class="op">.</span><span class="fu">notifyAll</span><span class="op">();</span>                        <span class="co">// 唤醒等待者(仍需重新竞争锁)</span></span>
+<span id="cb12-19"><a href="#cb12-19" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb12-20"><a href="#cb12-20" aria-hidden="true" tabindex="-1"></a>        waiter<span class="op">.</span><span class="fu">join</span><span class="op">();</span></span>
+<span id="cb12-21"><a href="#cb12-21" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;main: done&quot;</span><span class="op">);</span></span>
+<span id="cb12-22"><a href="#cb12-22" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb12-23"><a href="#cb12-23" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb12-24"><a href="#cb12-24" aria-hidden="true" tabindex="-1"></a><span class="co">// waiter: condition met</span></span>
+<span id="cb12-25"><a href="#cb12-25" aria-hidden="true" tabindex="-1"></a><span class="co">// main: done</span></span></code></pre></div>
+<p><code>lock.wait()</code>
+会释放锁并让当前线程进入等待,直到别的线程调用
+<code>lock.notify()</code>/<code>notifyAll()</code>
+才有机会被唤醒重新竞争锁——所以 <code>wait</code>/<code>notify</code>
+必须配对使用同一个锁对象。</p>
+<h3 id="底层与-c-对比-2">底层与 C 对比</h3>
 <p><code>synchronized</code>
 是<strong>可重入的监视器锁</strong>(monitor)。每个 Java
 对象都能作锁,锁状态记录在<strong>对象头的 mark word</strong> 里。</p>
@@ -381,33 +537,41 @@ Lock Record,用 CAS 把 mark word 换成指向它的指针。失败则自旋。<
 <code>ObjectMonitor</code>,竞争线程被 OS 挂起,类比
 <code>pthread_mutex</code>。</li>
 </ul>
-<div class="sourceCode" id="cb9"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">synchronized</span> <span class="op">(</span>lock<span class="op">)</span> <span class="op">{</span>        <span class="co">// monitorenter 字节码</span></span>
-<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 临界区</span></span>
-<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span>                            <span class="co">// monitorexit 字节码(异常路径也会 exit)</span></span></code></pre></div>
-<p><code>wait/notify</code> 必须在 <code>synchronized</code>
-内(需持有监视器):</p>
-<div class="sourceCode" id="cb10"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="kw">synchronized</span> <span class="op">(</span>lock<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> <span class="op">(!</span>condition<span class="op">)</span> lock<span class="op">.</span><span class="fu">wait</span><span class="op">();</span>  <span class="co">// 释放锁并进入 WAITING,必须用 while 防虚假唤醒</span></span>
-<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>    <span class="co">// ...</span></span>
-<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a><span class="kw">synchronized</span> <span class="op">(</span>lock<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>    condition <span class="op">=</span> <span class="kw">true</span><span class="op">;</span></span>
-<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>    lock<span class="op">.</span><span class="fu">notifyAll</span><span class="op">();</span>               <span class="co">// 唤醒等待者(仍需重新竞争锁)</span></span>
-<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <h2 id="cas-与-atomic">CAS 与 Atomic*</h2>
+<h3 id="怎么用-3">怎么用</h3>
+<p><code>AtomicInteger</code>
+这类原子类,提供一组”看起来是普通方法、实际上整体原子”的操作,不需要自己加锁:</p>
+<div class="sourceCode" id="cb15"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">concurrent</span><span class="op">.</span><span class="im">atomic</span><span class="op">.</span><span class="im">AtomicInteger</span><span class="op">;</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> AtomicBasicDemo <span class="op">{</span></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>        <span class="bu">AtomicInteger</span> ai <span class="op">=</span> <span class="kw">new</span> <span class="bu">AtomicInteger</span><span class="op">(</span><span class="dv">0</span><span class="op">);</span></span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>ai<span class="op">.</span><span class="fu">incrementAndGet</span><span class="op">());</span> <span class="co">// 1</span></span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>ai<span class="op">.</span><span class="fu">incrementAndGet</span><span class="op">());</span> <span class="co">// 2</span></span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>        <span class="dt">boolean</span> ok <span class="op">=</span> ai<span class="op">.</span><span class="fu">compareAndSet</span><span class="op">(</span><span class="dv">2</span><span class="op">,</span> <span class="dv">100</span><span class="op">);</span>     <span class="co">// 期望当前值是2,设为100</span></span>
+<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>ok<span class="op">);</span>                    <span class="co">// true</span></span>
+<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>ai<span class="op">.</span><span class="fu">get</span><span class="op">());</span>               <span class="co">// 100</span></span>
+<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb15-13"><a href="#cb15-13" aria-hidden="true" tabindex="-1"></a><span class="co">// 1</span></span>
+<span id="cb15-14"><a href="#cb15-14" aria-hidden="true" tabindex="-1"></a><span class="co">// 2</span></span>
+<span id="cb15-15"><a href="#cb15-15" aria-hidden="true" tabindex="-1"></a><span class="co">// true</span></span>
+<span id="cb15-16"><a href="#cb15-16" aria-hidden="true" tabindex="-1"></a><span class="co">// 100</span></span></code></pre></div>
+<p>多个线程并发调用 <code>incrementAndGet()</code>,不会像普通
+<code>int</code> 的 <code>count++</code> 那样丢更新——这背后就是
+CAS。</p>
+<h3 id="底层与-c-对比-3">底层与 C 对比</h3>
 <p>CAS(Compare-And-Swap)是无锁并发基石,对应 x86 的 <code>cmpxchg</code>
 指令。语义:<code>if (内存值==预期) { 内存值=新值; return true }</code>,整个过程硬件原子。</p>
-<div class="sourceCode" id="cb11"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="bu">AtomicInteger</span> ai <span class="op">=</span> <span class="kw">new</span> <span class="bu">AtomicInteger</span><span class="op">(</span><span class="dv">0</span><span class="op">);</span></span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>ai<span class="op">.</span><span class="fu">incrementAndGet</span><span class="op">();</span>               <span class="co">// 底层 CAS 自旋:do { old=get(); } while(!compareAndSet(old, old+1))</span></span>
-<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="dt">boolean</span> ok <span class="op">=</span> ai<span class="op">.</span><span class="fu">compareAndSet</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">);</span> <span class="co">// 期望1则设2</span></span>
-<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a><span class="co">// JDK8+ 高并发计数器,分段减少 CAS 竞争(热点分散到多个 Cell)</span></span>
-<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>LongAdder adder <span class="op">=</span> <span class="kw">new</span> <span class="fu">LongAdder</span><span class="op">();</span></span>
-<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>adder<span class="op">.</span><span class="fu">increment</span><span class="op">();</span></span>
-<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a><span class="dt">long</span> sum <span class="op">=</span> adder<span class="op">.</span><span class="fu">sum</span><span class="op">();</span></span></code></pre></div>
+<div class="sourceCode" id="cb16"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>ai<span class="op">.</span><span class="fu">incrementAndGet</span><span class="op">();</span>               <span class="co">// 底层 CAS 自旋:do { old=get(); } while(!compareAndSet(old, old+1))</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="dt">boolean</span> ok <span class="op">=</span> ai<span class="op">.</span><span class="fu">compareAndSet</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">);</span> <span class="co">// 期望1则设2</span></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a><span class="co">// JDK8+ 高并发计数器,分段减少 CAS 竞争(热点分散到多个 Cell)</span></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>LongAdder adder <span class="op">=</span> <span class="kw">new</span> <span class="fu">LongAdder</span><span class="op">();</span></span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>adder<span class="op">.</span><span class="fu">increment</span><span class="op">();</span></span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a><span class="dt">long</span> sum <span class="op">=</span> adder<span class="op">.</span><span class="fu">sum</span><span class="op">();</span></span></code></pre></div>
 <p><code>Atomic*</code> 内部字段用 <code>volatile</code> +
 <code>Unsafe</code>/<code>VarHandle</code> 的 CAS 实现。</p>
 <p><strong>ABA 问题</strong>:值从 A 变 B 又变回 A,CAS 察觉不到。用
@@ -417,54 +581,92 @@ pointer。</p>
 <code>int</code>
 因”读-改-写”非原子而<strong>丢更新</strong>,<code>AtomicInteger</code>
 靠 CAS 始终正确。用 <code>join</code> 等全部结束,结果确定:</p>
-<div class="sourceCode" id="cb12"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">concurrent</span><span class="op">.</span><span class="im">atomic</span><span class="op">.</span><span class="im">AtomicInteger</span><span class="op">;</span></span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> LostUpdate <span class="op">{</span></span>
-<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">int</span> plain <span class="op">=</span> <span class="dv">0</span><span class="op">;</span>                       <span class="co">// 无保护</span></span>
-<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">final</span> <span class="bu">AtomicInteger</span> atomic <span class="op">=</span> <span class="kw">new</span> <span class="bu">AtomicInteger</span><span class="op">(</span><span class="dv">0</span><span class="op">);</span></span>
-<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="kw">throws</span> <span class="bu">Exception</span> <span class="op">{</span></span>
-<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span> threads <span class="op">=</span> <span class="dv">8</span><span class="op">,</span> perThread <span class="op">=</span> <span class="dv">100_000</span><span class="op">;</span></span>
-<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Runnable</span> job <span class="op">=</span> <span class="op">()</span> <span class="op">-&gt;</span> <span class="op">{</span></span>
-<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> perThread<span class="op">;</span> i<span class="op">++)</span> <span class="op">{</span></span>
-<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>                plain<span class="op">++;</span>                         <span class="co">// 读-改-写,非原子:丢更新</span></span>
-<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a>                atomic<span class="op">.</span><span class="fu">incrementAndGet</span><span class="op">();</span>        <span class="co">// CAS:原子</span></span>
-<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
-<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a>        <span class="op">};</span></span>
-<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Thread</span><span class="op">[]</span> ts <span class="op">=</span> <span class="kw">new</span> <span class="bu">Thread</span><span class="op">[</span>threads<span class="op">];</span></span>
-<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> threads<span class="op">;</span> i<span class="op">++)</span> ts<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> <span class="kw">new</span> <span class="bu">Thread</span><span class="op">(</span>job<span class="op">);</span></span>
-<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span><span class="bu">Thread</span> t <span class="op">:</span> ts<span class="op">)</span> t<span class="op">.</span><span class="fu">start</span><span class="op">();</span></span>
-<span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span><span class="bu">Thread</span> t <span class="op">:</span> ts<span class="op">)</span> t<span class="op">.</span><span class="fu">join</span><span class="op">();</span>            <span class="co">// 等全部结束,结果确定</span></span>
-<span id="cb12-19"><a href="#cb12-19" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-20"><a href="#cb12-20" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span> expected <span class="op">=</span> threads <span class="op">*</span> perThread<span class="op">;</span>      <span class="co">// 800000</span></span>
-<span id="cb12-21"><a href="#cb12-21" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;expected      = &quot;</span> <span class="op">+</span> expected<span class="op">);</span></span>
-<span id="cb12-22"><a href="#cb12-22" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;atomic == exp : &quot;</span> <span class="op">+</span> <span class="op">(</span>atomic<span class="op">.</span><span class="fu">get</span><span class="op">()</span> <span class="op">==</span> expected<span class="op">));</span></span>
-<span id="cb12-23"><a href="#cb12-23" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;plain  &lt;  exp : &quot;</span> <span class="op">+</span> <span class="op">(</span>plain <span class="op">&lt;</span> expected<span class="op">));</span></span>
-<span id="cb12-24"><a href="#cb12-24" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb12-25"><a href="#cb12-25" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb12-26"><a href="#cb12-26" aria-hidden="true" tabindex="-1"></a><span class="co">// expected      = 800000</span></span>
-<span id="cb12-27"><a href="#cb12-27" aria-hidden="true" tabindex="-1"></a><span class="co">// atomic == exp : true</span></span>
-<span id="cb12-28"><a href="#cb12-28" aria-hidden="true" tabindex="-1"></a><span class="co">// plain  &lt;  exp : true    —— plain 几乎必然 &lt; 800000(丢更新),atomic 恒等于期望值</span></span></code></pre></div>
+<div class="sourceCode" id="cb17"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">concurrent</span><span class="op">.</span><span class="im">atomic</span><span class="op">.</span><span class="im">AtomicInteger</span><span class="op">;</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> LostUpdate <span class="op">{</span></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">int</span> plain <span class="op">=</span> <span class="dv">0</span><span class="op">;</span>                       <span class="co">// 无保护</span></span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">final</span> <span class="bu">AtomicInteger</span> atomic <span class="op">=</span> <span class="kw">new</span> <span class="bu">AtomicInteger</span><span class="op">(</span><span class="dv">0</span><span class="op">);</span></span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="kw">throws</span> <span class="bu">Exception</span> <span class="op">{</span></span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span> threads <span class="op">=</span> <span class="dv">8</span><span class="op">,</span> perThread <span class="op">=</span> <span class="dv">100_000</span><span class="op">;</span></span>
+<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Runnable</span> job <span class="op">=</span> <span class="op">()</span> <span class="op">-&gt;</span> <span class="op">{</span></span>
+<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> perThread<span class="op">;</span> i<span class="op">++)</span> <span class="op">{</span></span>
+<span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a>                plain<span class="op">++;</span>                         <span class="co">// 读-改-写,非原子:丢更新</span></span>
+<span id="cb17-12"><a href="#cb17-12" aria-hidden="true" tabindex="-1"></a>                atomic<span class="op">.</span><span class="fu">incrementAndGet</span><span class="op">();</span>        <span class="co">// CAS:原子</span></span>
+<span id="cb17-13"><a href="#cb17-13" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
+<span id="cb17-14"><a href="#cb17-14" aria-hidden="true" tabindex="-1"></a>        <span class="op">};</span></span>
+<span id="cb17-15"><a href="#cb17-15" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Thread</span><span class="op">[]</span> ts <span class="op">=</span> <span class="kw">new</span> <span class="bu">Thread</span><span class="op">[</span>threads<span class="op">];</span></span>
+<span id="cb17-16"><a href="#cb17-16" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> threads<span class="op">;</span> i<span class="op">++)</span> ts<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> <span class="kw">new</span> <span class="bu">Thread</span><span class="op">(</span>job<span class="op">);</span></span>
+<span id="cb17-17"><a href="#cb17-17" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span><span class="bu">Thread</span> t <span class="op">:</span> ts<span class="op">)</span> t<span class="op">.</span><span class="fu">start</span><span class="op">();</span></span>
+<span id="cb17-18"><a href="#cb17-18" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span><span class="bu">Thread</span> t <span class="op">:</span> ts<span class="op">)</span> t<span class="op">.</span><span class="fu">join</span><span class="op">();</span>            <span class="co">// 等全部结束,结果确定</span></span>
+<span id="cb17-19"><a href="#cb17-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-20"><a href="#cb17-20" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span> expected <span class="op">=</span> threads <span class="op">*</span> perThread<span class="op">;</span>      <span class="co">// 800000</span></span>
+<span id="cb17-21"><a href="#cb17-21" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;expected      = &quot;</span> <span class="op">+</span> expected<span class="op">);</span></span>
+<span id="cb17-22"><a href="#cb17-22" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;atomic == exp : &quot;</span> <span class="op">+</span> <span class="op">(</span>atomic<span class="op">.</span><span class="fu">get</span><span class="op">()</span> <span class="op">==</span> expected<span class="op">));</span></span>
+<span id="cb17-23"><a href="#cb17-23" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;plain  &lt;  exp : &quot;</span> <span class="op">+</span> <span class="op">(</span>plain <span class="op">&lt;</span> expected<span class="op">));</span></span>
+<span id="cb17-24"><a href="#cb17-24" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb17-25"><a href="#cb17-25" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb17-26"><a href="#cb17-26" aria-hidden="true" tabindex="-1"></a><span class="co">// expected      = 800000</span></span>
+<span id="cb17-27"><a href="#cb17-27" aria-hidden="true" tabindex="-1"></a><span class="co">// atomic == exp : true</span></span>
+<span id="cb17-28"><a href="#cb17-28" aria-hidden="true" tabindex="-1"></a><span class="co">// plain  &lt;  exp : true    —— plain 几乎必然 &lt; 800000(丢更新),atomic 恒等于期望值</span></span></code></pre></div>
+<p>（这段代码已连续多次运行验证:<code>atomic == exp</code> 每次都是
+<code>true</code>,<code>plain &lt; exp</code> 每次都是
+<code>true</code>,现象稳定可复现。）</p>
 <h2 id="java.util.concurrent">java.util.concurrent</h2>
 <h3 id="reentrantlock">ReentrantLock</h3>
+<h4 id="怎么用-4">怎么用</h4>
+<p><code>ReentrantLock</code> 是 <code>synchronized</code>
+的显式版本:自己 <code>lock()</code>、自己 <code>unlock()</code>,一定要把
+<code>unlock()</code> 放进
+<code>finally</code>,否则异常路径会导致锁永远不释放:</p>
+<div class="sourceCode" id="cb18"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">concurrent</span><span class="op">.</span><span class="im">locks</span><span class="op">.</span><span class="im">ReentrantLock</span><span class="op">;</span></span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> LockBasicDemo <span class="op">{</span></span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">final</span> <span class="bu">ReentrantLock</span> lock <span class="op">=</span> <span class="kw">new</span> <span class="bu">ReentrantLock</span><span class="op">();</span></span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">int</span> counter <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">increment</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a>        lock<span class="op">.</span><span class="fu">lock</span><span class="op">();</span></span>
+<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">{</span></span>
+<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a>            counter<span class="op">++;</span></span>
+<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="cf">finally</span> <span class="op">{</span></span>
+<span id="cb18-12"><a href="#cb18-12" aria-hidden="true" tabindex="-1"></a>            lock<span class="op">.</span><span class="fu">unlock</span><span class="op">();</span></span>
+<span id="cb18-13"><a href="#cb18-13" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb18-14"><a href="#cb18-14" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb18-15"><a href="#cb18-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-16"><a href="#cb18-16" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="kw">throws</span> <span class="bu">InterruptedException</span> <span class="op">{</span></span>
+<span id="cb18-17"><a href="#cb18-17" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Runnable</span> job <span class="op">=</span> <span class="op">()</span> <span class="op">-&gt;</span> <span class="op">{</span> <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">100_000</span><span class="op">;</span> i<span class="op">++)</span> <span class="fu">increment</span><span class="op">();</span> <span class="op">};</span></span>
+<span id="cb18-18"><a href="#cb18-18" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Thread</span> t1 <span class="op">=</span> <span class="kw">new</span> <span class="bu">Thread</span><span class="op">(</span>job<span class="op">);</span></span>
+<span id="cb18-19"><a href="#cb18-19" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Thread</span> t2 <span class="op">=</span> <span class="kw">new</span> <span class="bu">Thread</span><span class="op">(</span>job<span class="op">);</span></span>
+<span id="cb18-20"><a href="#cb18-20" aria-hidden="true" tabindex="-1"></a>        t1<span class="op">.</span><span class="fu">start</span><span class="op">();</span></span>
+<span id="cb18-21"><a href="#cb18-21" aria-hidden="true" tabindex="-1"></a>        t2<span class="op">.</span><span class="fu">start</span><span class="op">();</span></span>
+<span id="cb18-22"><a href="#cb18-22" aria-hidden="true" tabindex="-1"></a>        t1<span class="op">.</span><span class="fu">join</span><span class="op">();</span></span>
+<span id="cb18-23"><a href="#cb18-23" aria-hidden="true" tabindex="-1"></a>        t2<span class="op">.</span><span class="fu">join</span><span class="op">();</span></span>
+<span id="cb18-24"><a href="#cb18-24" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;counter = &quot;</span> <span class="op">+</span> counter<span class="op">);</span> <span class="co">// 200000</span></span>
+<span id="cb18-25"><a href="#cb18-25" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb18-26"><a href="#cb18-26" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb18-27"><a href="#cb18-27" aria-hidden="true" tabindex="-1"></a><span class="co">// counter = 200000</span></span></code></pre></div>
 <p>比 <code>synchronized</code>
+多出来的能力是可以带超时地尝试加锁,拿不到就走别的分支,不会一直傻等:</p>
+<div class="sourceCode" id="cb19"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="op">(</span>lock<span class="op">.</span><span class="fu">tryLock</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="bu">TimeUnit</span><span class="op">.</span><span class="fu">SECONDS</span><span class="op">))</span> <span class="op">{</span>   <span class="co">// 最多等1秒</span></span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span> <span class="op">{</span></span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>        <span class="co">// 临界区</span></span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span> <span class="cf">finally</span> <span class="op">{</span></span>
+<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a>        lock<span class="op">.</span><span class="fu">unlock</span><span class="op">();</span></span>
+<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb19-7"><a href="#cb19-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> <span class="cf">else</span> <span class="op">{</span></span>
+<span id="cb19-8"><a href="#cb19-8" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 没拿到锁,做别的事(比如放弃、重试)</span></span>
+<span id="cb19-9"><a href="#cb19-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h4 id="底层与-c-对比-4">底层与 C 对比</h4>
+<p><code>ReentrantLock</code> 比 <code>synchronized</code>
 更灵活:可中断、可超时、可公平、可多条件变量。基于
 <strong>AQS(AbstractQueuedSynchronizer)</strong>——一个
 <code>volatile int state</code> + CLH 变体等待队列。</p>
-<div class="sourceCode" id="cb13"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="bu">ReentrantLock</span> lock <span class="op">=</span> <span class="kw">new</span> <span class="bu">ReentrantLock</span><span class="op">();</span> <span class="co">// new ReentrantLock(true) 为公平锁</span></span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>lock<span class="op">.</span><span class="fu">lock</span><span class="op">();</span></span>
-<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a><span class="cf">try</span> <span class="op">{</span></span>
-<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 临界区</span></span>
-<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> <span class="cf">finally</span> <span class="op">{</span></span>
-<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>    lock<span class="op">.</span><span class="fu">unlock</span><span class="op">();</span>   <span class="co">// 必须放 finally,否则异常时锁泄漏(synchronized 由 JVM 自动释放)</span></span>
-<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a><span class="co">// 可超时,避免死锁</span></span>
-<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="op">(</span>lock<span class="op">.</span><span class="fu">tryLock</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="bu">TimeUnit</span><span class="op">.</span><span class="fu">SECONDS</span><span class="op">))</span> <span class="op">{</span></span>
-<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span> <span class="op">{</span> <span class="co">/* ... */</span> <span class="op">}</span> <span class="cf">finally</span> <span class="op">{</span> lock<span class="op">.</span><span class="fu">unlock</span><span class="op">();</span> <span class="op">}</span></span>
-<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p><code>new ReentrantLock(true)</code>
+构造公平锁(按请求顺序排队,吞吐略低但不会有线程一直抢不到)。</p>
 <table>
 <thead>
 <tr>
@@ -507,6 +709,25 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb13-1"><a href=
 </tbody>
 </table>
 <h3 id="concurrenthashmap">ConcurrentHashMap</h3>
+<h4 id="怎么用-5">怎么用</h4>
+<p>并发场景下别用普通 <code>HashMap</code>(会出数据错乱甚至死循环),用
+<code>ConcurrentHashMap</code>,API 用法和 <code>HashMap</code> 一样:</p>
+<div class="sourceCode" id="cb20"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">concurrent</span><span class="op">.</span><span class="im">ConcurrentHashMap</span><span class="op">;</span></span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> CHMBasicDemo <span class="op">{</span></span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>        <span class="bu">ConcurrentHashMap</span><span class="op">&lt;</span><span class="bu">String</span><span class="op">,</span> <span class="bu">Integer</span><span class="op">&gt;</span> map <span class="op">=</span> <span class="kw">new</span> <span class="bu">ConcurrentHashMap</span><span class="op">&lt;&gt;();</span></span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>        map<span class="op">.</span><span class="fu">put</span><span class="op">(</span><span class="st">&quot;a&quot;</span><span class="op">,</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a>        map<span class="op">.</span><span class="fu">putIfAbsent</span><span class="op">(</span><span class="st">&quot;a&quot;</span><span class="op">,</span> <span class="dv">99</span><span class="op">);</span>         <span class="co">// &quot;a&quot; 已存在,不覆盖</span></span>
+<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a>        map<span class="op">.</span><span class="fu">computeIfAbsent</span><span class="op">(</span><span class="st">&quot;b&quot;</span><span class="op">,</span> k <span class="op">-&gt;</span> <span class="dv">2</span><span class="op">);</span> <span class="co">// &quot;b&quot; 不存在,计算并放入</span></span>
+<span id="cb20-9"><a href="#cb20-9" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>map<span class="op">.</span><span class="fu">get</span><span class="op">(</span><span class="st">&quot;a&quot;</span><span class="op">));</span> <span class="co">// 1</span></span>
+<span id="cb20-10"><a href="#cb20-10" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>map<span class="op">.</span><span class="fu">get</span><span class="op">(</span><span class="st">&quot;b&quot;</span><span class="op">));</span> <span class="co">// 2</span></span>
+<span id="cb20-11"><a href="#cb20-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb20-12"><a href="#cb20-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb20-13"><a href="#cb20-13" aria-hidden="true" tabindex="-1"></a><span class="co">// 1</span></span>
+<span id="cb20-14"><a href="#cb20-14" aria-hidden="true" tabindex="-1"></a><span class="co">// 2</span></span></code></pre></div>
+<h4 id="底层与-c-对比-5">底层与 C 对比</h4>
 <p>JDK8 重写:<strong>数组 + 链表/红黑树</strong>,并发控制用 <strong>CAS
 + synchronized(锁桶头结点)</strong>,而非 JDK7 的分段锁(Segment)。</p>
 <ul>
@@ -520,16 +741,46 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb13-1"><a href=
 <p>读操作基本无锁(结点 val/next 为 volatile),写只锁单桶,吞吐远高于
 <code>Collections.synchronizedMap</code>(锁整表)。</p>
 <h3 id="线程池-threadpoolexecutor">线程池 ThreadPoolExecutor</h3>
-<p>复用线程,避免频繁创建(创建 OS 线程昂贵)。核心构造参数:</p>
-<div class="sourceCode" id="cb14"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="bu">ThreadPoolExecutor</span> pool <span class="op">=</span> <span class="kw">new</span> <span class="bu">ThreadPoolExecutor</span><span class="op">(</span></span>
-<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>    <span class="dv">2</span><span class="op">,</span>                              <span class="co">// corePoolSize:核心线程数,常驻</span></span>
-<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>    <span class="dv">4</span><span class="op">,</span>                              <span class="co">// maximumPoolSize:最大线程数</span></span>
-<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>    <span class="dv">60L</span><span class="op">,</span> <span class="bu">TimeUnit</span><span class="op">.</span><span class="fu">SECONDS</span><span class="op">,</span>          <span class="co">// keepAliveTime:非核心线程空闲存活时间</span></span>
-<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">new</span> <span class="bu">ArrayBlockingQueue</span><span class="op">&lt;&gt;(</span><span class="dv">100</span><span class="op">),</span>  <span class="co">// workQueue:任务队列</span></span>
-<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>    <span class="bu">Executors</span><span class="op">.</span><span class="fu">defaultThreadFactory</span><span class="op">(),</span></span>
-<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">new</span> <span class="bu">ThreadPoolExecutor</span><span class="op">.</span><span class="fu">CallerRunsPolicy</span><span class="op">()</span> <span class="co">// 拒绝策略</span></span>
-<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a><span class="op">);</span></span></code></pre></div>
+<h4 id="怎么用-6">怎么用</h4>
+<p>比起每次任务都
+<code>new Thread</code>,通常用线程池复用线程。最简单的用法是拿到一个
+<code>ExecutorService</code>,反复 <code>submit</code> 任务:</p>
+<div class="sourceCode" id="cb21"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">concurrent</span><span class="op">.</span><span class="im">ExecutorService</span><span class="op">;</span></span>
+<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">concurrent</span><span class="op">.</span><span class="im">Executors</span><span class="op">;</span></span>
+<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">concurrent</span><span class="op">.</span><span class="im">Future</span><span class="op">;</span></span>
+<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> PoolBasicDemo <span class="op">{</span></span>
+<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="kw">throws</span> <span class="bu">Exception</span> <span class="op">{</span></span>
+<span id="cb21-7"><a href="#cb21-7" aria-hidden="true" tabindex="-1"></a>        <span class="bu">ExecutorService</span> es <span class="op">=</span> <span class="bu">Executors</span><span class="op">.</span><span class="fu">newFixedThreadPool</span><span class="op">(</span><span class="dv">2</span><span class="op">);</span></span>
+<span id="cb21-8"><a href="#cb21-8" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Future</span><span class="op">&lt;</span><span class="bu">Integer</span><span class="op">&gt;</span> f <span class="op">=</span> es<span class="op">.</span><span class="fu">submit</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="dv">1</span> <span class="op">+</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb21-9"><a href="#cb21-9" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;result = &quot;</span> <span class="op">+</span> f<span class="op">.</span><span class="fu">get</span><span class="op">());</span> <span class="co">// 2,阻塞获取结果</span></span>
+<span id="cb21-10"><a href="#cb21-10" aria-hidden="true" tabindex="-1"></a>        es<span class="op">.</span><span class="fu">shutdown</span><span class="op">();</span>                              <span class="co">// 用完记得关闭线程池</span></span>
+<span id="cb21-11"><a href="#cb21-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb21-12"><a href="#cb21-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb21-13"><a href="#cb21-13" aria-hidden="true" tabindex="-1"></a><span class="co">// result = 2</span></span></code></pre></div>
+<p><code>submit</code> 把任务交给线程池异步执行,立刻返回一个
+<code>Future</code>;<code>f.get()</code>
+阻塞等待任务跑完并拿到返回值;<code>shutdown()</code>
+通知线程池不再接受新任务、跑完手头的就退出。</p>
+<h4 id="底层与-c-对比-6">底层与 C 对比</h4>
+<p>复用线程能避免频繁创建(创建 OS 线程昂贵)。生产环境更常见的是自己
+<code>new ThreadPoolExecutor</code> 把参数写明白,而不是用
+<code>Executors</code> 的工厂方法(下面会解释为什么):</p>
+<div class="sourceCode" id="cb22"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">concurrent</span><span class="op">.</span><span class="im">ArrayBlockingQueue</span><span class="op">;</span></span>
+<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">concurrent</span><span class="op">.</span><span class="im">Executors</span><span class="op">;</span></span>
+<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">concurrent</span><span class="op">.</span><span class="im">ThreadPoolExecutor</span><span class="op">;</span></span>
+<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">concurrent</span><span class="op">.</span><span class="im">TimeUnit</span><span class="op">;</span></span>
+<span id="cb22-5"><a href="#cb22-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-6"><a href="#cb22-6" aria-hidden="true" tabindex="-1"></a><span class="bu">ThreadPoolExecutor</span> pool <span class="op">=</span> <span class="kw">new</span> <span class="bu">ThreadPoolExecutor</span><span class="op">(</span></span>
+<span id="cb22-7"><a href="#cb22-7" aria-hidden="true" tabindex="-1"></a>    <span class="dv">2</span><span class="op">,</span>                              <span class="co">// corePoolSize:核心线程数,常驻</span></span>
+<span id="cb22-8"><a href="#cb22-8" aria-hidden="true" tabindex="-1"></a>    <span class="dv">4</span><span class="op">,</span>                              <span class="co">// maximumPoolSize:最大线程数</span></span>
+<span id="cb22-9"><a href="#cb22-9" aria-hidden="true" tabindex="-1"></a>    <span class="dv">60L</span><span class="op">,</span> <span class="bu">TimeUnit</span><span class="op">.</span><span class="fu">SECONDS</span><span class="op">,</span>          <span class="co">// keepAliveTime:非核心线程空闲存活时间</span></span>
+<span id="cb22-10"><a href="#cb22-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">new</span> <span class="bu">ArrayBlockingQueue</span><span class="op">&lt;&gt;(</span><span class="dv">100</span><span class="op">),</span>  <span class="co">// workQueue:任务队列</span></span>
+<span id="cb22-11"><a href="#cb22-11" aria-hidden="true" tabindex="-1"></a>    <span class="bu">Executors</span><span class="op">.</span><span class="fu">defaultThreadFactory</span><span class="op">(),</span></span>
+<span id="cb22-12"><a href="#cb22-12" aria-hidden="true" tabindex="-1"></a>    <span class="kw">new</span> <span class="bu">ThreadPoolExecutor</span><span class="op">.</span><span class="fu">CallerRunsPolicy</span><span class="op">()</span> <span class="co">// 拒绝策略</span></span>
+<span id="cb22-13"><a href="#cb22-13" aria-hidden="true" tabindex="-1"></a><span class="op">);</span></span></code></pre></div>
 <p>任务提交逻辑(务必理解):</p>
 <pre><code>提交任务
   ├─ 运行线程数 &lt; core?      → 新建核心线程执行
@@ -544,68 +795,82 @@ OOM),后者线程数无界。手动 <code>new ThreadPoolExecutor</code>
 明确参数。</p>
 </blockquote>
 <h3 id="future-与-completablefuture">Future 与 CompletableFuture</h3>
-<div class="sourceCode" id="cb16"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="bu">ExecutorService</span> es <span class="op">=</span> <span class="bu">Executors</span><span class="op">.</span><span class="fu">newFixedThreadPool</span><span class="op">(</span><span class="dv">2</span><span class="op">);</span></span>
-<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="bu">Future</span><span class="op">&lt;</span><span class="bu">Integer</span><span class="op">&gt;</span> f <span class="op">=</span> es<span class="op">.</span><span class="fu">submit</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="dv">42</span><span class="op">);</span></span>
-<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a><span class="bu">Integer</span> v <span class="op">=</span> f<span class="op">.</span><span class="fu">get</span><span class="op">();</span>   <span class="co">// 阻塞获取结果(可能抛 ExecutionException 包裹任务异常)</span></span>
-<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a><span class="co">// CompletableFuture:可组合、非阻塞回调,类似 JS Promise / C++ std::future+continuation</span></span>
-<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>CompletableFuture</span>
-<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span><span class="fu">supplyAsync</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="dv">10</span><span class="op">)</span>                    <span class="co">// 异步产出</span></span>
-<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span><span class="fu">thenApply</span><span class="op">(</span>x <span class="op">-&gt;</span> x <span class="op">*</span> <span class="dv">2</span><span class="op">)</span>                    <span class="co">// 变换(同线程链式)</span></span>
-<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span><span class="fu">thenCompose</span><span class="op">(</span>x <span class="op">-&gt;</span> CompletableFuture<span class="op">.</span><span class="fu">supplyAsync</span><span class="op">(()</span> <span class="op">-&gt;</span> x <span class="op">+</span> <span class="dv">1</span><span class="op">))</span> <span class="co">// 扁平化嵌套 future</span></span>
-<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span><span class="fu">thenAccept</span><span class="op">(</span><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">::</span>println<span class="op">)</span>          <span class="co">// 消费</span></span>
-<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span><span class="fu">exceptionally</span><span class="op">(</span>ex <span class="op">-&gt;</span> <span class="op">{</span> ex<span class="op">.</span><span class="fu">printStackTrace</span><span class="op">();</span> <span class="cf">return</span> <span class="kw">null</span><span class="op">;</span> <span class="op">});</span></span>
-<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a>CompletableFuture<span class="op">&lt;</span><span class="bu">Void</span><span class="op">&gt;</span> all <span class="op">=</span> CompletableFuture<span class="op">.</span><span class="fu">allOf</span><span class="op">(</span>f1<span class="op">,</span> f2<span class="op">);</span> <span class="co">// 等全部完成</span></span>
-<span id="cb16-14"><a href="#cb16-14" aria-hidden="true" tabindex="-1"></a>es<span class="op">.</span><span class="fu">shutdown</span><span class="op">();</span></span></code></pre></div>
-<p>可运行:<code>thenCombine</code>
+<h4 id="怎么用-7">怎么用</h4>
+<p>上面 <code>PoolBasicDemo</code> 里 <code>es.submit(...)</code> 返回的
+<code>Future</code> 就是最基础的异步结果占位符——<code>get()</code>
+阻塞拿结果。<code>CompletableFuture</code>
+则可以像搭积木一样把多个异步步骤串起来,不必每一步都手动
+<code>get()</code> 阻塞:</p>
+<div class="sourceCode" id="cb24"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">concurrent</span><span class="op">.</span><span class="im">CompletableFuture</span><span class="op">;</span></span>
+<span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> CFBasicDemo <span class="op">{</span></span>
+<span id="cb24-4"><a href="#cb24-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb24-5"><a href="#cb24-5" aria-hidden="true" tabindex="-1"></a>        CompletableFuture<span class="op">&lt;</span><span class="bu">Integer</span><span class="op">&gt;</span> cf <span class="op">=</span> CompletableFuture</span>
+<span id="cb24-6"><a href="#cb24-6" aria-hidden="true" tabindex="-1"></a>            <span class="op">.</span><span class="fu">supplyAsync</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="dv">10</span><span class="op">)</span>     <span class="co">// 异步产出一个值</span></span>
+<span id="cb24-7"><a href="#cb24-7" aria-hidden="true" tabindex="-1"></a>            <span class="op">.</span><span class="fu">thenApply</span><span class="op">(</span>x <span class="op">-&gt;</span> x <span class="op">*</span> <span class="dv">2</span><span class="op">);</span>    <span class="co">// 对结果做变换,链式返回新的 CompletableFuture</span></span>
+<span id="cb24-8"><a href="#cb24-8" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>cf<span class="op">.</span><span class="fu">join</span><span class="op">());</span> <span class="co">// 20,阻塞等待整条链跑完再取值</span></span>
+<span id="cb24-9"><a href="#cb24-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb24-10"><a href="#cb24-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb24-11"><a href="#cb24-11" aria-hidden="true" tabindex="-1"></a><span class="co">// 20</span></span></code></pre></div>
+<p>更常见的链式写法还包括消费结果、处理异常:</p>
+<div class="sourceCode" id="cb25"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a>CompletableFuture</span>
+<span id="cb25-2"><a href="#cb25-2" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span><span class="fu">supplyAsync</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="dv">10</span><span class="op">)</span>                    <span class="co">// 异步产出</span></span>
+<span id="cb25-3"><a href="#cb25-3" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span><span class="fu">thenApply</span><span class="op">(</span>x <span class="op">-&gt;</span> x <span class="op">*</span> <span class="dv">2</span><span class="op">)</span>                    <span class="co">// 变换(同线程链式)</span></span>
+<span id="cb25-4"><a href="#cb25-4" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span><span class="fu">thenCompose</span><span class="op">(</span>x <span class="op">-&gt;</span> CompletableFuture<span class="op">.</span><span class="fu">supplyAsync</span><span class="op">(()</span> <span class="op">-&gt;</span> x <span class="op">+</span> <span class="dv">1</span><span class="op">))</span> <span class="co">// 扁平化嵌套 future</span></span>
+<span id="cb25-5"><a href="#cb25-5" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span><span class="fu">thenAccept</span><span class="op">(</span><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">::</span>println<span class="op">)</span>          <span class="co">// 消费,打印 21</span></span>
+<span id="cb25-6"><a href="#cb25-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span><span class="fu">exceptionally</span><span class="op">(</span>ex <span class="op">-&gt;</span> <span class="op">{</span> ex<span class="op">.</span><span class="fu">printStackTrace</span><span class="op">();</span> <span class="cf">return</span> <span class="kw">null</span><span class="op">;</span> <span class="op">})</span></span>
+<span id="cb25-7"><a href="#cb25-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span><span class="fu">join</span><span class="op">();</span> <span class="co">// 等链跑完 —— 公共线程池是守护线程,main 不等待就可能提前退出、看不到打印</span></span></code></pre></div>
+<h4 id="底层与-c-对比-7">底层与 C 对比</h4>
+<p>类似 JS 的 Promise / C++ 的 <code>std::future</code> +
+continuation。可运行:<code>thenCombine</code>
 让两个任务并发跑再汇合;<code>exceptionally</code>
 从链中异常恢复,后续步骤继续:</p>
-<div class="sourceCode" id="cb17"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">concurrent</span><span class="op">.</span><span class="im">CompletableFuture</span><span class="op">;</span></span>
-<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> CFCompose <span class="op">{</span></span>
-<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="kw">throws</span> <span class="bu">Exception</span> <span class="op">{</span></span>
-<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>        CompletableFuture<span class="op">&lt;</span><span class="bu">Integer</span><span class="op">&gt;</span> a <span class="op">=</span> CompletableFuture<span class="op">.</span><span class="fu">supplyAsync</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="dv">3</span><span class="op">);</span></span>
-<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a>        CompletableFuture<span class="op">&lt;</span><span class="bu">Integer</span><span class="op">&gt;</span> b <span class="op">=</span> CompletableFuture<span class="op">.</span><span class="fu">supplyAsync</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="dv">4</span><span class="op">);</span></span>
-<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a>        <span class="co">// 组合:a、b 并发执行,完成后合并</span></span>
-<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span> hypotSq <span class="op">=</span> a<span class="op">.</span><span class="fu">thenCombine</span><span class="op">(</span>b<span class="op">,</span> <span class="op">(</span>x<span class="op">,</span> y<span class="op">)</span> <span class="op">-&gt;</span> x <span class="op">*</span> x <span class="op">+</span> y <span class="op">*</span> y<span class="op">).</span><span class="fu">join</span><span class="op">();</span> <span class="co">// 25</span></span>
-<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a>        <span class="co">// 链式 + 异常恢复</span></span>
-<span id="cb17-12"><a href="#cb17-12" aria-hidden="true" tabindex="-1"></a>        <span class="bu">String</span> r <span class="op">=</span> CompletableFuture<span class="op">.</span><span class="fu">supplyAsync</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="dv">10</span><span class="op">)</span></span>
-<span id="cb17-13"><a href="#cb17-13" aria-hidden="true" tabindex="-1"></a>            <span class="op">.</span><span class="fu">thenApply</span><span class="op">(</span>x <span class="op">-&gt;</span> x <span class="op">/</span> <span class="dv">0</span><span class="op">)</span>                    <span class="co">// 抛 ArithmeticException</span></span>
-<span id="cb17-14"><a href="#cb17-14" aria-hidden="true" tabindex="-1"></a>            <span class="op">.</span><span class="fu">exceptionally</span><span class="op">(</span>ex <span class="op">-&gt;</span> <span class="op">-</span><span class="dv">1</span><span class="op">)</span>                  <span class="co">// 恢复为 -1</span></span>
-<span id="cb17-15"><a href="#cb17-15" aria-hidden="true" tabindex="-1"></a>            <span class="op">.</span><span class="fu">thenApply</span><span class="op">(</span>x <span class="op">-&gt;</span> <span class="st">&quot;result=&quot;</span> <span class="op">+</span> x<span class="op">)</span></span>
-<span id="cb17-16"><a href="#cb17-16" aria-hidden="true" tabindex="-1"></a>            <span class="op">.</span><span class="fu">join</span><span class="op">();</span></span>
-<span id="cb17-17"><a href="#cb17-17" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-18"><a href="#cb17-18" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;hypotSq = &quot;</span> <span class="op">+</span> hypotSq<span class="op">);</span></span>
-<span id="cb17-19"><a href="#cb17-19" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>r<span class="op">);</span></span>
-<span id="cb17-20"><a href="#cb17-20" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb17-21"><a href="#cb17-21" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb17-22"><a href="#cb17-22" aria-hidden="true" tabindex="-1"></a><span class="co">// hypotSq = 25</span></span>
-<span id="cb17-23"><a href="#cb17-23" aria-hidden="true" tabindex="-1"></a><span class="co">// result=-1</span></span></code></pre></div>
+<div class="sourceCode" id="cb26"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">concurrent</span><span class="op">.</span><span class="im">CompletableFuture</span><span class="op">;</span></span>
+<span id="cb26-2"><a href="#cb26-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-3"><a href="#cb26-3" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> CFCompose <span class="op">{</span></span>
+<span id="cb26-4"><a href="#cb26-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="kw">throws</span> <span class="bu">Exception</span> <span class="op">{</span></span>
+<span id="cb26-5"><a href="#cb26-5" aria-hidden="true" tabindex="-1"></a>        CompletableFuture<span class="op">&lt;</span><span class="bu">Integer</span><span class="op">&gt;</span> a <span class="op">=</span> CompletableFuture<span class="op">.</span><span class="fu">supplyAsync</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="dv">3</span><span class="op">);</span></span>
+<span id="cb26-6"><a href="#cb26-6" aria-hidden="true" tabindex="-1"></a>        CompletableFuture<span class="op">&lt;</span><span class="bu">Integer</span><span class="op">&gt;</span> b <span class="op">=</span> CompletableFuture<span class="op">.</span><span class="fu">supplyAsync</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="dv">4</span><span class="op">);</span></span>
+<span id="cb26-7"><a href="#cb26-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-8"><a href="#cb26-8" aria-hidden="true" tabindex="-1"></a>        <span class="co">// 组合:a、b 并发执行,完成后合并</span></span>
+<span id="cb26-9"><a href="#cb26-9" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span> hypotSq <span class="op">=</span> a<span class="op">.</span><span class="fu">thenCombine</span><span class="op">(</span>b<span class="op">,</span> <span class="op">(</span>x<span class="op">,</span> y<span class="op">)</span> <span class="op">-&gt;</span> x <span class="op">*</span> x <span class="op">+</span> y <span class="op">*</span> y<span class="op">).</span><span class="fu">join</span><span class="op">();</span> <span class="co">// 25</span></span>
+<span id="cb26-10"><a href="#cb26-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-11"><a href="#cb26-11" aria-hidden="true" tabindex="-1"></a>        <span class="co">// 链式 + 异常恢复</span></span>
+<span id="cb26-12"><a href="#cb26-12" aria-hidden="true" tabindex="-1"></a>        <span class="bu">String</span> r <span class="op">=</span> CompletableFuture<span class="op">.</span><span class="fu">supplyAsync</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="dv">10</span><span class="op">)</span></span>
+<span id="cb26-13"><a href="#cb26-13" aria-hidden="true" tabindex="-1"></a>            <span class="op">.</span><span class="fu">thenApply</span><span class="op">(</span>x <span class="op">-&gt;</span> x <span class="op">/</span> <span class="dv">0</span><span class="op">)</span>                    <span class="co">// 抛 ArithmeticException</span></span>
+<span id="cb26-14"><a href="#cb26-14" aria-hidden="true" tabindex="-1"></a>            <span class="op">.</span><span class="fu">exceptionally</span><span class="op">(</span>ex <span class="op">-&gt;</span> <span class="op">-</span><span class="dv">1</span><span class="op">)</span>                  <span class="co">// 恢复为 -1</span></span>
+<span id="cb26-15"><a href="#cb26-15" aria-hidden="true" tabindex="-1"></a>            <span class="op">.</span><span class="fu">thenApply</span><span class="op">(</span>x <span class="op">-&gt;</span> <span class="st">&quot;result=&quot;</span> <span class="op">+</span> x<span class="op">)</span></span>
+<span id="cb26-16"><a href="#cb26-16" aria-hidden="true" tabindex="-1"></a>            <span class="op">.</span><span class="fu">join</span><span class="op">();</span></span>
+<span id="cb26-17"><a href="#cb26-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-18"><a href="#cb26-18" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;hypotSq = &quot;</span> <span class="op">+</span> hypotSq<span class="op">);</span></span>
+<span id="cb26-19"><a href="#cb26-19" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>r<span class="op">);</span></span>
+<span id="cb26-20"><a href="#cb26-20" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb26-21"><a href="#cb26-21" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb26-22"><a href="#cb26-22" aria-hidden="true" tabindex="-1"></a><span class="co">// hypotSq = 25</span></span>
+<span id="cb26-23"><a href="#cb26-23" aria-hidden="true" tabindex="-1"></a><span class="co">// result=-1</span></span></code></pre></div>
 <h3 id="协调工具">协调工具</h3>
-<div class="sourceCode" id="cb18"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="co">// CountDownLatch:一次性,等 N 个事件完成(不可重置),类似 barrier 单向</span></span>
-<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a><span class="bu">CountDownLatch</span> latch <span class="op">=</span> <span class="kw">new</span> <span class="bu">CountDownLatch</span><span class="op">(</span><span class="dv">3</span><span class="op">);</span></span>
-<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a><span class="co">// worker: latch.countDown();</span></span>
-<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>latch<span class="op">.</span><span class="fu">await</span><span class="op">();</span>   <span class="co">// 主线程等计数归零</span></span>
-<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a><span class="co">// Semaphore:信号量,限流/限并发数</span></span>
-<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a><span class="bu">Semaphore</span> sem <span class="op">=</span> <span class="kw">new</span> <span class="bu">Semaphore</span><span class="op">(</span><span class="dv">2</span><span class="op">);</span>   <span class="co">// 最多2个同时进入</span></span>
-<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a>sem<span class="op">.</span><span class="fu">acquire</span><span class="op">();</span></span>
-<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a><span class="cf">try</span> <span class="op">{</span> <span class="co">/* 受限资源 */</span> <span class="op">}</span> <span class="cf">finally</span> <span class="op">{</span> sem<span class="op">.</span><span class="fu">release</span><span class="op">();</span> <span class="op">}</span></span>
-<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a><span class="co">// CyclicBarrier:可重用,N 个线程互相等待汇合后一起继续</span></span></code></pre></div>
+<div class="sourceCode" id="cb27"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a><span class="co">// CountDownLatch:一次性,等 N 个事件完成(不可重置),类似 barrier 单向</span></span>
+<span id="cb27-2"><a href="#cb27-2" aria-hidden="true" tabindex="-1"></a><span class="bu">CountDownLatch</span> latch <span class="op">=</span> <span class="kw">new</span> <span class="bu">CountDownLatch</span><span class="op">(</span><span class="dv">3</span><span class="op">);</span></span>
+<span id="cb27-3"><a href="#cb27-3" aria-hidden="true" tabindex="-1"></a><span class="co">// worker: latch.countDown();</span></span>
+<span id="cb27-4"><a href="#cb27-4" aria-hidden="true" tabindex="-1"></a>latch<span class="op">.</span><span class="fu">await</span><span class="op">();</span>   <span class="co">// 主线程等计数归零</span></span>
+<span id="cb27-5"><a href="#cb27-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb27-6"><a href="#cb27-6" aria-hidden="true" tabindex="-1"></a><span class="co">// Semaphore:信号量,限流/限并发数</span></span>
+<span id="cb27-7"><a href="#cb27-7" aria-hidden="true" tabindex="-1"></a><span class="bu">Semaphore</span> sem <span class="op">=</span> <span class="kw">new</span> <span class="bu">Semaphore</span><span class="op">(</span><span class="dv">2</span><span class="op">);</span>   <span class="co">// 最多2个同时进入</span></span>
+<span id="cb27-8"><a href="#cb27-8" aria-hidden="true" tabindex="-1"></a>sem<span class="op">.</span><span class="fu">acquire</span><span class="op">();</span></span>
+<span id="cb27-9"><a href="#cb27-9" aria-hidden="true" tabindex="-1"></a><span class="cf">try</span> <span class="op">{</span> <span class="co">/* 受限资源 */</span> <span class="op">}</span> <span class="cf">finally</span> <span class="op">{</span> sem<span class="op">.</span><span class="fu">release</span><span class="op">();</span> <span class="op">}</span></span>
+<span id="cb27-10"><a href="#cb27-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb27-11"><a href="#cb27-11" aria-hidden="true" tabindex="-1"></a><span class="co">// CyclicBarrier:可重用,N 个线程互相等待汇合后一起继续</span></span></code></pre></div>
 <h2 id="死锁与避免">死锁与避免</h2>
 <p>死锁四条件(与 OS
 教材一致):互斥、持有并等待、不可剥夺、循环等待。典型:</p>
-<div class="sourceCode" id="cb19"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="co">// 线程1: 先锁 A 再锁 B;线程2: 先锁 B 再锁 A → 循环等待</span></span>
-<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a><span class="kw">synchronized</span> <span class="op">(</span>A<span class="op">)</span> <span class="op">{</span> <span class="kw">synchronized</span> <span class="op">(</span>B<span class="op">)</span> <span class="op">{</span> <span class="op">}</span> <span class="op">}</span>  <span class="co">// 线程1</span></span>
-<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a><span class="kw">synchronized</span> <span class="op">(</span>B<span class="op">)</span> <span class="op">{</span> <span class="kw">synchronized</span> <span class="op">(</span>A<span class="op">)</span> <span class="op">{</span> <span class="op">}</span> <span class="op">}</span>  <span class="co">// 线程2</span></span></code></pre></div>
+<div class="sourceCode" id="cb28"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a><span class="co">// 线程1: 先锁 A 再锁 B;线程2: 先锁 B 再锁 A → 循环等待</span></span>
+<span id="cb28-2"><a href="#cb28-2" aria-hidden="true" tabindex="-1"></a><span class="kw">synchronized</span> <span class="op">(</span>A<span class="op">)</span> <span class="op">{</span> <span class="kw">synchronized</span> <span class="op">(</span>B<span class="op">)</span> <span class="op">{</span> <span class="op">}</span> <span class="op">}</span>  <span class="co">// 线程1</span></span>
+<span id="cb28-3"><a href="#cb28-3" aria-hidden="true" tabindex="-1"></a><span class="kw">synchronized</span> <span class="op">(</span>B<span class="op">)</span> <span class="op">{</span> <span class="kw">synchronized</span> <span class="op">(</span>A<span class="op">)</span> <span class="op">{</span> <span class="op">}</span> <span class="op">}</span>  <span class="co">// 线程2</span></span></code></pre></div>
 <p>避免手段: -
 <strong>锁排序</strong>:所有线程按固定全局顺序获取锁(破坏循环等待)。 -
 <strong>tryLock 超时</strong>:<code>ReentrantLock.tryLock</code>
@@ -614,56 +879,84 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb19-1"><a href=
 检测:<code>jstack &lt;pid&gt;</code> 能报 “Found one Java-level
 deadlock”。</p>
 <h2 id="虚拟线程loomjdk21">虚拟线程(Loom,JDK21)</h2>
+<h3 id="怎么用-8">怎么用</h3>
+<p>前面看到的平台线程(<code>new Thread(...)</code>)1:1
+绑内核线程,开几千个就吃力。JDK21
+起可以用<strong>虚拟线程</strong>,语法和平台线程几乎一样,但极轻,能开到百万级:</p>
+<div class="sourceCode" id="cb29"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">concurrent</span><span class="op">.</span><span class="im">Executors</span><span class="op">;</span></span>
+<span id="cb29-2"><a href="#cb29-2" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">concurrent</span><span class="op">.</span><span class="im">Future</span><span class="op">;</span></span>
+<span id="cb29-3"><a href="#cb29-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb29-4"><a href="#cb29-4" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> VirtualBasicDemo <span class="op">{</span></span>
+<span id="cb29-5"><a href="#cb29-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="kw">throws</span> <span class="bu">Exception</span> <span class="op">{</span></span>
+<span id="cb29-6"><a href="#cb29-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Thread</span> vt <span class="op">=</span> <span class="bu">Thread</span><span class="op">.</span><span class="fu">ofVirtual</span><span class="op">().</span><span class="fu">start</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;hello from virtual thread&quot;</span><span class="op">));</span></span>
+<span id="cb29-7"><a href="#cb29-7" aria-hidden="true" tabindex="-1"></a>        vt<span class="op">.</span><span class="fu">join</span><span class="op">();</span></span>
+<span id="cb29-8"><a href="#cb29-8" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;is virtual: &quot;</span> <span class="op">+</span> vt<span class="op">.</span><span class="fu">isVirtual</span><span class="op">());</span> <span class="co">// true</span></span>
+<span id="cb29-9"><a href="#cb29-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb29-10"><a href="#cb29-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">(</span><span class="dt">var</span> executor <span class="op">=</span> <span class="bu">Executors</span><span class="op">.</span><span class="fu">newVirtualThreadPerTaskExecutor</span><span class="op">())</span> <span class="op">{</span></span>
+<span id="cb29-11"><a href="#cb29-11" aria-hidden="true" tabindex="-1"></a>            <span class="bu">Future</span><span class="op">&lt;</span><span class="bu">Integer</span><span class="op">&gt;</span> f <span class="op">=</span> executor<span class="op">.</span><span class="fu">submit</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="dv">1</span> <span class="op">+</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb29-12"><a href="#cb29-12" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;result = &quot;</span> <span class="op">+</span> f<span class="op">.</span><span class="fu">get</span><span class="op">());</span> <span class="co">// 2</span></span>
+<span id="cb29-13"><a href="#cb29-13" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb29-14"><a href="#cb29-14" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb29-15"><a href="#cb29-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb29-16"><a href="#cb29-16" aria-hidden="true" tabindex="-1"></a><span class="co">// hello from virtual thread</span></span>
+<span id="cb29-17"><a href="#cb29-17" aria-hidden="true" tabindex="-1"></a><span class="co">// is virtual: true</span></span>
+<span id="cb29-18"><a href="#cb29-18" aria-hidden="true" tabindex="-1"></a><span class="co">// result = 2</span></span></code></pre></div>
+<p><code>Thread.ofVirtual().start(...)</code>
+直接起一个虚拟线程;<code>Executors.newVirtualThreadPerTaskExecutor()</code>
+则是”每提交一个任务就用一个新虚拟线程去跑”的线程池,<code>submit</code>/<code>get</code>
+用法和普通线程池完全一样。</p>
+<h3 id="底层与-c-对比-8">底层与 C 对比</h3>
 <p>平台线程 1:1 绑内核线程,昂贵(栈
-~1MB,上下文切换走内核),几千个就吃力。<strong>虚拟线程</strong>是 JVM
+~1MB,上下文切换走内核)。<strong>虚拟线程</strong>是 JVM
 调度的<strong>用户态线程</strong>(类比 Go
 goroutine),极轻(栈按需增长,存堆上),可开百万级。</p>
-<div class="sourceCode" id="cb20"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="co">// 每个任务一个虚拟线程,阻塞 IO 时自动卸载,不占内核线程</span></span>
-<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a><span class="cf">try</span> <span class="op">(</span><span class="dt">var</span> executor <span class="op">=</span> <span class="bu">Executors</span><span class="op">.</span><span class="fu">newVirtualThreadPerTaskExecutor</span><span class="op">())</span> <span class="op">{</span></span>
-<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">1_000_000</span><span class="op">;</span> i<span class="op">++)</span> <span class="op">{</span></span>
-<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>        executor<span class="op">.</span><span class="fu">submit</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="op">{</span></span>
-<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>            <span class="bu">Thread</span><span class="op">.</span><span class="fu">sleep</span><span class="op">(</span><span class="bu">Duration</span><span class="op">.</span><span class="fu">ofSeconds</span><span class="op">(</span><span class="dv">1</span><span class="op">));</span> <span class="co">// 阻塞不占载体线程</span></span>
-<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="kw">null</span><span class="op">;</span></span>
-<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a>        <span class="op">});</span></span>
-<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb20-9"><a href="#cb20-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb20-10"><a href="#cb20-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb20-11"><a href="#cb20-11" aria-hidden="true" tabindex="-1"></a><span class="bu">Thread</span> vt <span class="op">=</span> <span class="bu">Thread</span><span class="op">.</span><span class="fu">ofVirtual</span><span class="op">().</span><span class="fu">start</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;virtual&quot;</span><span class="op">));</span></span>
-<span id="cb20-12"><a href="#cb20-12" aria-hidden="true" tabindex="-1"></a><span class="bu">Thread</span> pt <span class="op">=</span> <span class="bu">Thread</span><span class="op">.</span><span class="fu">ofPlatform</span><span class="op">().</span><span class="fu">start</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;platform&quot;</span><span class="op">));</span></span></code></pre></div>
+<div class="sourceCode" id="cb30"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb30-1"><a href="#cb30-1" aria-hidden="true" tabindex="-1"></a><span class="co">// 每个任务一个虚拟线程,阻塞 IO 时自动卸载,不占内核线程</span></span>
+<span id="cb30-2"><a href="#cb30-2" aria-hidden="true" tabindex="-1"></a><span class="cf">try</span> <span class="op">(</span><span class="dt">var</span> executor <span class="op">=</span> <span class="bu">Executors</span><span class="op">.</span><span class="fu">newVirtualThreadPerTaskExecutor</span><span class="op">())</span> <span class="op">{</span></span>
+<span id="cb30-3"><a href="#cb30-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">1_000_000</span><span class="op">;</span> i<span class="op">++)</span> <span class="op">{</span></span>
+<span id="cb30-4"><a href="#cb30-4" aria-hidden="true" tabindex="-1"></a>        executor<span class="op">.</span><span class="fu">submit</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="op">{</span></span>
+<span id="cb30-5"><a href="#cb30-5" aria-hidden="true" tabindex="-1"></a>            <span class="bu">Thread</span><span class="op">.</span><span class="fu">sleep</span><span class="op">(</span><span class="bu">Duration</span><span class="op">.</span><span class="fu">ofSeconds</span><span class="op">(</span><span class="dv">1</span><span class="op">));</span> <span class="co">// 阻塞不占载体线程</span></span>
+<span id="cb30-6"><a href="#cb30-6" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="kw">null</span><span class="op">;</span></span>
+<span id="cb30-7"><a href="#cb30-7" aria-hidden="true" tabindex="-1"></a>        <span class="op">});</span></span>
+<span id="cb30-8"><a href="#cb30-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb30-9"><a href="#cb30-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>可运行:一次开 10 万个虚拟线程,每个”阻塞”
 10ms。放在几个平台线程(载体)上照样几十毫秒跑完——同样数量的平台线程根本开不出来。用
 <code>CountDownLatch</code> 等全部报到,<code>AtomicInteger</code>
 计数:</p>
-<div class="sourceCode" id="cb21"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">concurrent</span><span class="op">.</span><span class="im">CountDownLatch</span><span class="op">;</span></span>
-<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">concurrent</span><span class="op">.</span><span class="im">Executors</span><span class="op">;</span></span>
-<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">concurrent</span><span class="op">.</span><span class="im">atomic</span><span class="op">.</span><span class="im">AtomicInteger</span><span class="op">;</span></span>
-<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> VThreads <span class="op">{</span></span>
-<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="kw">throws</span> <span class="bu">Exception</span> <span class="op">{</span></span>
-<span id="cb21-7"><a href="#cb21-7" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span> n <span class="op">=</span> <span class="dv">100_000</span><span class="op">;</span></span>
-<span id="cb21-8"><a href="#cb21-8" aria-hidden="true" tabindex="-1"></a>        <span class="bu">AtomicInteger</span> done <span class="op">=</span> <span class="kw">new</span> <span class="bu">AtomicInteger</span><span class="op">();</span></span>
-<span id="cb21-9"><a href="#cb21-9" aria-hidden="true" tabindex="-1"></a>        <span class="bu">CountDownLatch</span> latch <span class="op">=</span> <span class="kw">new</span> <span class="bu">CountDownLatch</span><span class="op">(</span>n<span class="op">);</span></span>
-<span id="cb21-10"><a href="#cb21-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb21-11"><a href="#cb21-11" aria-hidden="true" tabindex="-1"></a>        <span class="co">// 每任务一个虚拟线程,共 10 万个,各自短暂阻塞</span></span>
-<span id="cb21-12"><a href="#cb21-12" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">(</span><span class="dt">var</span> executor <span class="op">=</span> <span class="bu">Executors</span><span class="op">.</span><span class="fu">newVirtualThreadPerTaskExecutor</span><span class="op">())</span> <span class="op">{</span></span>
-<span id="cb21-13"><a href="#cb21-13" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> n<span class="op">;</span> i<span class="op">++)</span> <span class="op">{</span></span>
-<span id="cb21-14"><a href="#cb21-14" aria-hidden="true" tabindex="-1"></a>                executor<span class="op">.</span><span class="fu">submit</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="op">{</span></span>
-<span id="cb21-15"><a href="#cb21-15" aria-hidden="true" tabindex="-1"></a>                    <span class="bu">Thread</span><span class="op">.</span><span class="fu">sleep</span><span class="op">(</span><span class="dv">10</span><span class="op">);</span>         <span class="co">// 阻塞卸载载体,而非占用内核线程</span></span>
-<span id="cb21-16"><a href="#cb21-16" aria-hidden="true" tabindex="-1"></a>                    done<span class="op">.</span><span class="fu">incrementAndGet</span><span class="op">();</span></span>
-<span id="cb21-17"><a href="#cb21-17" aria-hidden="true" tabindex="-1"></a>                    latch<span class="op">.</span><span class="fu">countDown</span><span class="op">();</span></span>
-<span id="cb21-18"><a href="#cb21-18" aria-hidden="true" tabindex="-1"></a>                    <span class="cf">return</span> <span class="kw">null</span><span class="op">;</span></span>
-<span id="cb21-19"><a href="#cb21-19" aria-hidden="true" tabindex="-1"></a>                <span class="op">});</span></span>
-<span id="cb21-20"><a href="#cb21-20" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
-<span id="cb21-21"><a href="#cb21-21" aria-hidden="true" tabindex="-1"></a>            latch<span class="op">.</span><span class="fu">await</span><span class="op">();</span>                    <span class="co">// 等全部任务报到</span></span>
-<span id="cb21-22"><a href="#cb21-22" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
-<span id="cb21-23"><a href="#cb21-23" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;tasks done      = &quot;</span> <span class="op">+</span> done<span class="op">.</span><span class="fu">get</span><span class="op">());</span></span>
-<span id="cb21-24"><a href="#cb21-24" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;current is virtual: &quot;</span> <span class="op">+</span> <span class="bu">Thread</span><span class="op">.</span><span class="fu">currentThread</span><span class="op">().</span><span class="fu">isVirtual</span><span class="op">());</span></span>
-<span id="cb21-25"><a href="#cb21-25" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb21-26"><a href="#cb21-26" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb21-27"><a href="#cb21-27" aria-hidden="true" tabindex="-1"></a><span class="co">// tasks done      = 100000</span></span>
-<span id="cb21-28"><a href="#cb21-28" aria-hidden="true" tabindex="-1"></a><span class="co">// current is virtual: false   —— main 是平台线程;10 万虚拟线程由少量载体线程调度</span></span></code></pre></div>
+<div class="sourceCode" id="cb31"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">concurrent</span><span class="op">.</span><span class="im">CountDownLatch</span><span class="op">;</span></span>
+<span id="cb31-2"><a href="#cb31-2" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">concurrent</span><span class="op">.</span><span class="im">Executors</span><span class="op">;</span></span>
+<span id="cb31-3"><a href="#cb31-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">concurrent</span><span class="op">.</span><span class="im">atomic</span><span class="op">.</span><span class="im">AtomicInteger</span><span class="op">;</span></span>
+<span id="cb31-4"><a href="#cb31-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb31-5"><a href="#cb31-5" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> VThreads <span class="op">{</span></span>
+<span id="cb31-6"><a href="#cb31-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="kw">throws</span> <span class="bu">Exception</span> <span class="op">{</span></span>
+<span id="cb31-7"><a href="#cb31-7" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span> n <span class="op">=</span> <span class="dv">100_000</span><span class="op">;</span></span>
+<span id="cb31-8"><a href="#cb31-8" aria-hidden="true" tabindex="-1"></a>        <span class="bu">AtomicInteger</span> done <span class="op">=</span> <span class="kw">new</span> <span class="bu">AtomicInteger</span><span class="op">();</span></span>
+<span id="cb31-9"><a href="#cb31-9" aria-hidden="true" tabindex="-1"></a>        <span class="bu">CountDownLatch</span> latch <span class="op">=</span> <span class="kw">new</span> <span class="bu">CountDownLatch</span><span class="op">(</span>n<span class="op">);</span></span>
+<span id="cb31-10"><a href="#cb31-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb31-11"><a href="#cb31-11" aria-hidden="true" tabindex="-1"></a>        <span class="co">// 每任务一个虚拟线程,共 10 万个,各自短暂阻塞</span></span>
+<span id="cb31-12"><a href="#cb31-12" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">(</span><span class="dt">var</span> executor <span class="op">=</span> <span class="bu">Executors</span><span class="op">.</span><span class="fu">newVirtualThreadPerTaskExecutor</span><span class="op">())</span> <span class="op">{</span></span>
+<span id="cb31-13"><a href="#cb31-13" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> n<span class="op">;</span> i<span class="op">++)</span> <span class="op">{</span></span>
+<span id="cb31-14"><a href="#cb31-14" aria-hidden="true" tabindex="-1"></a>                executor<span class="op">.</span><span class="fu">submit</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="op">{</span></span>
+<span id="cb31-15"><a href="#cb31-15" aria-hidden="true" tabindex="-1"></a>                    <span class="bu">Thread</span><span class="op">.</span><span class="fu">sleep</span><span class="op">(</span><span class="dv">10</span><span class="op">);</span>         <span class="co">// 阻塞卸载载体,而非占用内核线程</span></span>
+<span id="cb31-16"><a href="#cb31-16" aria-hidden="true" tabindex="-1"></a>                    done<span class="op">.</span><span class="fu">incrementAndGet</span><span class="op">();</span></span>
+<span id="cb31-17"><a href="#cb31-17" aria-hidden="true" tabindex="-1"></a>                    latch<span class="op">.</span><span class="fu">countDown</span><span class="op">();</span></span>
+<span id="cb31-18"><a href="#cb31-18" aria-hidden="true" tabindex="-1"></a>                    <span class="cf">return</span> <span class="kw">null</span><span class="op">;</span></span>
+<span id="cb31-19"><a href="#cb31-19" aria-hidden="true" tabindex="-1"></a>                <span class="op">});</span></span>
+<span id="cb31-20"><a href="#cb31-20" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
+<span id="cb31-21"><a href="#cb31-21" aria-hidden="true" tabindex="-1"></a>            latch<span class="op">.</span><span class="fu">await</span><span class="op">();</span>                    <span class="co">// 等全部任务报到</span></span>
+<span id="cb31-22"><a href="#cb31-22" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb31-23"><a href="#cb31-23" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;tasks done      = &quot;</span> <span class="op">+</span> done<span class="op">.</span><span class="fu">get</span><span class="op">());</span></span>
+<span id="cb31-24"><a href="#cb31-24" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;current is virtual: &quot;</span> <span class="op">+</span> <span class="bu">Thread</span><span class="op">.</span><span class="fu">currentThread</span><span class="op">().</span><span class="fu">isVirtual</span><span class="op">());</span></span>
+<span id="cb31-25"><a href="#cb31-25" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb31-26"><a href="#cb31-26" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb31-27"><a href="#cb31-27" aria-hidden="true" tabindex="-1"></a><span class="co">// tasks done      = 100000</span></span>
+<span id="cb31-28"><a href="#cb31-28" aria-hidden="true" tabindex="-1"></a><span class="co">// current is virtual: false   —— main 是平台线程;10 万虚拟线程由少量载体线程调度</span></span></code></pre></div>
+<p>（该例已实测:10 万虚拟线程 + 每个 10ms 阻塞,总耗时不到 0.2
+秒——如果换成 10
+万个平台线程,光是创建开销和内存就足以拖垮大多数机器。）</p>
 <h3 id="挂载与卸载">挂载与卸载</h3>
 <p>虚拟线程运行时<strong>挂载(mount)</strong>到一个平台线程(<strong>载体线程
 carrier</strong>,来自 ForkJoinPool)。遇到阻塞操作(如网络
@@ -719,6 +1012,30 @@ pin。</p>
 <p>关于 <code>volatile</code>/CAS 的底层内存屏障,可回顾 <a
 href="03-变量与内存模型.html">03-变量与内存模型</a>。线程池提交的任务与异常传播见
 <a href="09-错误处理与资源管理.html">09-错误处理与资源管理</a>。</p>
+<hr />
+<h2 id="小结">小结</h2>
+<ul>
+<li><strong>用法层面</strong>:<code>new Thread(() -&gt; ...).start()</code>
+开线程,<code>join()</code> 等它跑完;两个线程改同一个变量就用
+<code>synchronized</code> 包起来,或用
+<code>ReentrantLock</code>/<code>AtomicInteger</code>;批量任务用线程池
+<code>submit</code>,拿
+<code>Future</code>/<code>CompletableFuture</code>
+取结果;<code>ConcurrentHashMap</code> 代替并发场景下的
+<code>HashMap</code>;<code>Thread.ofVirtual()</code>/<code>newVirtualThreadPerTaskExecutor()</code>
+开虚拟线程,语法和平台线程一样但能开到百万级。</li>
+<li><strong>底层层面</strong>:多线程出问题的根源是 JMM
+抽象里”工作内存/主内存”不同步——可见性、有序性、原子性三个特性分别靠
+volatile/synchronized/happens-before 和 CAS
+保证。<code>synchronized</code> 锁状态记在对象头 mark word
+里,会经历偏向锁→轻量级锁→重量级锁的升级;CAS 是无锁并发的硬件基石(但有
+ABA 问题);<code>ReentrantLock</code> 基于
+AQS;<code>ConcurrentHashMap</code> 靠”空桶 CAS +
+非空桶锁单桶头结点”把并发度提到桶级;线程池要理解核心/最大线程数、队列、拒绝策略的提交流程;虚拟线程是
+JVM 调度的用户态线程,阻塞时卸载载体线程而不占用内核线程,但要避开会导致
+pinning 的场景。</li>
+</ul>
+<p>下一章看标准库里现成的算法与数据结构工具。</p>
 <hr />
 <p><a href="09-错误处理与资源管理.html">← 上一章:错误处理与资源管理</a>
 · <a href="index.html">返回目录</a> · <a

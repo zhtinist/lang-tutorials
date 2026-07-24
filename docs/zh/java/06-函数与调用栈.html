@@ -2,20 +2,17 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="zh-CN" xml:lang="zh-CN">
 <head>
   <meta charset="utf-8" />
-  <meta name="generator" content="pandoc 3.10" />
+  <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
   <title>函数与调用栈:方法与参数传递的真相</title>
   <style>
     /* Default styles provided by pandoc.
     ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
     */
+    code{white-space: pre-wrap;}
     span.smallcaps{font-variant: small-caps;}
-    div.columns{display: flex; gap: 1.5em;}
-    div.column{flex: auto;}
-    @media screen {
-    div.columns{gap: min(4vw, 1.5em);}
-    div.column{overflow-x: auto;}
-    }
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
     div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
     /* The extra [class] is a hack that increases specificity enough to
        override a similar rule in reveal.js */
@@ -110,6 +107,10 @@
 <li><a href="#函数与调用栈方法与参数传递的真相"
 id="toc-函数与调用栈方法与参数传递的真相">函数与调用栈:方法与参数传递的真相</a>
 <ul>
+<li><a href="#先会用方法怎么定义怎么调用"
+id="toc-先会用方法怎么定义怎么调用">先会用:方法怎么定义、怎么调用</a></li>
+<li><a href="#开始深入调用栈与参数传递的真相"
+id="toc-开始深入调用栈与参数传递的真相">开始深入:调用栈与参数传递的真相</a></li>
 <li><a href="#方法定义与重载"
 id="toc-方法定义与重载">方法定义与重载</a></li>
 <li><a href="#java-只有值传递反复强调"
@@ -125,50 +126,101 @@ id="toc-可变参数varargs">可变参数(varargs)</a></li>
 <li><a href="#lambda-与方法引用invokedynamic-的舞台"
 id="toc-lambda-与方法引用invokedynamic-的舞台">lambda
 与方法引用:invokedynamic 的舞台</a></li>
+<li><a href="#小结" id="toc-小结">小结</a></li>
 </ul></li>
 </ul>
 </nav>
 <h1
 id="函数与调用栈方法与参数传递的真相">函数与调用栈:方法与参数传递的真相</h1>
-<p>在 C++
+<p>本章先讲最基础的事:Java
+里方法怎么定义、怎么调用——这部分和你写过的任何语言差不多,几行代码就能上手。然后再进入本章真正的主题:在
+C++
 里你有全局函数、成员函数、静态成员函数、函数指针、引用参数、<code>std::move</code>……Java
-把这一切收窄成一个概念:<strong>方法(method)</strong>。方法永远属于某个类,没有游离于类之外的函数。但收窄不代表简单——方法调用背后的<strong>栈帧布局</strong>、<strong>分派机制</strong>和<strong>只有值传递</strong>这条铁律,才是本章要拆开的底层真相。</p>
+把这一切收窄成一个概念:<strong>方法(method)</strong>,方法永远属于某个类,没有游离于类之外的函数。但收窄不代表简单——方法调用背后的<strong>栈帧布局</strong>、<strong>分派机制</strong>和<strong>只有值传递</strong>这条铁律,才是本章要拆开的底层真相。只想会写方法,读完「先会用」就够;想搞懂”传对象进方法,改的到底是谁”这类问题,请把全篇读完。</p>
+<hr />
+<h2 id="先会用方法怎么定义怎么调用">先会用:方法怎么定义、怎么调用</h2>
+<p>Java 的方法必须写在某个类里面,由
+<code>返回类型 方法名(参数列表) { 方法体 }</code> 组成:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> MethodDemo <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">int</span> <span class="fu">add</span><span class="op">(</span><span class="dt">int</span> a<span class="op">,</span> <span class="dt">int</span> b<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> a <span class="op">+</span> b<span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">greet</span><span class="op">(</span><span class="bu">String</span> name<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;Hello, &quot;</span> <span class="op">+</span> name<span class="op">);</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span> sum <span class="op">=</span> <span class="fu">add</span><span class="op">(</span><span class="dv">3</span><span class="op">,</span> <span class="dv">4</span><span class="op">);</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>sum<span class="op">);</span>     <span class="co">// 7</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>        <span class="fu">greet</span><span class="op">(</span><span class="st">&quot;Ada&quot;</span><span class="op">);</span>                 <span class="co">// Hello, Ada</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<ul>
+<li>没有返回值就写 <code>void</code>,方法体里可以没有
+<code>return</code>,也可以用不带值的 <code>return;</code>
+提前退出。</li>
+<li>调用方法就是 <code>方法名(实参...)</code>,和 C 一样。</li>
+<li>上面用的都是 <code>static</code> 方法(属于类本身,不需要先
+<code>new</code> 一个对象就能调),普通实例方法需要先有一个对象再
+<code>对象.方法名(...)</code> 调用,这在<a
+href="08-面向对象与类型系统.html">「面向对象与类型系统」</a>详细展开。</li>
+</ul>
+<p>这些足够你写出正常的方法了。下面进入 Java
+方法调用背后的真相:重载怎么决议、参数到底是怎么传的、调用栈长什么样。</p>
+<hr />
+<h2
+id="开始深入调用栈与参数传递的真相">开始深入:调用栈与参数传递的真相</h2>
 <h2 id="方法定义与重载">方法定义与重载</h2>
+<h3 id="怎么用">怎么用</h3>
+<p>一个类里可以有多个<strong>同名但参数列表不同</strong>的方法,这叫<strong>重载(overload)</strong>,调用时编译器按实参类型自动选中对应的一个:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Greeter <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">say</span><span class="op">(</span><span class="bu">String</span> name<span class="op">)</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;Hi, &quot;</span> <span class="op">+</span> name<span class="op">);</span> <span class="op">}</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">say</span><span class="op">(</span><span class="dt">int</span> times<span class="op">)</span>   <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;repeat &quot;</span> <span class="op">+</span> times <span class="op">+</span> <span class="st">&quot; times&quot;</span><span class="op">);</span> <span class="op">}</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>        <span class="fu">say</span><span class="op">(</span><span class="st">&quot;Ada&quot;</span><span class="op">);</span>   <span class="co">// Hi, Ada          -- 选中 say(String)</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>        <span class="fu">say</span><span class="op">(</span><span class="dv">3</span><span class="op">);</span>       <span class="co">// repeat 3 times   -- 选中 say(int)</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="底层与-c-对比">底层与 C 对比</h3>
 <p>方法签名 = 方法名 + 参数类型列表(<strong>不含返回类型</strong>,这点和
 C++
 一致)。重载(overload)在<strong>编译期</strong>根据实参的静态类型选定目标,与
 C++ 的重载决议同理,但 Java
 没有默认参数,只能靠多个重载或可变参数模拟。</p>
-<div class="sourceCode" id="cb1"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Overload <span class="op">{</span></span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">f</span><span class="op">(</span><span class="dt">int</span> x<span class="op">)</span>    <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;int: &quot;</span> <span class="op">+</span> x<span class="op">);</span> <span class="op">}</span></span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">f</span><span class="op">(</span><span class="dt">long</span> x<span class="op">)</span>   <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;long: &quot;</span> <span class="op">+</span> x<span class="op">);</span> <span class="op">}</span></span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">f</span><span class="op">(</span><span class="bu">Object</span> x<span class="op">)</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;Object: &quot;</span> <span class="op">+</span> x<span class="op">);</span> <span class="op">}</span></span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>        <span class="fu">f</span><span class="op">(</span><span class="dv">1</span><span class="op">);</span>        <span class="co">// int:任何时候优先精确匹配</span></span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>        <span class="fu">f</span><span class="op">(</span><span class="dv">1L</span><span class="op">);</span>       <span class="co">// long</span></span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>        <span class="fu">f</span><span class="op">(</span><span class="st">&quot;hi&quot;</span><span class="op">);</span>     <span class="co">// Object</span></span>
-<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>        <span class="co">// 重载决议顺序:精确匹配 → 拓宽(widening) → 装箱(boxing) → 可变参数</span></span>
-<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>        <span class="dt">byte</span> b <span class="op">=</span> <span class="dv">5</span><span class="op">;</span></span>
-<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>        <span class="fu">f</span><span class="op">(</span>b<span class="op">);</span>        <span class="co">// int:byte 拓宽成 int,而不是装箱成 Object</span></span>
-<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Overload <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">f</span><span class="op">(</span><span class="dt">int</span> x<span class="op">)</span>    <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;int: &quot;</span> <span class="op">+</span> x<span class="op">);</span> <span class="op">}</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">f</span><span class="op">(</span><span class="dt">long</span> x<span class="op">)</span>   <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;long: &quot;</span> <span class="op">+</span> x<span class="op">);</span> <span class="op">}</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">f</span><span class="op">(</span><span class="bu">Object</span> x<span class="op">)</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;Object: &quot;</span> <span class="op">+</span> x<span class="op">);</span> <span class="op">}</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>        <span class="fu">f</span><span class="op">(</span><span class="dv">1</span><span class="op">);</span>        <span class="co">// int:任何时候优先精确匹配</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>        <span class="fu">f</span><span class="op">(</span><span class="dv">1L</span><span class="op">);</span>       <span class="co">// long</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>        <span class="fu">f</span><span class="op">(</span><span class="st">&quot;hi&quot;</span><span class="op">);</span>     <span class="co">// Object</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>        <span class="co">// 重载决议顺序:精确匹配 → 拓宽(widening) → 装箱(boxing) → 可变参数</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>        <span class="dt">byte</span> b <span class="op">=</span> <span class="dv">5</span><span class="op">;</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>        <span class="fu">f</span><span class="op">(</span>b<span class="op">);</span>        <span class="co">// int:byte 拓宽成 int,而不是装箱成 Object</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>关键:重载决议在编译期完成,<code>javac</code>
 直接把调用点绑定到某个具体签名。运行期的对象实际类型对<strong>重载</strong>毫无影响——这与下文的<strong>重写(override)</strong>是两码事。</p>
 <p>“重载看静态类型”这一点最容易和重写混淆。看这个例子:同一个对象,声明类型不同,选中的重载就不同:</p>
-<div class="sourceCode" id="cb2"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> OverloadStatic <span class="op">{</span></span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">f</span><span class="op">(</span><span class="bu">Object</span> o<span class="op">)</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;Object&quot;</span><span class="op">);</span> <span class="op">}</span></span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">f</span><span class="op">(</span><span class="bu">String</span> s<span class="op">)</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;String&quot;</span><span class="op">);</span> <span class="op">}</span></span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Object</span> x <span class="op">=</span> <span class="st">&quot;hi&quot;</span><span class="op">;</span>        <span class="co">// 运行期实际类型是 String</span></span>
-<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>        <span class="fu">f</span><span class="op">(</span>x<span class="op">);</span>                   <span class="co">// Object —— 只看 x 的静态类型 Object</span></span>
-<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>        <span class="fu">f</span><span class="op">(</span><span class="st">&quot;hi&quot;</span><span class="op">);</span>                <span class="co">// String —— 字面量静态类型 String</span></span>
-<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>        <span class="fu">f</span><span class="op">((</span><span class="bu">Object</span><span class="op">)</span> <span class="st">&quot;hi&quot;</span><span class="op">);</span>       <span class="co">// Object —— 强转改变静态类型</span></span>
-<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> OverloadStatic <span class="op">{</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">f</span><span class="op">(</span><span class="bu">Object</span> o<span class="op">)</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;Object&quot;</span><span class="op">);</span> <span class="op">}</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">f</span><span class="op">(</span><span class="bu">String</span> s<span class="op">)</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;String&quot;</span><span class="op">);</span> <span class="op">}</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Object</span> x <span class="op">=</span> <span class="st">&quot;hi&quot;</span><span class="op">;</span>        <span class="co">// 运行期实际类型是 String</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>        <span class="fu">f</span><span class="op">(</span>x<span class="op">);</span>                   <span class="co">// Object —— 只看 x 的静态类型 Object</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>        <span class="fu">f</span><span class="op">(</span><span class="st">&quot;hi&quot;</span><span class="op">);</span>                <span class="co">// String —— 字面量静态类型 String</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>        <span class="fu">f</span><span class="op">((</span><span class="bu">Object</span><span class="op">)</span> <span class="st">&quot;hi&quot;</span><span class="op">);</span>       <span class="co">// Object —— 强转改变静态类型</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p><code>x</code> 运行期明明装着 <code>String</code>,但
 <code>f(x)</code> 仍选中
 <code>f(Object)</code>——因为重载在<strong>编译期</strong>按变量的<strong>声明类型</strong>定死,运行期实际类型不参与。这恰好和重写(override,按运行期实际类型走
@@ -186,28 +238,28 @@ C++ 意义上的”引用别名”。</p>
 <p>副本和原变量指向<strong>同一个堆对象</strong>,所以你能改对象内容;但重新赋值副本,原变量纹丝不动。</p>
 <h3 id="swap-反例证明改不了调用方的指向">swap
 反例:证明改不了调用方的指向</h3>
-<div class="sourceCode" id="cb3"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Swap <span class="op">{</span></span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">class</span> <span class="bu">Box</span> <span class="op">{</span> <span class="dt">int</span> v<span class="op">;</span> <span class="bu">Box</span><span class="op">(</span><span class="dt">int</span> v<span class="op">)</span> <span class="op">{</span> <span class="kw">this</span><span class="op">.</span><span class="fu">v</span> <span class="op">=</span> v<span class="op">;</span> <span class="op">}</span> <span class="op">}</span></span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 试图交换两个引用——注定失败</span></span>
-<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">swap</span><span class="op">(</span><span class="bu">Box</span> a<span class="op">,</span> <span class="bu">Box</span> b<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Box</span> t <span class="op">=</span> a<span class="op">;</span> a <span class="op">=</span> b<span class="op">;</span> b <span class="op">=</span> t<span class="op">;</span>   <span class="co">// 只交换了副本 a、b 的指向</span></span>
-<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 能改对象内容——成功</span></span>
-<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">fill</span><span class="op">(</span><span class="bu">Box</span> x<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>        x<span class="op">.</span><span class="fu">v</span> <span class="op">=</span> <span class="dv">999</span><span class="op">;</span>                 <span class="co">// 通过副本引用写堆里的字段</span></span>
-<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Box</span> p <span class="op">=</span> <span class="kw">new</span> <span class="bu">Box</span><span class="op">(</span><span class="dv">1</span><span class="op">),</span> q <span class="op">=</span> <span class="kw">new</span> <span class="bu">Box</span><span class="op">(</span><span class="dv">2</span><span class="op">);</span></span>
-<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>        <span class="fu">swap</span><span class="op">(</span>p<span class="op">,</span> q<span class="op">);</span></span>
-<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>p<span class="op">.</span><span class="fu">v</span> <span class="op">+</span> <span class="st">&quot; &quot;</span> <span class="op">+</span> q<span class="op">.</span><span class="fu">v</span><span class="op">);</span> <span class="co">// 1 2:调用方指向没变</span></span>
-<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>        <span class="fu">fill</span><span class="op">(</span>p<span class="op">);</span></span>
-<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>p<span class="op">.</span><span class="fu">v</span><span class="op">);</span>             <span class="co">// 999:对象内容被改了</span></span>
-<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Swap <span class="op">{</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">class</span> <span class="bu">Box</span> <span class="op">{</span> <span class="dt">int</span> v<span class="op">;</span> <span class="bu">Box</span><span class="op">(</span><span class="dt">int</span> v<span class="op">)</span> <span class="op">{</span> <span class="kw">this</span><span class="op">.</span><span class="fu">v</span> <span class="op">=</span> v<span class="op">;</span> <span class="op">}</span> <span class="op">}</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 试图交换两个引用——注定失败</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">swap</span><span class="op">(</span><span class="bu">Box</span> a<span class="op">,</span> <span class="bu">Box</span> b<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Box</span> t <span class="op">=</span> a<span class="op">;</span> a <span class="op">=</span> b<span class="op">;</span> b <span class="op">=</span> t<span class="op">;</span>   <span class="co">// 只交换了副本 a、b 的指向</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 能改对象内容——成功</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">fill</span><span class="op">(</span><span class="bu">Box</span> x<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>        x<span class="op">.</span><span class="fu">v</span> <span class="op">=</span> <span class="dv">999</span><span class="op">;</span>                 <span class="co">// 通过副本引用写堆里的字段</span></span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Box</span> p <span class="op">=</span> <span class="kw">new</span> <span class="bu">Box</span><span class="op">(</span><span class="dv">1</span><span class="op">),</span> q <span class="op">=</span> <span class="kw">new</span> <span class="bu">Box</span><span class="op">(</span><span class="dv">2</span><span class="op">);</span></span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>        <span class="fu">swap</span><span class="op">(</span>p<span class="op">,</span> q<span class="op">);</span></span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>p<span class="op">.</span><span class="fu">v</span> <span class="op">+</span> <span class="st">&quot; &quot;</span> <span class="op">+</span> q<span class="op">.</span><span class="fu">v</span><span class="op">);</span> <span class="co">// 1 2:调用方指向没变</span></span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>        <span class="fu">fill</span><span class="op">(</span>p<span class="op">);</span></span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>p<span class="op">.</span><span class="fu">v</span><span class="op">);</span>             <span class="co">// 999:对象内容被改了</span></span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>内存图(<code>swap</code> 执行到 <code>b = t;</code> 时):</p>
 <pre><code>   main 栈帧                     swap 栈帧
  +----------+                 +----------+
@@ -287,11 +339,11 @@ int、相加、压回结果。最大深度也在编译期确定(<code>stack</cod
 <li><strong>帧数据</strong>:返回地址(调用者的下一条指令)、异常表引用等。</li>
 </ul>
 <p>用 <code>javap</code> 看真相:</p>
-<div class="sourceCode" id="cb6"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Frame.java</span></span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> <span class="bu">Frame</span> <span class="op">{</span></span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">int</span> <span class="fu">add</span><span class="op">(</span><span class="dt">int</span> a<span class="op">,</span> <span class="dt">int</span> b<span class="op">)</span> <span class="op">{</span> <span class="dt">int</span> c <span class="op">=</span> a <span class="op">+</span> b<span class="op">;</span> <span class="cf">return</span> c<span class="op">;</span> <span class="op">}</span></span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Frame.java</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> <span class="bu">Frame</span> <span class="op">{</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">int</span> <span class="fu">add</span><span class="op">(</span><span class="dt">int</span> a<span class="op">,</span> <span class="dt">int</span> b<span class="op">)</span> <span class="op">{</span> <span class="dt">int</span> c <span class="op">=</span> a <span class="op">+</span> b<span class="op">;</span> <span class="cf">return</span> c<span class="op">;</span> <span class="op">}</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <pre><code>$ javac Frame.java &amp;&amp; javap -c -v Frame.class
 static int add(int, int);
   Code:
@@ -367,70 +419,102 @@ C++ 的 vptr → vtable 机制几乎一模一样,区别在于:</p>
 +-------------+       | vtable[1] -&gt; Dog.speak
 | 实例字段    |       | vtable[2] -&gt; ...  |
 +-------------+       +------------------+</code></pre>
-<div class="sourceCode" id="cb9"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> <span class="bu">Dispatch</span> <span class="op">{</span></span>
-<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">class</span> Animal <span class="op">{</span> <span class="dt">void</span> <span class="fu">speak</span><span class="op">()</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;...&quot;</span><span class="op">);</span> <span class="op">}</span> <span class="op">}</span></span>
-<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">class</span> Dog <span class="kw">extends</span> Animal <span class="op">{</span> <span class="at">@Override</span> <span class="dt">void</span> <span class="fu">speak</span><span class="op">()</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;Woof&quot;</span><span class="op">);</span> <span class="op">}</span> <span class="op">}</span></span>
-<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>        Animal a <span class="op">=</span> <span class="kw">new</span> <span class="fu">Dog</span><span class="op">();</span></span>
-<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>        a<span class="op">.</span><span class="fu">speak</span><span class="op">();</span>   <span class="co">// invokevirtual:静态类型 Animal,运行期查到 Dog 的 vtable 槽 -&gt; &quot;Woof&quot;</span></span>
-<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> <span class="bu">Dispatch</span> <span class="op">{</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">class</span> Animal <span class="op">{</span> <span class="dt">void</span> <span class="fu">speak</span><span class="op">()</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;...&quot;</span><span class="op">);</span> <span class="op">}</span> <span class="op">}</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">class</span> Dog <span class="kw">extends</span> Animal <span class="op">{</span> <span class="at">@Override</span> <span class="dt">void</span> <span class="fu">speak</span><span class="op">()</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;Woof&quot;</span><span class="op">);</span> <span class="op">}</span> <span class="op">}</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>        Animal a <span class="op">=</span> <span class="kw">new</span> <span class="fu">Dog</span><span class="op">();</span></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>        a<span class="op">.</span><span class="fu">speak</span><span class="op">();</span>   <span class="co">// invokevirtual:静态类型 Animal,运行期查到 Dog 的 vtable 槽 -&gt; &quot;Woof&quot;</span></span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p><code>invokeinterface</code> 稍慢:接口方法在实现类里的 vtable
 索引不固定,需查 itable(interface method table)或做搜索,JIT
 会用内联缓存(inline cache)优化。</p>
 <h2 id="递归与-stackoverflowerror">递归与 StackOverflowError</h2>
+<h3 id="怎么用-1">怎么用</h3>
+<p>递归方法就是方法体里调用自己,和 C 里写法完全一样:</p>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Factorial <span class="op">{</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">long</span> <span class="fu">fact</span><span class="op">(</span><span class="dt">int</span> n<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>n <span class="op">&lt;=</span> <span class="dv">1</span><span class="op">)</span> <span class="cf">return</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> n <span class="op">*</span> <span class="fu">fact</span><span class="op">(</span>n <span class="op">-</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="fu">fact</span><span class="op">(</span><span class="dv">5</span><span class="op">));</span>   <span class="co">// 120</span></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="底层与-c-对比-1">底层与 C 对比</h3>
 <p>每层递归压一个栈帧。Java 栈容量由 <code>-Xss</code> 决定(默认约
 512KB~1MB,平台相关)。栈耗尽抛 <code>StackOverflowError</code>(注意是
 <code>Error</code> 不是 <code>Exception</code>,见<a
 href="09-错误处理与资源管理.html">第 9 章</a>)。JVM
 <strong>不做尾调用优化</strong>(TCO),即便是尾递归也照样吃栈——这是与许多函数式语言、部分
 C++ 编译器的重要区别。</p>
-<div class="sourceCode" id="cb10"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Recur <span class="op">{</span></span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">long</span> depth <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
-<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">dive</span><span class="op">()</span> <span class="op">{</span> depth<span class="op">++;</span> <span class="fu">dive</span><span class="op">();</span> <span class="op">}</span>   <span class="co">// 无终止,故意撑爆栈</span></span>
-<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">{</span> <span class="fu">dive</span><span class="op">();</span> <span class="op">}</span></span>
-<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">catch</span> <span class="op">(</span><span class="bu">StackOverflowError</span> e<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;爆栈深度约: &quot;</span> <span class="op">+</span> depth<span class="op">);</span> <span class="co">// 每帧越大,层数越少</span></span>
-<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
-<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Recur <span class="op">{</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">long</span> depth <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">dive</span><span class="op">()</span> <span class="op">{</span> depth<span class="op">++;</span> <span class="fu">dive</span><span class="op">();</span> <span class="op">}</span>   <span class="co">// 无终止,故意撑爆栈</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">{</span> <span class="fu">dive</span><span class="op">();</span> <span class="op">}</span></span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">catch</span> <span class="op">(</span><span class="bu">StackOverflowError</span> e<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;爆栈深度约: &quot;</span> <span class="op">+</span> depth<span class="op">);</span> <span class="co">// 每帧越大,层数越少</span></span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>深递归应改写为迭代 + 显式 <code>Deque</code>
 模拟栈,把帧数据从线程栈搬到堆上。</p>
 <h2 id="可变参数varargs">可变参数(varargs)</h2>
+<h3 id="怎么用-2">怎么用</h3>
+<p>参数类型后面加 <code>...</code>,调用时可以传任意个数的实参(包括 0
+个),方法内部当数组用:</p>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Varargs <span class="op">{</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">int</span> <span class="fu">sum</span><span class="op">(</span><span class="dt">int</span><span class="kw">...</span> xs<span class="op">)</span> <span class="op">{</span>          <span class="co">// 编译为 int[] xs</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span> s <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> x <span class="op">:</span> xs<span class="op">)</span> s <span class="op">+=</span> x<span class="op">;</span> <span class="cf">return</span> s<span class="op">;</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="fu">sum</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">));</span> <span class="co">// 编译器生成 new int[]{1,2,3}</span></span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="fu">sum</span><span class="op">());</span>        <span class="co">// 传空数组 new int[]{},不是 null</span></span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span><span class="op">[]</span> arr <span class="op">=</span> <span class="op">{</span><span class="dv">4</span><span class="op">,</span> <span class="dv">5</span><span class="op">};</span></span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="fu">sum</span><span class="op">(</span>arr<span class="op">));</span>     <span class="co">// 直接传数组,不再包一层</span></span>
+<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="底层与-c-对比-2">底层与 C 对比</h3>
 <p><code>T...</code> 在字节码里就是
-<code>T[]</code>。编译器在调用点自动把散列实参打包成一个<strong>堆上的数组</strong>——所以每次调用都可能有一次数组分配。</p>
-<div class="sourceCode" id="cb11"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Varargs <span class="op">{</span></span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">int</span> <span class="fu">sum</span><span class="op">(</span><span class="dt">int</span><span class="kw">...</span> xs<span class="op">)</span> <span class="op">{</span>          <span class="co">// 编译为 int[] xs</span></span>
-<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span> s <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> x <span class="op">:</span> xs<span class="op">)</span> s <span class="op">+=</span> x<span class="op">;</span> <span class="cf">return</span> s<span class="op">;</span></span>
-<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="fu">sum</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">));</span> <span class="co">// 编译器生成 new int[]{1,2,3}</span></span>
-<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="fu">sum</span><span class="op">());</span>        <span class="co">// 传空数组 new int[]{},不是 null</span></span>
-<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span><span class="op">[]</span> arr <span class="op">=</span> <span class="op">{</span><span class="dv">4</span><span class="op">,</span> <span class="dv">5</span><span class="op">};</span></span>
-<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="fu">sum</span><span class="op">(</span>arr<span class="op">));</span>     <span class="co">// 直接传数组,不再包一层</span></span>
-<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
-<p>重载 + varargs 时,固定参数版本优先于 varargs 版本(varargs
+<code>T[]</code>。编译器在调用点自动把散列实参打包成一个<strong>堆上的数组</strong>——所以每次调用都可能有一次数组分配。重载
++ varargs 时,固定参数版本优先于 varargs 版本(varargs
 是决议的最后一档)。</p>
 <h2 id="lambda-与方法引用invokedynamic-的舞台">lambda
 与方法引用:invokedynamic 的舞台</h2>
+<h3 id="怎么用-3">怎么用</h3>
+<p>lambda 是”没有名字的方法体”,写法是
+<code>(参数) -&gt; 表达式或代码块</code>,常用来当作一个”可传递的行为”传给别的方法:</p>
+<div class="sourceCode" id="cb15"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">function</span><span class="op">.</span><span class="im">IntBinaryOperator</span><span class="op">;</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> LambdaBasic <span class="op">{</span></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>        IntBinaryOperator add <span class="op">=</span> <span class="op">(</span>a<span class="op">,</span> b<span class="op">)</span> <span class="op">-&gt;</span> a <span class="op">+</span> b<span class="op">;</span></span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>add<span class="op">.</span><span class="fu">applyAsInt</span><span class="op">(</span><span class="dv">3</span><span class="op">,</span> <span class="dv">4</span><span class="op">));</span>   <span class="co">// 7</span></span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>方法引用是 lambda 的简写,<code>类::方法名</code>
+直接把一个已有方法当作行为传递,比如
+<code>System.out::println</code>。</p>
+<h3 id="底层与-c-对比-3">底层与 C 对比</h3>
 <p>C++ 的 lambda 在编译期生成一个匿名闭包类(带
 <code>operator()</code>)。Java <strong>没有</strong>在编译期为每个
 lambda 生成 <code>.class</code>,而是用 <code>invokedynamic</code>
 把实现推迟到<strong>运行期</strong>。</p>
-<div class="sourceCode" id="cb12"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">function</span><span class="op">.</span><span class="im">IntBinaryOperator</span><span class="op">;</span></span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Lambda <span class="op">{</span></span>
-<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>        IntBinaryOperator add <span class="op">=</span> <span class="op">(</span>a<span class="op">,</span> b<span class="op">)</span> <span class="op">-&gt;</span> a <span class="op">+</span> b<span class="op">;</span>   <span class="co">// 编译成一个 invokedynamic 调用点</span></span>
-<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>add<span class="op">.</span><span class="fu">applyAsInt</span><span class="op">(</span><span class="dv">3</span><span class="op">,</span> <span class="dv">4</span><span class="op">));</span></span>
-<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb16"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">function</span><span class="op">.</span><span class="im">IntBinaryOperator</span><span class="op">;</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Lambda <span class="op">{</span></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>        IntBinaryOperator add <span class="op">=</span> <span class="op">(</span>a<span class="op">,</span> b<span class="op">)</span> <span class="op">-&gt;</span> a <span class="op">+</span> b<span class="op">;</span>   <span class="co">// 编译成一个 invokedynamic 调用点</span></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>add<span class="op">.</span><span class="fu">applyAsInt</span><span class="op">(</span><span class="dv">3</span><span class="op">,</span> <span class="dv">4</span><span class="op">));</span></span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p><code>javap -c</code> 会看到 <code>invokedynamic #N, 0</code>
 与一个引导方法(bootstrap
 method)<code>LambdaMetafactory.metafactory</code>。机制:</p>
@@ -456,20 +540,20 @@ C++ 的 <code>[=]</code> 按值捕获语义相近,而 Java 不允许
 <p>一个直观的可运行验证:循环里每轮把 <code>i</code> 存进一个新的
 <code>cur</code>(每次迭代都是新变量、事实最终),各 lambda
 捕获的是各自那一份值:</p>
-<div class="sourceCode" id="cb13"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.*;</span></span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">function</span><span class="op">.</span><span class="im">Supplier</span><span class="op">;</span></span>
-<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Capture <span class="op">{</span></span>
-<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>        <span class="bu">List</span><span class="op">&lt;</span>Supplier<span class="op">&lt;</span><span class="bu">Integer</span><span class="op">&gt;&gt;</span> fns <span class="op">=</span> <span class="kw">new</span> <span class="bu">ArrayList</span><span class="op">&lt;&gt;();</span></span>
-<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">3</span><span class="op">;</span> i<span class="op">++)</span> <span class="op">{</span></span>
-<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>            <span class="dt">int</span> cur <span class="op">=</span> i<span class="op">;</span>              <span class="co">// 每轮一个新的、事实最终的变量</span></span>
-<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>            fns<span class="op">.</span><span class="fu">add</span><span class="op">(()</span> <span class="op">-&gt;</span> cur<span class="op">);</span>       <span class="co">// 捕获 cur 当时的值</span></span>
-<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
-<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span><span class="dt">var</span> f <span class="op">:</span> fns<span class="op">)</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">print</span><span class="op">(</span>f<span class="op">.</span><span class="fu">get</span><span class="op">()</span> <span class="op">+</span> <span class="st">&quot; &quot;</span><span class="op">);</span>  <span class="co">// 0 1 2</span></span>
-<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">();</span></span>
-<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb17"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.*;</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">function</span><span class="op">.</span><span class="im">Supplier</span><span class="op">;</span></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Capture <span class="op">{</span></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>        <span class="bu">List</span><span class="op">&lt;</span>Supplier<span class="op">&lt;</span><span class="bu">Integer</span><span class="op">&gt;&gt;</span> fns <span class="op">=</span> <span class="kw">new</span> <span class="bu">ArrayList</span><span class="op">&lt;&gt;();</span></span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">3</span><span class="op">;</span> i<span class="op">++)</span> <span class="op">{</span></span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a>            <span class="dt">int</span> cur <span class="op">=</span> i<span class="op">;</span>              <span class="co">// 每轮一个新的、事实最终的变量</span></span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a>            fns<span class="op">.</span><span class="fu">add</span><span class="op">(()</span> <span class="op">-&gt;</span> cur<span class="op">);</span>       <span class="co">// 捕获 cur 当时的值</span></span>
+<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span><span class="dt">var</span> f <span class="op">:</span> fns<span class="op">)</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">print</span><span class="op">(</span>f<span class="op">.</span><span class="fu">get</span><span class="op">()</span> <span class="op">+</span> <span class="st">&quot; &quot;</span><span class="op">);</span>  <span class="co">// 0 1 2</span></span>
+<span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">();</span></span>
+<span id="cb17-12"><a href="#cb17-12" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb17-13"><a href="#cb17-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>三个 lambda 分别打印
 <code>0 1 2</code>,因为每个捕获的是<strong>创建时刻 <code>cur</code>
 的值副本</strong>,而非共享同一个变量。这与 JavaScript 里
@@ -477,12 +561,23 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb13-1"><a href=
 <code>3 3 3</code>)形成对比——Java 靠”捕获值副本 +
 事实最终”从根上避免了这类共享可变状态的坑。</p>
 <hr />
-<p>小结:方法属于类;传参永远是值传递(引用类型传引用值的副本);栈帧由局部变量表
-+ 操作数栈 + 帧数据构成;<code>invokestatic/special</code>
+<h2 id="小结">小结</h2>
+<ul>
+<li><strong>用法层面</strong>:方法写在类里,<code>返回类型 方法名(参数) { ... }</code>
+定义、<code>方法名(实参)</code>
+调用;同名不同参数列表可以重载,编译器按实参类型自动选;递归就是方法调自己;可变参数
+<code>T...</code> 当数组用;lambda 用 <code>(参数) -&gt; 表达式</code>
+写一段可传递的行为。</li>
+<li><strong>底层层面</strong>:方法属于类;传参永远是值传递(引用类型传引用值的副本);重载在编译期按静态类型决议,与运行期按动态类型走
+vtable 的重写是两回事;栈帧由局部变量表 + 操作数栈 +
+帧数据构成;<code>invokestatic/special</code>
 静态绑定,<code>invokevirtual/interface</code> 走 vtable/itable
-动态分派,<code>invokedynamic</code> 承载 lambda
-的运行期生成。下一章我们把镜头转向异常与内存回收——当栈帧因异常提前展开、当堆对象无人引用时,JVM
+动态分派,<code>invokedynamic</code> 承载 lambda 的运行期生成;JVM
+不做尾调用优化,深递归会 <code>StackOverflowError</code>。</li>
+</ul>
+<p>下一章我们把镜头转向异常与内存回收——当栈帧因异常提前展开、当堆对象无人引用时,JVM
 如何收场。</p>
+<hr />
 <p><a href="05-控制流.html">← 上一章:控制流</a> · <a
 href="index.html">返回目录</a> · <a
 href="07-复合数据结构.html">下一章:复合数据结构</a> →</p>

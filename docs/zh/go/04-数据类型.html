@@ -2,20 +2,17 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="zh-CN" xml:lang="zh-CN">
 <head>
   <meta charset="utf-8" />
-  <meta name="generator" content="pandoc 3.10" />
+  <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
   <title>数据类型</title>
   <style>
     /* Default styles provided by pandoc.
     ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
     */
+    code{white-space: pre-wrap;}
     span.smallcaps{font-variant: small-caps;}
-    div.columns{display: flex; gap: 1.5em;}
-    div.column{flex: auto;}
-    @media screen {
-    div.columns{gap: min(4vw, 1.5em);}
-    div.column{overflow-x: auto;}
-    }
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
     div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
     /* The extra [class] is a hack that increases specificity enough to
        override a similar rule in reveal.js */
@@ -109,6 +106,9 @@
 <ul>
 <li><a href="#数据类型" id="toc-数据类型">数据类型</a>
 <ul>
+<li><a href="#先会用内置类型速览"
+id="toc-先会用内置类型速览">先会用:内置类型速览</a></li>
+<li><a href="#开始深入" id="toc-开始深入">开始深入</a></li>
 <li><a href="#定长数值类型" id="toc-定长数值类型">定长数值类型</a></li>
 <li><a href="#无类型常量与隐式转换规则"
 id="toc-无类型常量与隐式转换规则">无类型常量与隐式转换规则</a></li>
@@ -121,17 +121,83 @@ padding</a></li>
 id="toc-string只读的-ptr-len-头">string:只读的 (ptr, len) 头</a></li>
 <li><a href="#interfacetype-data-双字"
 id="toc-interfacetype-data-双字">interface:(type, data) 双字</a></li>
-<li><a href="#小结内存布局速查"
-id="toc-小结内存布局速查">小结:内存布局速查</a></li>
+<li><a href="#小结" id="toc-小结">小结</a></li>
 </ul></li>
 </ul>
 </nav>
 <h1 id="数据类型">数据类型</h1>
+<p>本章先带你认识 Go
+的常用内置类型<strong>怎么声明、怎么用</strong>——这部分不需要任何底层知识。认全了之后,再进入”底层与
+C 对比”:这些类型在内存里到底长什么样,int 到底多宽、struct
+怎么对齐、string 为什么不是 <code>char*</code>、interface
+值到底是什么。只想会用,读完第一节就够;想搞懂内存布局与性能,再往下看。</p>
+<h2 id="先会用内置类型速览">先会用:内置类型速览</h2>
+<p>Go 的基本类型和字面量,照着写就能跑:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> n <span class="dt">int</span> <span class="op">=</span> <span class="dv">42</span>        <span class="co">// 整数</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> f <span class="dt">float64</span> <span class="op">=</span> <span class="fl">3.14</span>  <span class="co">// 浮点数</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> b <span class="dt">bool</span> <span class="op">=</span> <span class="ot">true</span>     <span class="co">// 布尔</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> s <span class="dt">string</span> <span class="op">=</span> <span class="st">&quot;café&quot;</span> <span class="co">// 字符串(UTF-8 编码)</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> by <span class="dt">byte</span> <span class="op">=</span> <span class="ch">&#39;A&#39;</span>     <span class="co">// 一个字节(uint8),常用来处理二进制/ASCII</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> r <span class="dt">rune</span> <span class="op">=</span> <span class="ch">&#39;中&#39;</span>      <span class="co">// 一个 Unicode 字符(int32)</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>n<span class="op">,</span> f<span class="op">,</span> b<span class="op">,</span> s<span class="op">,</span> by<span class="op">,</span> r<span class="op">)</span> <span class="co">// 42 3.14 true café 65 20013</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>类型转换、数字与字符串互转:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="op">(</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;strconv&quot;</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="op">)</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    i <span class="op">:=</span> <span class="dv">42</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    f <span class="op">:=</span> <span class="dt">float64</span><span class="op">(</span>i<span class="op">)</span>             <span class="co">// int -&gt; float64,必须显式转换</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    str <span class="op">:=</span> strconv<span class="op">.</span>Itoa<span class="op">(</span>i<span class="op">)</span>      <span class="co">// 数字转字符串</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    n<span class="op">,</span> _ <span class="op">:=</span> strconv<span class="op">.</span>Atoi<span class="op">(</span><span class="st">&quot;100&quot;</span><span class="op">)</span> <span class="co">// 字符串转数字</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>f<span class="op">,</span> str<span class="op">,</span> n<span class="op">)</span> <span class="co">// 42 42 100</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>再认识两种”容器”类型——数组、切片,以及结构体:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Point <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    X<span class="op">,</span> Y <span class="dt">int</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    arr <span class="op">:=</span> <span class="op">[</span><span class="dv">3</span><span class="op">]</span><span class="dt">int</span><span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">}</span> <span class="co">// 数组:长度固定,是类型的一部分</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    sl <span class="op">:=</span> <span class="op">[]</span><span class="dt">int</span><span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">}</span>   <span class="co">// 切片:长度可变</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    p <span class="op">:=</span> Point<span class="op">{</span>X<span class="op">:</span> <span class="dv">1</span><span class="op">,</span> Y<span class="op">:</span> <span class="dv">2</span><span class="op">}</span> <span class="co">// 结构体:把相关数据打包在一起</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>arr<span class="op">,</span> sl<span class="op">,</span> p<span class="op">.</span>X<span class="op">,</span> p<span class="op">.</span>Y<span class="op">)</span> <span class="co">// [1 2 3] [1 2 3] 1 2</span></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="bu">len</span><span class="op">(</span>arr<span class="op">),</span> <span class="bu">len</span><span class="op">(</span>sl<span class="op">))</span> <span class="co">// 3 3</span></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>这些足够你开始声明变量、写简单程序。下面进入底层——这些类型在内存里到底占几个字节、怎么排布,并处处与
+C 对照。</p>
+<h2 id="开始深入">开始深入</h2>
 <p>上一章讲清了内存语义(值拷贝、指针、逃逸)。这一章把 Go
-的类型系统逐个摊开,重点仍然是<strong>底层内存布局</strong>,并处处与 C
-对照:哪些是定长的、int 到底多宽、struct 怎么对齐、string 为什么不是
-<code>char*</code>、interface 值到底是什么。</p>
+的类型系统逐个摊开,重点是<strong>底层内存布局</strong>,并处处与 C
+对照。</p>
 <h2 id="定长数值类型">定长数值类型</h2>
+<h3 id="怎么用">怎么用</h3>
+<p>上一节已经用过
+<code>int</code>、<code>float64</code>、<code>bool</code>、<code>byte</code>、<code>rune</code>。数值类型之间不能隐式混用,必须用
+<code>T(x)</code> 显式转换(详见<a href="02-基础语法.html">第 2
+章</a>):</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> a <span class="dt">int32</span> <span class="op">=</span> <span class="dv">1</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> b <span class="dt">int64</span> <span class="op">=</span> <span class="dv">2</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="co">// c := a + b        // 编译错误:mismatched types int32 and int64</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>c <span class="op">:=</span> <span class="dt">int64</span><span class="op">(</span>a<span class="op">)</span> <span class="op">+</span> b    <span class="co">// 必须显式转换</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> f <span class="dt">float64</span> <span class="op">=</span> <span class="dt">float64</span><span class="op">(</span>a<span class="op">)</span> <span class="co">// int32 → float64 也要显式</span></span></code></pre></div>
+<h3 id="底层与-c-对比">底层与 C 对比</h3>
 <p>Go 的数值类型宽度是<strong>语言规范写死的</strong>,不像 C 里
 <code>int</code>/<code>long</code>
 的宽度随平台和编译器漂移。这对写跨平台、写协议的人是巨大的确定性。</p>
@@ -191,17 +257,12 @@ id="toc-小结内存布局速查">小结:内存布局速查</a></li>
 即可。</li>
 <li><strong>没有隐式整型提升,也没有隐式类型转换</strong>。C 里
 <code>int + long</code>、<code>int + double</code> 会自动提升;Go
-里<strong>不同类型不能直接混用</strong>,必须显式转换:</li>
+里<strong>不同类型不能直接混用</strong>,必须显式转换(见上)。这种”啰嗦”是故意的:C
+的隐式转换和整型提升是无数溢出、截断、符号 bug 的温床,Go
+直接从语言层面禁掉。</li>
 </ul>
-<div class="sourceCode" id="cb1"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> a <span class="dt">int32</span> <span class="op">=</span> <span class="dv">1</span></span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> b <span class="dt">int64</span> <span class="op">=</span> <span class="dv">2</span></span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co">// c := a + b        // 编译错误:mismatched types int32 and int64</span></span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>c <span class="op">:=</span> <span class="dt">int64</span><span class="op">(</span>a<span class="op">)</span> <span class="op">+</span> b    <span class="co">// 必须显式转换</span></span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> f <span class="dt">float64</span> <span class="op">=</span> <span class="dt">float64</span><span class="op">(</span>a<span class="op">)</span> <span class="co">// int32 → float64 也要显式</span></span></code></pre></div>
-<p>这种”啰嗦”是故意的:C 的隐式转换和整型提升是无数溢出、截断、符号 bug
-的温床,Go 直接从语言层面禁掉。</p>
-<h3 id="rune-与-byte">rune 与 byte</h3>
-<p>两个重要别名,底层就是整数,但语义命名让代码更清楚:</p>
+<p><strong><code>rune</code> 与
+<code>byte</code></strong>:两个重要别名,底层就是整数,但语义命名让代码更清楚:</p>
 <table>
 <thead>
 <tr>
@@ -225,10 +286,9 @@ id="toc-小结内存布局速查">小结:内存布局速查</a></li>
 </table>
 <p><code>rune</code> 是 <code>int32</code> 而不是一字节,因为一个 Unicode
 码点最大需要 21 位。遍历字符串时理解这点很关键(下文 string
-一节详述)。</p>
-<div class="sourceCode" id="cb2"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> b <span class="dt">byte</span> <span class="op">=</span> <span class="ch">&#39;A&#39;</span>   <span class="co">// 65,占 1 字节</span></span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> r <span class="dt">rune</span> <span class="op">=</span> <span class="ch">&#39;中&#39;</span>  <span class="co">// 码点 20013;rune 即 int32,变量占 4 字节——这是类型宽度,非 UTF-8 长度(&#39;中&#39; 的 UTF-8 是 3 字节,见第05章)</span></span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Println<span class="op">(</span>b<span class="op">,</span> r<span class="op">)</span>  <span class="co">// 65 20013</span></span></code></pre></div>
+一节详述)。第一节的例子里 <code>'中'</code> 的码点是 20013,占 4
+字节——这是变量的类型宽度,不是它编码成 UTF-8 后的字节数(<code>'中'</code>
+的 UTF-8 编码是 3 字节,见<a href="05-控制流.html">第 5 章</a>)。</p>
 <h2 id="无类型常量与隐式转换规则">无类型常量与隐式转换规则</h2>
 <p>既然 Go 禁止隐式类型转换,为什么 <code>var x float64 = 3</code>
 这种写法能通过?因为 Go 有一套独特的<strong>无类型常量(untyped
@@ -236,57 +296,62 @@ constant)</strong>机制。</p>
 <p>字面量
 <code>3</code>、<code>3.14</code>、<code>'A'</code>、<code>true</code>、<code>"hi"</code>
 在获得确定类型之前是”无类型”的,它们以任意精度存在于编译期,只在被赋值或参与运算需要具体类型时,才”默认化”或按上下文转成对应类型。这让常量能自然地跨类型使用,而运行期变量不行:</p>
-<div class="sourceCode" id="cb3"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">const</span> k <span class="op">=</span> <span class="dv">3</span>          <span class="co">// 无类型整型常量</span></span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> a <span class="dt">int32</span> <span class="op">=</span> k      <span class="co">// OK,k 适配为 int32</span></span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> b <span class="dt">float64</span> <span class="op">=</span> k    <span class="co">// OK,同一个 k 适配为 float64</span></span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> c <span class="dt">float64</span> <span class="op">=</span> <span class="fl">3.0</span>  <span class="co">// OK</span></span>
-<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="co">// var d int32 = a + b // 若 a,b 是不同类型变量则错;但常量不受此限</span></span></code></pre></div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">const</span> k <span class="op">=</span> <span class="dv">3</span>          <span class="co">// 无类型整型常量</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> a <span class="dt">int32</span> <span class="op">=</span> k      <span class="co">// OK,k 适配为 int32</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> b <span class="dt">float64</span> <span class="op">=</span> k    <span class="co">// OK,同一个 k 适配为 float64</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> c <span class="dt">float64</span> <span class="op">=</span> <span class="fl">3.0</span>  <span class="co">// OK</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="co">// var d int32 = a + b // 若 a,b 是不同类型变量则错;但常量不受此限</span></span></code></pre></div>
 <p>无类型常量还能保持超高精度,直到落地:</p>
-<div class="sourceCode" id="cb4"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">const</span> big <span class="op">=</span> <span class="dv">1</span> <span class="op">&lt;&lt;</span> <span class="dv">62</span>      <span class="co">// 编译期任意精度,合法</span></span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="kw">const</span> huge <span class="op">=</span> <span class="dv">1</span> <span class="op">&lt;&lt;</span> <span class="dv">100</span>    <span class="co">// 常量本身合法(任意精度)</span></span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="co">// var x int64 = huge    // 报错:溢出 int64,落地时才检查</span></span></code></pre></div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="kw">const</span> big <span class="op">=</span> <span class="dv">1</span> <span class="op">&lt;&lt;</span> <span class="dv">62</span>      <span class="co">// 编译期任意精度,合法</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="kw">const</span> huge <span class="op">=</span> <span class="dv">1</span> <span class="op">&lt;&lt;</span> <span class="dv">100</span>    <span class="co">// 常量本身合法(任意精度)</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="co">// var x int64 = huge    // 报错:溢出 int64,落地时才检查</span></span></code></pre></div>
 <p>每个无类型常量有个<strong>默认类型</strong>,当没有上下文强制时使用:整数默认
 <code>int</code>,浮点默认 <code>float64</code>,字符默认
 <code>rune</code>,布尔 <code>bool</code>,字符串
 <code>string</code>。</p>
 <h3 id="const-与-iota">const 与 iota</h3>
-<p><code>const</code> 声明编译期常量。<code>iota</code> 是一个在每个
-const 块里从 0 开始、逐行自增的计数器,专门用来生成枚举:</p>
-<div class="sourceCode" id="cb5"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Weekday <span class="dt">int</span></span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="kw">const</span> <span class="op">(</span></span>
-<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    Sunday Weekday <span class="op">=</span> <span class="ot">iota</span> <span class="co">// 0</span></span>
-<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    Monday                <span class="co">// 1(表达式沿用上一行,iota 自增)</span></span>
-<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>    Tuesday               <span class="co">// 2</span></span>
-<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>    Wednesday             <span class="co">// 3</span></span>
-<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a><span class="op">)</span></span>
-<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a><span class="co">// 位标志:iota 配合移位</span></span>
-<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a><span class="kw">const</span> <span class="op">(</span></span>
-<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>    FlagRead    <span class="op">=</span> <span class="dv">1</span> <span class="op">&lt;&lt;</span> <span class="ot">iota</span> <span class="co">// 1 &lt;&lt; 0 = 1</span></span>
-<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>    FlagWrite               <span class="co">// 1 &lt;&lt; 1 = 2</span></span>
-<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>    FlagExecute             <span class="co">// 1 &lt;&lt; 2 = 4</span></span>
-<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a><span class="op">)</span></span></code></pre></div>
+<p><code>const</code> 声明编译期常量。用法已在<a
+href="02-基础语法.html">第 2
+章</a>详细展开,这里补一个类型化枚举的例子:</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Weekday <span class="dt">int</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="kw">const</span> <span class="op">(</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    Sunday Weekday <span class="op">=</span> <span class="ot">iota</span> <span class="co">// 0</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>    Monday                <span class="co">// 1(表达式沿用上一行,iota 自增)</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>    Tuesday               <span class="co">// 2</span></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>    Wednesday             <span class="co">// 3</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a><span class="op">)</span></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a><span class="co">// 位标志:iota 配合移位</span></span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a><span class="kw">const</span> <span class="op">(</span></span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>    FlagRead    <span class="op">=</span> <span class="dv">1</span> <span class="op">&lt;&lt;</span> <span class="ot">iota</span> <span class="co">// 1 &lt;&lt; 0 = 1</span></span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>    FlagWrite               <span class="co">// 1 &lt;&lt; 1 = 2</span></span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>    FlagExecute             <span class="co">// 1 &lt;&lt; 2 = 4</span></span>
+<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a><span class="op">)</span></span></code></pre></div>
 <p>比起 C 的 <code>enum</code>,<code>iota</code>
 更灵活(能做移位、跳值、表达式),但也仅仅是编译期常量,不像 C++
 <code>enum class</code> 那样自带类型安全——类型安全靠你像上面那样定义
 <code>type Weekday int</code> 来获得。</p>
 <h2 id="array-是值slice-不是">array 是值,slice 不是</h2>
+<h3 id="怎么用-1">怎么用</h3>
+<div class="sourceCode" id="cb8"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>arr <span class="op">:=</span> <span class="op">[</span><span class="dv">3</span><span class="op">]</span><span class="dt">int</span><span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">}</span> <span class="co">// 数组:长度固定,写在类型里</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>sl <span class="op">:=</span> <span class="op">[]</span><span class="dt">int</span><span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">}</span>   <span class="co">// 切片:长度可变,更常用</span></span></code></pre></div>
+<h3 id="底层与-c-对比-1">底层与 C 对比</h3>
 <p>再强调一次(因为 C
 程序员太容易踩):<strong>数组是值类型,定长,赋值和传参拷贝整个数组</strong>;slice
 是含指针的表头。</p>
-<div class="sourceCode" id="cb6"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> modify<span class="op">(</span>a <span class="op">[</span><span class="dv">3</span><span class="op">]</span><span class="dt">int</span><span class="op">)</span>  <span class="op">{</span> a<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="dv">99</span> <span class="op">}</span> <span class="co">// 拷贝整个数组,改副本</span></span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> modifyS<span class="op">(</span>s <span class="op">[]</span><span class="dt">int</span><span class="op">)</span>  <span class="op">{</span> s<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="dv">99</span> <span class="op">}</span> <span class="co">// 拷贝表头,共享底层数组</span></span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
-<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>    arr <span class="op">:=</span> <span class="op">[</span><span class="dv">3</span><span class="op">]</span><span class="dt">int</span><span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">}</span></span>
-<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>    modify<span class="op">(</span>arr<span class="op">)</span></span>
-<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>arr<span class="op">[</span><span class="dv">0</span><span class="op">])</span> <span class="co">// 1 —— 没变</span></span>
-<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>    sl <span class="op">:=</span> <span class="op">[]</span><span class="dt">int</span><span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">}</span></span>
-<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>    modifyS<span class="op">(</span>sl<span class="op">)</span></span>
-<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>sl<span class="op">[</span><span class="dv">0</span><span class="op">])</span> <span class="co">// 99 —— 变了</span></span>
-<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb9"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> modify<span class="op">(</span>a <span class="op">[</span><span class="dv">3</span><span class="op">]</span><span class="dt">int</span><span class="op">)</span>  <span class="op">{</span> a<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="dv">99</span> <span class="op">}</span> <span class="co">// 拷贝整个数组,改副本</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> modifyS<span class="op">(</span>s <span class="op">[]</span><span class="dt">int</span><span class="op">)</span>  <span class="op">{</span> s<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="dv">99</span> <span class="op">}</span> <span class="co">// 拷贝表头,共享底层数组</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>    arr <span class="op">:=</span> <span class="op">[</span><span class="dv">3</span><span class="op">]</span><span class="dt">int</span><span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">}</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>    modify<span class="op">(</span>arr<span class="op">)</span></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>arr<span class="op">[</span><span class="dv">0</span><span class="op">])</span> <span class="co">// 1 —— 没变</span></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>    sl <span class="op">:=</span> <span class="op">[]</span><span class="dt">int</span><span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">}</span></span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a>    modifyS<span class="op">(</span>sl<span class="op">)</span></span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>sl<span class="op">[</span><span class="dv">0</span><span class="op">])</span> <span class="co">// 99 —— 变了</span></span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <table>
 <thead>
 <tr>
@@ -323,6 +388,16 @@ href="07-复合数据结构.html">07-复合数据结构.md</a>;这里只需记�
 是”指针表头”。</p>
 <h2 id="struct内存布局对齐与-padding">struct:内存布局、对齐与
 padding</h2>
+<h3 id="怎么用-2">怎么用</h3>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Point <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>    X<span class="op">,</span> Y <span class="dt">int</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>p <span class="op">:=</span> Point<span class="op">{</span>X<span class="op">:</span> <span class="dv">1</span><span class="op">,</span> Y<span class="op">:</span> <span class="dv">2</span><span class="op">}</span> <span class="co">// 用字段名初始化</span></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Println<span class="op">(</span>p<span class="op">.</span>X<span class="op">,</span> p<span class="op">.</span>Y<span class="op">)</span>  <span class="co">// 用点号访问字段:1 2</span></span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>p<span class="op">.</span>X <span class="op">=</span> <span class="dv">100</span>              <span class="co">// 用点号赋值</span></span></code></pre></div>
+<h3 id="底层与-c-对比-2">底层与 C 对比</h3>
 <p>struct 的字段在内存里<strong>按声明顺序连续排列</strong>,和 C 的
 <code>struct</code>
 完全一致——同样遵守<strong>内存对齐</strong>规则,同样会插入
@@ -331,35 +406,40 @@ padding</h2>
 struct 的大小必须是其最大字段对齐值的倍数(便于数组中连续排列)。</p>
 <p>用 <code>unsafe.Sizeof</code> / <code>unsafe.Alignof</code> /
 <code>unsafe.Offsetof</code> 可以精确验证:</p>
-<div class="sourceCode" id="cb7"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="op">(</span></span>
-<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;fmt&quot;</span></span>
-<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;unsafe&quot;</span></span>
-<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a><span class="op">)</span></span>
-<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a><span class="co">// 字段顺序不佳:bool, int64, bool</span></span>
-<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Bad <span class="kw">struct</span> <span class="op">{</span></span>
-<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>    a <span class="dt">bool</span>  <span class="co">// 偏移 0,占 1</span></span>
-<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 7 字节 padding(为了让 b 对齐到 8)</span></span>
-<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>    b <span class="dt">int64</span> <span class="co">// 偏移 8,占 8</span></span>
-<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>    c <span class="dt">bool</span>  <span class="co">// 偏移 16,占 1</span></span>
-<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 7 字节 padding(整体补到 8 的倍数)</span></span>
-<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a><span class="co">// 重排后:int64, bool, bool</span></span>
-<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Good <span class="kw">struct</span> <span class="op">{</span></span>
-<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a>    b <span class="dt">int64</span> <span class="co">// 偏移 0,占 8</span></span>
-<span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a>    a <span class="dt">bool</span>  <span class="co">// 偏移 8,占 1</span></span>
-<span id="cb7-21"><a href="#cb7-21" aria-hidden="true" tabindex="-1"></a>    c <span class="dt">bool</span>  <span class="co">// 偏移 9,占 1</span></span>
-<span id="cb7-22"><a href="#cb7-22" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 6 字节 padding</span></span>
-<span id="cb7-23"><a href="#cb7-23" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb7-24"><a href="#cb7-24" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-25"><a href="#cb7-25" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
-<span id="cb7-26"><a href="#cb7-26" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>unsafe<span class="op">.</span>Sizeof<span class="op">(</span>Bad<span class="op">{}))</span>  <span class="co">// 24</span></span>
-<span id="cb7-27"><a href="#cb7-27" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>unsafe<span class="op">.</span>Sizeof<span class="op">(</span>Good<span class="op">{}))</span> <span class="co">// 16</span></span>
-<span id="cb7-28"><a href="#cb7-28" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>unsafe<span class="op">.</span>Alignof<span class="op">(</span><span class="dt">int64</span><span class="op">(</span><span class="dv">0</span><span class="op">)),</span> unsafe<span class="op">.</span>Offsetof<span class="op">(</span>Bad<span class="op">{}.</span>b<span class="op">))</span></span>
-<span id="cb7-29"><a href="#cb7-29" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="op">(</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;unsafe&quot;</span></span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a><span class="op">)</span></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a><span class="co">// 字段顺序不佳:bool, int64, bool</span></span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Bad <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a>    a <span class="dt">bool</span>  <span class="co">// 偏移 0,占 1</span></span>
+<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 7 字节 padding(为了让 b 对齐到 8)</span></span>
+<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a>    b <span class="dt">int64</span> <span class="co">// 偏移 8,占 8</span></span>
+<span id="cb11-13"><a href="#cb11-13" aria-hidden="true" tabindex="-1"></a>    c <span class="dt">bool</span>  <span class="co">// 偏移 16,占 1</span></span>
+<span id="cb11-14"><a href="#cb11-14" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 7 字节 padding(整体补到 8 的倍数)</span></span>
+<span id="cb11-15"><a href="#cb11-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb11-16"><a href="#cb11-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-17"><a href="#cb11-17" aria-hidden="true" tabindex="-1"></a><span class="co">// 重排后:int64, bool, bool</span></span>
+<span id="cb11-18"><a href="#cb11-18" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Good <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb11-19"><a href="#cb11-19" aria-hidden="true" tabindex="-1"></a>    b <span class="dt">int64</span> <span class="co">// 偏移 0,占 8</span></span>
+<span id="cb11-20"><a href="#cb11-20" aria-hidden="true" tabindex="-1"></a>    a <span class="dt">bool</span>  <span class="co">// 偏移 8,占 1</span></span>
+<span id="cb11-21"><a href="#cb11-21" aria-hidden="true" tabindex="-1"></a>    c <span class="dt">bool</span>  <span class="co">// 偏移 9,占 1</span></span>
+<span id="cb11-22"><a href="#cb11-22" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 6 字节 padding</span></span>
+<span id="cb11-23"><a href="#cb11-23" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb11-24"><a href="#cb11-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-25"><a href="#cb11-25" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb11-26"><a href="#cb11-26" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>unsafe<span class="op">.</span>Sizeof<span class="op">(</span>Bad<span class="op">{}))</span>  <span class="co">// 24</span></span>
+<span id="cb11-27"><a href="#cb11-27" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>unsafe<span class="op">.</span>Sizeof<span class="op">(</span>Good<span class="op">{}))</span> <span class="co">// 16</span></span>
+<span id="cb11-28"><a href="#cb11-28" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>unsafe<span class="op">.</span>Alignof<span class="op">(</span><span class="dt">int64</span><span class="op">(</span><span class="dv">0</span><span class="op">)),</span> unsafe<span class="op">.</span>Offsetof<span class="op">(</span>Bad<span class="op">{}.</span>b<span class="op">))</span></span>
+<span id="cb11-29"><a href="#cb11-29" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>运行输出:</p>
+<pre><code>24
+16
+8 8</code></pre>
 <p>内存图对照(每格 1 字节):</p>
 <pre><code>Bad (24 字节):
 偏移 0        8               16       24
@@ -383,23 +463,24 @@ unsafe)。</p>
 <p>Go 用<strong>嵌入(embedding)</strong>替代 C++
 的继承。把一个类型不带字段名地写进
 struct,就是嵌入;外层类型自动”提升”内层的字段和方法,可以直接访问:</p>
-<div class="sourceCode" id="cb9"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Base <span class="kw">struct</span> <span class="op">{</span></span>
-<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>    ID   <span class="dt">int</span></span>
-<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>    Name <span class="dt">string</span></span>
-<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>b Base<span class="op">)</span> Hello<span class="op">()</span> <span class="dt">string</span> <span class="op">{</span> <span class="cf">return</span> <span class="st">&quot;hi &quot;</span> <span class="op">+</span> b<span class="op">.</span>Name <span class="op">}</span></span>
-<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> User <span class="kw">struct</span> <span class="op">{</span></span>
-<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>    Base        <span class="co">// 嵌入,匿名字段</span></span>
-<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a>    Email <span class="dt">string</span></span>
-<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
-<span id="cb9-14"><a href="#cb9-14" aria-hidden="true" tabindex="-1"></a>    u <span class="op">:=</span> User<span class="op">{</span>Base<span class="op">:</span> Base<span class="op">{</span>ID<span class="op">:</span> <span class="dv">1</span><span class="op">,</span> Name<span class="op">:</span> <span class="st">&quot;Alice&quot;</span><span class="op">},</span> Email<span class="op">:</span> <span class="st">&quot;a@x.com&quot;</span><span class="op">}</span></span>
-<span id="cb9-15"><a href="#cb9-15" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>u<span class="op">.</span>Name<span class="op">)</span>    <span class="co">// 字段提升:等价 u.Base.Name</span></span>
-<span id="cb9-16"><a href="#cb9-16" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>u<span class="op">.</span>Hello<span class="op">())</span> <span class="co">// 方法提升:等价 u.Base.Hello()</span></span>
-<span id="cb9-17"><a href="#cb9-17" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Base <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>    ID   <span class="dt">int</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>    Name <span class="dt">string</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>b Base<span class="op">)</span> Hello<span class="op">()</span> <span class="dt">string</span> <span class="op">{</span> <span class="cf">return</span> <span class="st">&quot;hi &quot;</span> <span class="op">+</span> b<span class="op">.</span>Name <span class="op">}</span></span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> User <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a>    Base        <span class="co">// 嵌入,匿名字段</span></span>
+<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a>    Email <span class="dt">string</span></span>
+<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb14-14"><a href="#cb14-14" aria-hidden="true" tabindex="-1"></a>    u <span class="op">:=</span> User<span class="op">{</span>Base<span class="op">:</span> Base<span class="op">{</span>ID<span class="op">:</span> <span class="dv">1</span><span class="op">,</span> Name<span class="op">:</span> <span class="st">&quot;Alice&quot;</span><span class="op">},</span> Email<span class="op">:</span> <span class="st">&quot;a@x.com&quot;</span><span class="op">}</span></span>
+<span id="cb14-15"><a href="#cb14-15" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>u<span class="op">.</span>Name<span class="op">)</span>    <span class="co">// 字段提升:等价 u.Base.Name</span></span>
+<span id="cb14-16"><a href="#cb14-16" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>u<span class="op">.</span>Hello<span class="op">())</span> <span class="co">// 方法提升:等价 u.Base.Hello()</span></span>
+<span id="cb14-17"><a href="#cb14-17" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>底层上,嵌入<strong>没有任何魔法</strong>:<code>Base</code> 就是
 <code>User</code> 里一个名叫 <code>Base</code>
 的普通字段,内存里连续排布,<code>u.Name</code> 只是
@@ -408,14 +489,22 @@ struct,就是嵌入;外层类型自动”提升”内层的字段和方法,可�
 C++ 那种基类子对象+vptr 的开销。方法分发的多态由 interface 承担(见 <a
 href="08-面向对象与类型系统.html">08-面向对象与类型系统.md</a>)。</p>
 <h2 id="string只读的-ptr-len-头">string:只读的 (ptr, len) 头</h2>
+<h3 id="怎么用-3">怎么用</h3>
+<div class="sourceCode" id="cb15"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>s <span class="op">:=</span> <span class="st">&quot;hello&quot;</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Println<span class="op">(</span><span class="bu">len</span><span class="op">(</span>s<span class="op">))</span>    <span class="co">// 5,长度</span></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Println<span class="op">(</span>s<span class="op">[</span><span class="dv">0</span><span class="op">])</span>      <span class="co">// 104,按字节索引(&#39;h&#39; 的 ASCII 码)</span></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Println<span class="op">(</span>s<span class="op">[</span><span class="dv">1</span><span class="op">:</span><span class="dv">4</span><span class="op">])</span>    <span class="co">// &quot;ell&quot;,切片</span></span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>t <span class="op">:=</span> s <span class="op">+</span> <span class="st">&quot; world&quot;</span>      <span class="co">// 拼接产生新字符串</span></span></code></pre></div>
+<h3 id="底层与-c-对比-3">底层与 C 对比</h3>
 <p>C 程序员对 string 的最大误解就是把它当 <code>char*</code>。<strong>Go
 的 string 不是以 <code>\0</code>
 结尾的字符指针,而是一个两字长的只读表头</strong>:</p>
-<div class="sourceCode" id="cb10"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> stringHeader <span class="kw">struct</span> <span class="op">{</span></span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>    Data <span class="dt">uintptr</span> <span class="co">// 指向底层字节数组</span></span>
-<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>    Len  <span class="dt">int</span>     <span class="co">// 字节长度(不含结尾 0,也没有结尾 0)</span></span>
-<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb16"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> stringHeader <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>    Data <span class="dt">uintptr</span> <span class="co">// 指向底层字节数组</span></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>    Len  <span class="dt">int</span>     <span class="co">// 字节长度(不含结尾 0,也没有结尾 0)</span></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>要点:</p>
 <ul>
 <li>底层是一段 <strong>UTF-8
@@ -426,25 +515,30 @@ class="sourceCode go"><code class="sourceCode go"><span id="cb10-1"><a href="#cb
 <li><code>s := "hello"; t := s</code> 拷贝的是 16
 字节表头,共享同一底层字节,安全(因为只读)。</li>
 </ul>
-<div class="sourceCode" id="cb11"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>s <span class="op">:=</span> <span class="st">&quot;héllo&quot;</span>       <span class="co">// é 是 2 字节 UTF-8</span></span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Println<span class="op">(</span><span class="bu">len</span><span class="op">(</span>s<span class="op">))</span> <span class="co">// 6,不是 5(字节数)</span></span>
-<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a><span class="co">// 按字节索引</span></span>
-<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Println<span class="op">(</span>s<span class="op">[</span><span class="dv">0</span><span class="op">])</span>   <span class="co">// 104,byte,&#39;h&#39;</span></span>
-<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a><span class="co">// 按码点遍历:range 自动 UTF-8 解码,i 是字节偏移,r 是 rune</span></span>
-<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i<span class="op">,</span> r <span class="op">:=</span> <span class="kw">range</span> s <span class="op">{</span></span>
-<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Printf<span class="op">(</span><span class="st">&quot;%d:%c &quot;</span><span class="op">,</span> i<span class="op">,</span> r<span class="op">)</span> <span class="co">// 0:h 1:é 3:l 4:l 5:o(注意偏移跳了)</span></span>
-<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Println<span class="op">(</span><span class="bu">len</span><span class="op">([]</span><span class="dt">rune</span><span class="op">(</span>s<span class="op">)))</span> <span class="co">// 5,真正的字符数</span></span></code></pre></div>
+<div class="sourceCode" id="cb17"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>s <span class="op">:=</span> <span class="st">&quot;héllo&quot;</span>       <span class="co">// é 是 2 字节 UTF-8</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Println<span class="op">(</span><span class="bu">len</span><span class="op">(</span>s<span class="op">))</span> <span class="co">// 6,不是 5(字节数)</span></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a><span class="co">// 按字节索引</span></span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Println<span class="op">(</span>s<span class="op">[</span><span class="dv">0</span><span class="op">])</span>   <span class="co">// 104,byte,&#39;h&#39;</span></span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a><span class="co">// 按码点遍历:range 自动 UTF-8 解码,i 是字节偏移,r 是 rune</span></span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i<span class="op">,</span> r <span class="op">:=</span> <span class="kw">range</span> s <span class="op">{</span></span>
+<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Printf<span class="op">(</span><span class="st">&quot;%d:%c &quot;</span><span class="op">,</span> i<span class="op">,</span> r<span class="op">)</span> <span class="co">// 0:h 1:é 3:l 4:l 5:o(注意偏移跳了)</span></span>
+<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Println<span class="op">(</span><span class="bu">len</span><span class="op">([]</span><span class="dt">rune</span><span class="op">(</span>s<span class="op">)))</span> <span class="co">// 5,真正的字符数</span></span></code></pre></div>
+<p>运行输出:</p>
+<pre><code>6
+104
+0:h 1:é 3:l 4:l 5:o
+5</code></pre>
 <h3 id="string-与-byte-互转会拷贝">string 与 []byte 互转会拷贝</h3>
 <p>因为 string 只读而 <code>[]byte</code>
 可写,二者互转<strong>必须复制底层字节</strong>,不能共享(否则就能通过
 []byte 改动”不可变”的字符串了):</p>
-<div class="sourceCode" id="cb12"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>b <span class="op">:=</span> <span class="op">[]</span><span class="dt">byte</span><span class="op">(</span><span class="st">&quot;hello&quot;</span><span class="op">)</span> <span class="co">// 分配新数组,拷贝 5 字节</span></span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>s <span class="op">:=</span> <span class="dt">string</span><span class="op">(</span>b<span class="op">)</span>       <span class="co">// 又拷贝一次</span></span></code></pre></div>
+<div class="sourceCode" id="cb19"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>b <span class="op">:=</span> <span class="op">[]</span><span class="dt">byte</span><span class="op">(</span><span class="st">&quot;hello&quot;</span><span class="op">)</span> <span class="co">// 分配新数组,拷贝 5 字节</span></span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>s <span class="op">:=</span> <span class="dt">string</span><span class="op">(</span>b<span class="op">)</span>       <span class="co">// 又拷贝一次</span></span></code></pre></div>
 <p>在热点路径上频繁 <code>string ↔︎ []byte</code>
 转换会带来分配和拷贝开销,这是常见性能陷阱。(编译器对某些局部场景有优化,如
 <code>map[string(b)]</code> 查找不会真的分配字符串;更多见后续章节。)对照
@@ -452,19 +546,26 @@ C:C 里 <code>char*</code>
 和字符串是一回事,强转不拷贝,但你要自己管理可变性和越界——Go
 用”拷贝一次”换来了不可变的安全性。</p>
 <h2 id="interfacetype-data-双字">interface:(type, data) 双字</h2>
+<h3 id="怎么用-4">怎么用</h3>
+<div class="sourceCode" id="cb20"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> x <span class="kw">interface</span><span class="op">{}</span> <span class="op">=</span> <span class="dv">42</span>     <span class="co">// any 类型的别名就是 interface{}</span></span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>n <span class="op">:=</span> x<span class="op">.(</span><span class="dt">int</span><span class="op">)</span>                <span class="co">// 类型断言:我确定它是 int</span></span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>m<span class="op">,</span> ok <span class="op">:=</span> x<span class="op">.(</span><span class="dt">string</span><span class="op">)</span>          <span class="co">// 安全断言:不是就 ok=false,不 panic</span></span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Println<span class="op">(</span>n<span class="op">,</span> m<span class="op">,</span> ok<span class="op">)</span>        <span class="co">// 42  false</span></span></code></pre></div>
+<h3 id="底层与-c-对比-4">底层与 C 对比</h3>
 <p>interface 是 Go
 类型系统的核心,它的运行时表示是一个<strong>两字长的结构</strong>:一个指向类型信息的指针,一个指向数据的指针。</p>
-<div class="sourceCode" id="cb13"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="co">// 非空接口(带方法)的运行时布局,概念上:</span></span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> iface <span class="kw">struct</span> <span class="op">{</span></span>
-<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    tab  <span class="op">*</span>itab          <span class="co">// 类型 + 方法表(类似 C++ vtable + 类型元数据)</span></span>
-<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>    data unsafe<span class="op">.</span>Pointer <span class="co">// 指向实际数据</span></span>
-<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a><span class="co">// 空接口 interface{} / any:</span></span>
-<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> eface <span class="kw">struct</span> <span class="op">{</span></span>
-<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>    _type <span class="op">*</span>_type         <span class="co">// 动态类型信息</span></span>
-<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>    data  unsafe<span class="op">.</span>Pointer <span class="co">// 指向实际数据</span></span>
-<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb21"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="co">// 非空接口(带方法)的运行时布局,概念上:</span></span>
+<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> iface <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a>    tab  <span class="op">*</span>itab          <span class="co">// 类型 + 方法表(类似 C++ vtable + 类型元数据)</span></span>
+<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a>    data unsafe<span class="op">.</span>Pointer <span class="co">// 指向实际数据</span></span>
+<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a><span class="co">// 空接口 interface{} / any:</span></span>
+<span id="cb21-7"><a href="#cb21-7" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> eface <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb21-8"><a href="#cb21-8" aria-hidden="true" tabindex="-1"></a>    _type <span class="op">*</span>_type         <span class="co">// 动态类型信息</span></span>
+<span id="cb21-9"><a href="#cb21-9" aria-hidden="true" tabindex="-1"></a>    data  unsafe<span class="op">.</span>Pointer <span class="co">// 指向实际数据</span></span>
+<span id="cb21-10"><a href="#cb21-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>要点对 C++ 程序员:</p>
 <ul>
 <li>interface 值 = <strong>(动态类型, 数据指针)</strong>
@@ -481,14 +582,9 @@ nil</strong>。有个经典坑:把一个值为 nil 的具体指针装进
 interface,interface 的 <code>_type</code> 非 nil,于是
 <code>iface != nil</code> 为真——“接口不是 nil 但里面是 nil 指针”。</li>
 </ul>
-<div class="sourceCode" id="cb14"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> i <span class="kw">interface</span><span class="op">{}</span> <span class="op">=</span> <span class="dv">42</span></span>
-<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Println<span class="op">(</span>unsafe<span class="op">.</span>Sizeof<span class="op">(</span>i<span class="op">))</span> <span class="co">// 16(64 位:两个字)</span></span>
-<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a><span class="co">// 类型断言:取回动态类型</span></span>
-<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>n <span class="op">:=</span> i<span class="op">.(</span><span class="dt">int</span><span class="op">)</span>      <span class="co">// 断言成功返回 42</span></span>
-<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>m<span class="op">,</span> ok <span class="op">:=</span> i<span class="op">.(</span><span class="dt">string</span><span class="op">)</span> <span class="co">// ok=false,不 panic</span></span>
-<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Println<span class="op">(</span>n<span class="op">,</span> m<span class="op">,</span> ok<span class="op">)</span></span></code></pre></div>
+<div class="sourceCode" id="cb22"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> i <span class="kw">interface</span><span class="op">{}</span> <span class="op">=</span> <span class="dv">42</span></span>
+<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Println<span class="op">(</span>unsafe<span class="op">.</span>Sizeof<span class="op">(</span>i<span class="op">))</span> <span class="co">// 16(64 位:两个字)</span></span></code></pre></div>
 <p>interface 的方法集规则、类型断言、type switch、与嵌入的配合等,在 <a
 href="08-面向对象与类型系统.html">08-面向对象与类型系统.md</a>
 系统展开。这里先建立”interface 值是 (type, data) 双字”这个底层图景。</p>
@@ -496,79 +592,52 @@ href="08-面向对象与类型系统.html">08-面向对象与类型系统.md</a>
 <p>前面反复说 string 是双字、slice 是三字、interface
 是双字。<code>unsafe.Sizeof</code>
 只算<strong>表头本身</strong>(不含底层数据),正好能实测这些论断:</p>
-<div class="sourceCode" id="cb15"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
-<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="op">(</span></span>
-<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;fmt&quot;</span></span>
-<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;unsafe&quot;</span></span>
-<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a><span class="op">)</span></span>
-<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
-<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> p <span class="op">*</span><span class="dt">int</span></span>
-<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> s <span class="dt">string</span> <span class="op">=</span> <span class="st">&quot;hi&quot;</span></span>
-<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> sl <span class="op">[]</span><span class="dt">int</span> <span class="op">=</span> <span class="op">[]</span><span class="dt">int</span><span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">}</span></span>
-<span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> i <span class="kw">interface</span><span class="op">{}</span> <span class="op">=</span> <span class="dv">42</span></span>
-<span id="cb15-13"><a href="#cb15-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-14"><a href="#cb15-14" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>unsafe<span class="op">.</span>Sizeof<span class="op">(</span>p<span class="op">))</span>  <span class="co">// 8,指针:一个机器字</span></span>
-<span id="cb15-15"><a href="#cb15-15" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>unsafe<span class="op">.</span>Sizeof<span class="op">(</span>s<span class="op">))</span>  <span class="co">// 16,string = (ptr, len) 双字</span></span>
-<span id="cb15-16"><a href="#cb15-16" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>unsafe<span class="op">.</span>Sizeof<span class="op">(</span>sl<span class="op">))</span> <span class="co">// 24,slice = (ptr, len, cap) 三字</span></span>
-<span id="cb15-17"><a href="#cb15-17" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>unsafe<span class="op">.</span>Sizeof<span class="op">(</span>i<span class="op">))</span>  <span class="co">// 16,interface = (type, data) 双字</span></span>
-<span id="cb15-18"><a href="#cb15-18" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb23"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="op">(</span></span>
+<span id="cb23-4"><a href="#cb23-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb23-5"><a href="#cb23-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;unsafe&quot;</span></span>
+<span id="cb23-6"><a href="#cb23-6" aria-hidden="true" tabindex="-1"></a><span class="op">)</span></span>
+<span id="cb23-7"><a href="#cb23-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-8"><a href="#cb23-8" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb23-9"><a href="#cb23-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> p <span class="op">*</span><span class="dt">int</span></span>
+<span id="cb23-10"><a href="#cb23-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> s <span class="dt">string</span> <span class="op">=</span> <span class="st">&quot;hi&quot;</span></span>
+<span id="cb23-11"><a href="#cb23-11" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> sl <span class="op">[]</span><span class="dt">int</span> <span class="op">=</span> <span class="op">[]</span><span class="dt">int</span><span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">}</span></span>
+<span id="cb23-12"><a href="#cb23-12" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> i <span class="kw">interface</span><span class="op">{}</span> <span class="op">=</span> <span class="dv">42</span></span>
+<span id="cb23-13"><a href="#cb23-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-14"><a href="#cb23-14" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>unsafe<span class="op">.</span>Sizeof<span class="op">(</span>p<span class="op">))</span>  <span class="co">// 8,指针:一个机器字</span></span>
+<span id="cb23-15"><a href="#cb23-15" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>unsafe<span class="op">.</span>Sizeof<span class="op">(</span>s<span class="op">))</span>  <span class="co">// 16,string = (ptr, len) 双字</span></span>
+<span id="cb23-16"><a href="#cb23-16" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>unsafe<span class="op">.</span>Sizeof<span class="op">(</span>sl<span class="op">))</span> <span class="co">// 24,slice = (ptr, len, cap) 三字</span></span>
+<span id="cb23-17"><a href="#cb23-17" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>unsafe<span class="op">.</span>Sizeof<span class="op">(</span>i<span class="op">))</span>  <span class="co">// 16,interface = (type, data) 双字</span></span>
+<span id="cb23-18"><a href="#cb23-18" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>运行输出:</p>
+<pre><code>8
+16
+24
+16</code></pre>
 <p>注意 <code>Sizeof(sl)</code> 恒为 24,和底层数组有 3 个还是 300
 万个元素无关——它量的是表头,不是数据。</p>
-<h2 id="小结内存布局速查">小结:内存布局速查</h2>
-<table>
-<thead>
-<tr>
-<th>类型</th>
-<th>底层表示</th>
-<th>拷贝时复制什么</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>数值 / bool</td>
-<td>定长原始字节</td>
-<td>全部数据</td>
-</tr>
-<tr>
-<td>array <code>[N]T</code></td>
-<td>连续 N 个元素</td>
-<td>全部元素</td>
-</tr>
-<tr>
-<td>struct</td>
-<td>字段按序 + padding</td>
-<td>全部字段(含嵌入)</td>
-</tr>
-<tr>
-<td>指针 <code>*T</code></td>
-<td>一个机器字</td>
-<td>地址(共享目标)</td>
-</tr>
-<tr>
-<td>string</td>
-<td><code>(ptr, len)</code> 只读双字</td>
-<td>表头(共享只读字节)</td>
-</tr>
-<tr>
-<td>slice</td>
-<td><code>(ptr, len, cap)</code> 三字</td>
-<td>表头(共享底层数组)</td>
-</tr>
-<tr>
-<td>map / chan</td>
-<td>指向运行时结构的指针</td>
-<td>指针(共享同一结构)</td>
-</tr>
-<tr>
-<td>interface</td>
-<td><code>(type, data)</code> 双字</td>
-<td>双字(data 指向的数据视情况)</td>
-</tr>
-</tbody>
-</table>
+<h2 id="小结">小结</h2>
+<ul>
+<li><strong>用法层面</strong>:数值类型用
+<code>var</code>/字面量声明,转换用 <code>T(x)</code>(数字转字符串/反向用
+<code>strconv</code>);数组 <code>[N]T</code> 定长,切片 <code>[]T</code>
+变长;结构体用 <code>type ... struct</code>
+定义,点号访问字段;字符串用双引号字面量,<code>len()</code>/切片/<code>range</code>
+都能直接用;<code>interface{}</code>(即 <code>any</code>)配合类型断言
+<code>x.(T)</code> 使用。</li>
+<li><strong>底层层面</strong>:数值类型宽度由语言规范写死,不随平台漂移;<code>rune</code>/<code>byte</code>
+分别是 <code>int32</code>/<code>uint8</code>
+的别名;无类型常量在编译期以任意精度存在;array 拷贝整块数据,slice
+拷贝三字长表头;struct 字段按声明顺序连续排列并遵守对齐/padding
+规则,调整字段顺序能省内存;嵌入是字段提升的语法糖,不是继承;string
+是只读的 <code>(ptr, len)</code> 双字表头,底层 UTF-8
+字节,<code>len()</code> 数字节不数字符;interface 值是
+<code>(type, data)</code> 双字,方法分发靠 itab 间接跳转。</li>
+</ul>
+<p>下一章进入控制流,你会看到 <code>range</code>
+遍历这些类型时,各自的拷贝行为有何不同。</p>
 <hr />
 <p><a href="03-变量与内存模型.html">← 上一章:变量与内存模型</a> · <a
 href="index.html">返回目录</a> · <a

@@ -2,20 +2,17 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="zh-CN" xml:lang="zh-CN">
 <head>
   <meta charset="utf-8" />
-  <meta name="generator" content="pandoc 3.10" />
+  <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
   <title>数据类型</title>
   <style>
     /* Default styles provided by pandoc.
     ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
     */
+    code{white-space: pre-wrap;}
     span.smallcaps{font-variant: small-caps;}
-    div.columns{display: flex; gap: 1.5em;}
-    div.column{flex: auto;}
-    @media screen {
-    div.columns{gap: min(4vw, 1.5em);}
-    div.column{overflow-x: auto;}
-    }
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
     div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
     /* The extra [class] is a hack that increases specificity enough to
        override a similar rule in reveal.js */
@@ -109,58 +106,83 @@
 <ul>
 <li><a href="#数据类型" id="toc-数据类型">数据类型</a>
 <ul>
-<li><a href="#一切皆对象统一的对象头"
-id="toc-一切皆对象统一的对象头">4.1 一切皆对象:统一的对象头</a></li>
-<li><a href="#int任意精度的变长大整数"
-id="toc-int任意精度的变长大整数">4.2
-<code>int</code>:任意精度的变长大整数</a></li>
-<li><a href="#boolint-的子类" id="toc-boolint-的子类">4.3
-<code>bool</code>:<code>int</code> 的子类</a></li>
-<li><a href="#float装箱的-c-double" id="toc-float装箱的-c-double">4.4
-<code>float</code>:装箱的 C <code>double</code></a></li>
-<li><a href="#complex两个-double" id="toc-complex两个-double">4.5
-<code>complex</code>:两个 double</a></li>
-<li><a href="#strpep-393-紧凑-unicode"
-id="toc-strpep-393-紧凑-unicode">4.6 <code>str</code>:PEP 393 紧凑
-Unicode</a></li>
-<li><a href="#bytes-与-bytearray才是c-的-char-数组"
-id="toc-bytes-与-bytearray才是c-的-char-数组">4.7 <code>bytes</code> 与
+<li><a href="#先会用内置类型与字面量速览"
+id="toc-先会用内置类型与字面量速览">4.1
+先会用:内置类型与字面量速览</a></li>
+<li><a href="#开始深入所有值都是堆对象"
+id="toc-开始深入所有值都是堆对象">4.2 开始深入:所有值都是堆对象</a></li>
+<li><a href="#int任意精度整数" id="toc-int任意精度整数">4.3
+<code>int</code>:任意精度整数</a></li>
+<li><a href="#booltrue-false" id="toc-booltrue-false">4.4
+<code>bool</code>:<code>True</code> / <code>False</code></a></li>
+<li><a href="#float双精度浮点" id="toc-float双精度浮点">4.5
+<code>float</code>:双精度浮点</a></li>
+<li><a href="#complex复数" id="toc-complex复数">4.6
+<code>complex</code>:复数</a></li>
+<li><a href="#strunicode-文本" id="toc-strunicode-文本">4.7
+<code>str</code>:Unicode 文本</a></li>
+<li><a href="#bytes-bytearray才是c-的-char-数组"
+id="toc-bytes-bytearray才是c-的-char-数组">4.8 <code>bytes</code> /
 <code>bytearray</code>:才是「C 的 char 数组」</a></li>
 <li><a href="#单例nonenotimplementedellipsis"
-id="toc-单例nonenotimplementedellipsis">4.8
+id="toc-单例nonenotimplementedellipsis">4.9
 单例:<code>None</code>、<code>NotImplemented</code>、<code>Ellipsis</code></a></li>
-<li><a href="#数值与字符串转换" id="toc-数值与字符串转换">4.9
+<li><a href="#数值与字符串转换" id="toc-数值与字符串转换">4.10
 数值与字符串转换</a></li>
 <li><a href="#小结" id="toc-小结">小结</a></li>
 </ul></li>
 </ul>
 </nav>
 <h1 id="数据类型">数据类型</h1>
-<p>上一章我们建立了「变量是指向对象的引用」的世界观。本章把常用的内置数据类型逐个拆开,看它们在
-CPython 里到底长什么样——<code>PyObject</code>
-头部之后跟着什么字节,和你熟悉的 C 定长 <code>int</code>、IEEE-754
-<code>double</code>、<code>char*</code> 差在哪里。</p>
+<p>本章介绍 Python
+的常用内置数据类型。<strong>每种类型都先讲「怎么写、怎么用」——你不需要懂底层也能马上上手;再进入「底层与
+C 对比」——看它在 CPython 里到底长什么样、和你熟悉的 C 定长
+<code>int</code>、IEEE-754 <code>double</code>、<code>char*</code>
+差在哪。</strong>
+只想会用的话,读每节的前半段即可;想搞懂性能与内存,再往下看后半段。</p>
 <p>贯穿本章的一句话:<strong>在 C 里类型决定了变量占几个字节;在 Python
-里类型是对象堆里的一块结构体,变量只是指向它的指针。</strong> 所以「一个
-int 占多少字节」这个问题,在 Python 里问的是「这个
-<code>PyLongObject</code> 结构体有多大」,而不是「机器字长」。</p>
+里类型是对象堆里的一块结构体,变量只是指向它的指针。</strong></p>
 <hr />
-<h2 id="一切皆对象统一的对象头">4.1 一切皆对象:统一的对象头</h2>
-<p>回顾 <a
-href="03-变量与内存模型.html">见「变量与内存模型」</a>,CPython
-中每个对象在堆上都以 <code>PyObject</code>(或变长的
-<code>PyVarObject</code>)开头:</p>
-<div class="sourceCode" id="cb1"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// CPython 源码 Include/object.h(简化)</span></span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="kw">typedef</span> <span class="kw">struct</span> _object <span class="op">{</span></span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    Py_ssize_t    ob_refcnt<span class="op">;</span>    <span class="co">// 引用计数</span></span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    PyTypeObject <span class="op">*</span>ob_type<span class="op">;</span>      <span class="co">// 指向类型对象的指针(相当于 C++ 的 vptr)</span></span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> PyObject<span class="op">;</span></span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="kw">typedef</span> <span class="kw">struct</span> <span class="op">{</span></span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    PyObject ob_base<span class="op">;</span></span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    Py_ssize_t ob_size<span class="op">;</span>         <span class="co">// 变长对象的&quot;元素个数&quot;</span></span>
-<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> PyVarObject<span class="op">;</span></span></code></pre></div>
-<p><code>ob_type</code> 就是 C++ 里的虚表指针(vptr)的类比:它指向一个
+<h2 id="先会用内置类型与字面量速览">4.1 先会用:内置类型与字面量速览</h2>
+<p>写 Python 之前,先认识怎么「写出」各种值。下面这些字面量不需要任何
+import:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>n <span class="op">=</span> <span class="dv">42</span>              <span class="co"># int   整数,任意大小</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>f <span class="op">=</span> <span class="fl">3.14</span>            <span class="co"># float 浮点数</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> <span class="va">True</span>            <span class="co"># bool  布尔(True / False)</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>z <span class="op">=</span> <span class="dv">3</span> <span class="op">+</span> <span class="ot">4j</span>          <span class="co"># complex 复数(虚部后缀 j)</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>s <span class="op">=</span> <span class="st">&quot;café😀&quot;</span>        <span class="co"># str   字符串(Unicode 文本)</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>raw <span class="op">=</span> <span class="st">b&quot;hello&quot;</span>      <span class="co"># bytes 字节序列(前缀 b)</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>nothing <span class="op">=</span> <span class="va">None</span>      <span class="co"># 空值</span></span></code></pre></div>
+<p>常见的即时操作:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="dv">7</span> <span class="op">//</span> <span class="dv">2</span>)       <span class="co"># 3    —— 整除(向下取整)</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="dv">7</span> <span class="op">%</span> <span class="dv">2</span>)        <span class="co"># 1    —— 取余</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="dv">2</span> <span class="op">**</span> <span class="dv">10</span>)      <span class="co"># 1024 —— 幂运算</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">&quot;ab&quot;</span> <span class="op">*</span> <span class="dv">3</span>)     <span class="co"># ababab —— 字符串重复</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">len</span>(<span class="st">&quot;café&quot;</span>))  <span class="co"># 4    —— 长度(数的是字符,不是字节)</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">type</span>(<span class="dv">42</span>))     <span class="co"># &lt;class &#39;int&#39;&gt; —— 查类型</span></span></code></pre></div>
+<p>用类型名当函数做转换:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="bu">int</span>(<span class="st">&quot;42&quot;</span>)           <span class="co"># 42</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="bu">float</span>(<span class="st">&quot;3.14&quot;</span>)       <span class="co"># 3.14</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="bu">str</span>(<span class="dv">255</span>)            <span class="co"># &quot;255&quot;</span></span></code></pre></div>
+<p>这些够你开始写代码了。下面逐个类型展开——<strong>先用法,后底层</strong>。</p>
+<hr />
+<h2 id="开始深入所有值都是堆对象">4.2 开始深入:所有值都是堆对象</h2>
+<p>从这一节起进入「底层」。要理解后面每种类型的内存开销,先记住一个事实:<strong>CPython
+里每个值都是堆上的一个对象</strong>,开头都有一段统一的「对象头」。</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co">// CPython 源码 Include/object.h(简化)</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="kw">typedef</span> <span class="kw">struct</span> _object <span class="op">{</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    Py_ssize_t    ob_refcnt<span class="op">;</span>    <span class="co">// 引用计数</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    PyTypeObject <span class="op">*</span>ob_type<span class="op">;</span>      <span class="co">// 指向类型对象的指针(相当于 C++ 的 vptr)</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> PyObject<span class="op">;</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="kw">typedef</span> <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>    PyObject ob_base<span class="op">;</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>    Py_ssize_t ob_size<span class="op">;</span>         <span class="co">// 变长对象的&quot;元素个数&quot;</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> PyVarObject<span class="op">;</span></span></code></pre></div>
+<p><code>ob_type</code> 就是 C++ 里虚表指针(vptr)的类比:它指向一个
 <code>PyTypeObject</code>,里面存着「这个类型怎么加法、怎么打印、怎么取长度」等一堆函数指针(称为
 tp_slots)。区别在于 C++ 的 vtable 在编译期定死,而 Python
 的类型对象是运行期可修改的普通对象。</p>
@@ -168,33 +190,40 @@ tp_slots)。区别在于 C++ 的 vtable 在编译期定死,而 Python
 字节(<code>PyVarObject</code>)。<strong>任何 Python
 对象都至少这么大</strong>——这也是为什么 Python 的 <code>int</code>
 动辄二三十字节,而 C 的 <code>int</code> 只有 4 字节。</p>
-<div class="sourceCode" id="cb2"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sys</span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.getsizeof(<span class="dv">0</span>))      <span class="co"># 28(64 位 CPython 3.12+;更早版本是 24)</span></span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.getsizeof(<span class="fl">1.0</span>))    <span class="co"># 24</span></span></code></pre></div>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sys</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.getsizeof(<span class="dv">0</span>))      <span class="co"># 28(64 位 CPython 3.12+;更早版本是 24)</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.getsizeof(<span class="fl">1.0</span>))    <span class="co"># 24</span></span></code></pre></div>
+<p>记住这个「对象头」,下面每种类型的「底层」小节都会用到它。</p>
 <hr />
-<h2 id="int任意精度的变长大整数">4.2
-<code>int</code>:任意精度的变长大整数</h2>
-<h3 id="语义数学意义上的整数不会溢出">4.2.1
-语义:数学意义上的整数,不会溢出</h3>
-<p>在 C 里 <code>int32_t x = INT_MAX; x + 1;</code>
-会溢出回绕成负数。Python 的 <code>int</code>
-是<strong>任意精度</strong>的:</p>
-<div class="sourceCode" id="cb3"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>x <span class="op">=</span> <span class="dv">2</span> <span class="op">**</span> <span class="dv">100</span></span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(x)            <span class="co"># 1267650600228229401496703205376,不溢出</span></span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(x <span class="op">*</span> x)        <span class="co"># 继续放大也没问题</span></span></code></pre></div>
-<p>这不是魔法,而是把整数存成一个「digit
+<h2 id="int任意精度整数">4.3 <code>int</code>:任意精度整数</h2>
+<h3 id="怎么用">怎么用</h3>
+<p>Python 的整数<strong>没有大小上限</strong>,想多大就多大,不会像 C
+那样溢出:</p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>x <span class="op">=</span> <span class="dv">2</span> <span class="op">**</span> <span class="dv">100</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(x)            <span class="co"># 1267650600228229401496703205376,不溢出</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(x <span class="op">*</span> x)        <span class="co"># 继续放大也没问题</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="dv">10</span> <span class="op">//</span> <span class="dv">3</span>)      <span class="co"># 3   —— 整除</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="dv">10</span> <span class="op">%</span> <span class="dv">3</span>)       <span class="co"># 1   —— 取余</span></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="op">-</span><span class="dv">7</span> <span class="op">//</span> <span class="dv">2</span>)      <span class="co"># -4  —— 注意:向下取整(不是向零),和 C 不同!</span></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">int</span>(<span class="st">&quot;ff&quot;</span>, <span class="dv">16</span>))<span class="co"># 255 —— 按 16 进制解析</span></span></code></pre></div>
+<blockquote>
+<p>⚠️ 一个和 C 不同的坑:Python 的 <code>//</code> 和 <code>%</code>
+是<strong>向下取整</strong>(floor),<code>-7 // 2 == -4</code>;C
+的整数除法是<strong>向零截断</strong>,<code>-7 / 2 == -3</code>。</p>
+</blockquote>
+<h3 id="底层与-c-对比">底层与 C 对比</h3>
+<p>Python 的 <code>int</code>
+是<strong>任意精度</strong>的:它把整数存成一个「digit
 数组」,像小学竖式一样按需扩展位数——本质上就是 C 里手写的 bignum(GMP
 那类库干的事),只不过内置了。</p>
-<h3 id="内存布局pylongobject-与-30-bit-digit">4.2.2
-内存布局:<code>PyLongObject</code> 与 30-bit digit</h3>
-<p>CPython 的整数是变长对象 <code>PyLongObject</code>:</p>
-<div class="sourceCode" id="cb4"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co">// 简化后的概念结构</span></span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="kw">typedef</span> <span class="kw">struct</span> <span class="op">{</span></span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    PyObject_VAR_HEAD          <span class="co">// ob_refcnt, ob_type, ob_size</span></span>
-<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    digit ob_digit<span class="op">[</span><span class="dv">1</span><span class="op">];</span>         <span class="co">// 变长数组,每个 digit 存 30 位</span></span>
-<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> PyLongObject<span class="op">;</span></span></code></pre></div>
+<div class="sourceCode" id="cb7"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="co">// 简化后的概念结构</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="kw">typedef</span> <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    PyObject_VAR_HEAD          <span class="co">// ob_refcnt, ob_type, ob_size</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    digit ob_digit<span class="op">[</span><span class="dv">1</span><span class="op">];</span>         <span class="co">// 变长数组,每个 digit 存 30 位</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> PyLongObject<span class="op">;</span></span></code></pre></div>
 <p>关键点:</p>
 <ul>
 <li>每个 <code>digit</code> 是一个 32
@@ -207,11 +236,10 @@ C 的 32 位。</li>
 </ul>
 <blockquote>
 <p>注:CPython 3.12 起内部改用 <code>ob_size</code> + 一个标志位打包的
-<code>lv_tag</code>(PEP 不涉及,属实现细节),但「30-bit digit 数组 +
+<code>lv_tag</code>(属实现细节),但「30-bit digit 数组 +
 符号」这个模型不变。</p>
 </blockquote>
-<p>一个 ASCII 图,表示 <code>2**60</code>(需要 3 个 30-bit digit,因为 60
-位放不进两个满 30 位……实际上 2**60 恰好第 61 位为 1):</p>
+<p>内存布局示意,<code>2**60</code>(需要 3 个 30-bit digit):</p>
 <pre><code>值 = digit[0] * 2^0 + digit[1] * 2^30 + digit[2] * 2^60
 
 +-------------------+
@@ -261,131 +289,133 @@ C 的 32 位。</li>
 </tbody>
 </table>
 <p>用 <code>sys.getsizeof</code> 观察增长:</p>
-<div class="sourceCode" id="cb6"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sys</span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.getsizeof(<span class="dv">0</span>))          <span class="co"># 28(空 digit 情况,依版本)</span></span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.getsizeof(<span class="dv">2</span><span class="op">**</span><span class="dv">29</span>))      <span class="co"># 28  —— 1 个 digit</span></span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.getsizeof(<span class="dv">2</span><span class="op">**</span><span class="dv">30</span>))      <span class="co"># 32  —— 需要 2 个 digit</span></span>
-<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.getsizeof(<span class="dv">2</span><span class="op">**</span><span class="dv">60</span>))      <span class="co"># 36  —— 3 个 digit</span></span>
-<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.getsizeof(<span class="dv">2</span><span class="op">**</span><span class="dv">300</span>))     <span class="co"># 更大</span></span></code></pre></div>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sys</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.getsizeof(<span class="dv">0</span>))          <span class="co"># 28(空 digit 情况,依版本)</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.getsizeof(<span class="dv">2</span><span class="op">**</span><span class="dv">29</span>))      <span class="co"># 28  —— 1 个 digit</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.getsizeof(<span class="dv">2</span><span class="op">**</span><span class="dv">30</span>))      <span class="co"># 32  —— 需要 2 个 digit</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.getsizeof(<span class="dv">2</span><span class="op">**</span><span class="dv">60</span>))      <span class="co"># 36  —— 3 个 digit</span></span></code></pre></div>
 <p>每多一个 30-bit digit,大约多 4 字节,和上面的结构完全吻合。</p>
-<h3 id="小整数缓存small-int-cache">4.2.3 小整数缓存(small int
-cache)</h3>
-<p>CPython 在启动时预先创建了 <code>[-5, 256]</code>
-范围内的所有整数对象,永久驻留。所有对这些值的引用都指向同一个对象:</p>
-<div class="sourceCode" id="cb7"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> <span class="dv">100</span></span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> <span class="dv">100</span></span>
-<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a <span class="kw">is</span> b)       <span class="co"># True —— 同一个缓存对象</span></span>
-<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>x <span class="op">=</span> <span class="dv">1000</span></span>
-<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>y <span class="op">=</span> <span class="dv">1000</span></span>
-<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(x <span class="kw">is</span> y)                       <span class="co"># 同一编译单元里通常是 True:字面量 1000 在 co_consts 中被复用(是常量去重,不是缓存)</span></span>
-<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">int</span>(<span class="st">&quot;1000&quot;</span>) <span class="kw">is</span> <span class="bu">int</span>(<span class="st">&quot;1000&quot;</span>))   <span class="co"># False:运行时各自新建,才真正落在缓存范围之外</span></span></code></pre></div>
-<p>这是纯粹的 CPython 优化(类比 C++
-编译器对小字面量的处理无关,更像是一个共享的常量池)。<strong>永远不要用
-<code>is</code> 比较数值</strong>,用 <code>==</code>。</p>
-<h3 id="dis-看整数字面量">4.2.4 <code>dis</code> 看整数字面量</h3>
-<div class="sourceCode" id="cb8"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> dis</span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>dis.dis(<span class="bu">compile</span>(<span class="st">&quot;x = 2 + 3&quot;</span>, <span class="st">&quot;&lt;s&gt;&quot;</span>, <span class="st">&quot;exec&quot;</span>))</span></code></pre></div>
-<p>你会看到 <code>LOAD_CONST 5</code>——编译期常量折叠已经把
-<code>2 + 3</code> 算成了 <code>5</code>,运行时并不做加法。这类似 C
-编译器的常量折叠。</p>
+<p><strong>小整数缓存</strong>:CPython 启动时预先创建了
+<code>[-5, 256]</code> 范围内的所有整数对象,永久驻留。所以:</p>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> <span class="dv">100</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> <span class="dv">100</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a <span class="kw">is</span> b)                       <span class="co"># True —— 同一个缓存对象</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">int</span>(<span class="st">&quot;1000&quot;</span>) <span class="kw">is</span> <span class="bu">int</span>(<span class="st">&quot;1000&quot;</span>))   <span class="co"># False:运行时各自新建,落在缓存范围外</span></span></code></pre></div>
+<p><strong>永远不要用 <code>is</code> 比较数值</strong>,用
+<code>==</code>。</p>
 <hr />
-<h2 id="boolint-的子类">4.3 <code>bool</code>:<code>int</code>
-的子类</h2>
+<h2 id="booltrue-false">4.4 <code>bool</code>:<code>True</code> /
+<code>False</code></h2>
+<h3 id="怎么用-1">怎么用</h3>
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>flag <span class="op">=</span> <span class="va">True</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="kw">not</span> flag)         <span class="co"># False</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="va">True</span> <span class="kw">and</span> <span class="va">False</span>)   <span class="co"># False</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="dv">3</span> <span class="op">&gt;</span> <span class="dv">2</span>)            <span class="co"># True —— 比较运算返回 bool</span></span></code></pre></div>
+<h3 id="底层与-c-对比-1">底层与 C 对比</h3>
 <p>Python 里 <code>bool</code> <strong>继承自
 <code>int</code></strong>,<code>True</code> 和 <code>False</code>
 就是值为 1 和 0 的两个单例整数对象:</p>
-<div class="sourceCode" id="cb9"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">isinstance</span>(<span class="va">True</span>, <span class="bu">int</span>))   <span class="co"># True</span></span>
-<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="va">True</span> <span class="op">+</span> <span class="va">True</span>)             <span class="co"># 2 —— 当成整数参与运算</span></span>
-<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="va">True</span> <span class="op">==</span> <span class="dv">1</span>)               <span class="co"># True</span></span>
-<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="va">True</span> <span class="kw">is</span> <span class="dv">1</span>)               <span class="co"># False —— 值相等但不是同一对象</span></span></code></pre></div>
-<p>底层上 <code>True</code>/<code>False</code>
-是两个预先创建、全程唯一的 <code>PyLongObject</code>(带 bool 类型)。这和
-C 的 <code>bool</code>(<code>_Bool</code>,通常 1 字节)完全不同:C 的 bool
-是栈上一个字节,Python 的 bool 是堆上一个继承自 int 的对象。</p>
-<p>实用后果:<code>True</code> 可当数组下标、可求和统计布尔数量:</p>
-<div class="sourceCode" id="cb10"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>data <span class="op">=</span> [<span class="dv">1</span>, <span class="op">-</span><span class="dv">2</span>, <span class="dv">3</span>, <span class="op">-</span><span class="dv">4</span>, <span class="dv">5</span>]</span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>positives <span class="op">=</span> <span class="bu">sum</span>(x <span class="op">&gt;</span> <span class="dv">0</span> <span class="cf">for</span> x <span class="kw">in</span> data)   <span class="co"># 把 True/False 当 1/0 求和 = 3</span></span></code></pre></div>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">isinstance</span>(<span class="va">True</span>, <span class="bu">int</span>))   <span class="co"># True</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="va">True</span> <span class="op">+</span> <span class="va">True</span>)             <span class="co"># 2 —— 当成整数参与运算</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="va">True</span> <span class="op">==</span> <span class="dv">1</span>)               <span class="co"># True</span></span></code></pre></div>
+<p>这和 C 的 <code>bool</code>(<code>_Bool</code>,通常 1
+字节栈上值)完全不同:Python 的 bool 是堆上一个继承自 int
+的对象。一个实用后果——可以直接对布尔求和来计数:</p>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>data <span class="op">=</span> [<span class="dv">1</span>, <span class="op">-</span><span class="dv">2</span>, <span class="dv">3</span>, <span class="op">-</span><span class="dv">4</span>, <span class="dv">5</span>]</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>positives <span class="op">=</span> <span class="bu">sum</span>(x <span class="op">&gt;</span> <span class="dv">0</span> <span class="cf">for</span> x <span class="kw">in</span> data)   <span class="co"># 把 True/False 当 1/0 求和 = 3</span></span></code></pre></div>
 <hr />
-<h2 id="float装箱的-c-double">4.4 <code>float</code>:装箱的 C
-<code>double</code></h2>
+<h2 id="float双精度浮点">4.5 <code>float</code>:双精度浮点</h2>
+<h3 id="怎么用-2">怎么用</h3>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>f <span class="op">=</span> <span class="fl">3.14</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(f <span class="op">+</span> <span class="dv">1</span>)            <span class="co"># 4.140000000000001</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="fl">2.0</span> <span class="op">**</span> <span class="fl">0.5</span>)       <span class="co"># 1.4142135623730951 —— 开方</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">round</span>(<span class="fl">3.14159</span>, <span class="dv">2</span>))<span class="co"># 3.14</span></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="fl">0.1</span> <span class="op">+</span> <span class="fl">0.2</span>)        <span class="co"># 0.30000000000000004 —— 浮点误差!</span></span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="fl">0.1</span> <span class="op">+</span> <span class="fl">0.2</span> <span class="op">==</span> <span class="fl">0.3</span>) <span class="co"># False —— 别用 == 比浮点</span></span></code></pre></div>
+<p>要精确的十进制(金融)用 <code>decimal.Decimal</code>,精确分数用
+<code>fractions.Fraction</code>。</p>
+<h3 id="底层与-c-对比-2">底层与 C 对比</h3>
 <p>Python 的 <code>float</code> 就是一个 IEEE-754
 双精度浮点,<strong>装箱</strong>(boxing)在对象里:</p>
-<div class="sourceCode" id="cb11"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="kw">typedef</span> <span class="kw">struct</span> <span class="op">{</span></span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>    PyObject_HEAD</span>
-<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">double</span> ob_fval<span class="op">;</span>      <span class="co">// 一个货真价实的 C double</span></span>
-<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> PyFloatObject<span class="op">;</span></span></code></pre></div>
+<div class="sourceCode" id="cb15"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="kw">typedef</span> <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>    PyObject_HEAD</span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">double</span> ob_fval<span class="op">;</span>      <span class="co">// 一个货真价实的 C double</span></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> PyFloatObject<span class="op">;</span></span></code></pre></div>
 <p>所以一个 float 对象 = 16 字节对象头 + 8 字节 double = 24 字节:</p>
-<div class="sourceCode" id="cb12"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sys</span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.getsizeof(<span class="fl">3.14</span>))   <span class="co"># 24</span></span></code></pre></div>
-<p>对照 C:C 的 <code>double x = 3.14;</code> 是栈上 8
-字节裸值,运算直接走 FPU 指令。Python 里每个 float
-是堆对象,<code>a + b</code> 要解引用两个指针取出
-<code>ob_fval</code>、相加、再<strong>分配一个新 float
-对象</strong>装结果。这就是数值密集计算下纯 Python
-慢、且内存开销大的根源,也是 NumPy 存在的理由——NumPy 把一亿个 double
+<div class="sourceCode" id="cb16"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sys</span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.getsizeof(<span class="fl">3.14</span>))   <span class="co"># 24</span></span></code></pre></div>
+<p>C 的 <code>double x = 3.14;</code> 是栈上 8 字节裸值,运算直接走 FPU
+指令。Python 里每个 float 是堆对象,<code>a + b</code>
+要解引用两个指针取出 <code>ob_fval</code>、相加、再<strong>分配一个新
+float 对象</strong>装结果。这就是数值密集计算下纯 Python
+慢、内存开销大的根源,也是 NumPy 存在的理由——NumPy 把一亿个 double
 打包进一块连续 C 数组,而不是一亿个 24 字节对象(<a
 href="12-常用第三方库.html">见「常用第三方库」</a>)。</p>
-<p>浮点的所有「坑」和 C 完全一样,因为底层就是同一个 double:</p>
-<div class="sourceCode" id="cb13"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="fl">0.1</span> <span class="op">+</span> <span class="fl">0.2</span>)            <span class="co"># 0.30000000000000004</span></span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="fl">0.1</span> <span class="op">+</span> <span class="fl">0.2</span> <span class="op">==</span> <span class="fl">0.3</span>)     <span class="co"># False</span></span></code></pre></div>
-<p>特殊值也一致:<code>float('inf')</code>、<code>float('-inf')</code>、<code>float('nan')</code>,<code>nan != nan</code>
-成立。</p>
-<p>需要精确十进制(金融)时用标准库
-<code>decimal.Decimal</code>;需要精确分数用
-<code>fractions.Fraction</code>——它们内部用整数实现,不是 double。</p>
+<p>浮点的所有「坑」和 C 完全一样,因为底层就是同一个 double:上面
+<code>0.1 + 0.2 != 0.3</code>
+就是明证。特殊值也一致:<code>float('inf')</code>、<code>float('nan')</code>,且
+<code>nan != nan</code>。</p>
 <hr />
-<h2 id="complex两个-double">4.5 <code>complex</code>:两个 double</h2>
-<p><code>complex</code> 就是一个装了两个 C double(实部、虚部)的对象:</p>
-<div class="sourceCode" id="cb14"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="kw">typedef</span> <span class="kw">struct</span> <span class="op">{</span></span>
-<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>    PyObject_HEAD</span>
-<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">double</span> real<span class="op">;</span></span>
-<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">double</span> imag<span class="op">;</span></span>
-<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> PyComplexObject<span class="op">;</span></span></code></pre></div>
-<div class="sourceCode" id="cb15"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>z <span class="op">=</span> <span class="dv">3</span> <span class="op">+</span> <span class="ot">4j</span></span>
-<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(z.real, z.imag)   <span class="co"># 3.0 4.0</span></span>
-<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">abs</span>(z))           <span class="co"># 5.0</span></span></code></pre></div>
-<p>虚部字面量后缀是 <code>j</code>。这是内置类型,不需要 import。</p>
+<h2 id="complex复数">4.6 <code>complex</code>:复数</h2>
+<h3 id="怎么用-3">怎么用</h3>
+<p>虚部字面量后缀是 <code>j</code>,内置类型,不需要 import:</p>
+<div class="sourceCode" id="cb17"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>z <span class="op">=</span> <span class="dv">3</span> <span class="op">+</span> <span class="ot">4j</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(z.real, z.imag)   <span class="co"># 3.0 4.0</span></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">abs</span>(z))           <span class="co"># 5.0 —— 模长</span></span></code></pre></div>
 <p>要做复数的三角/指数运算,用标准库 <code>cmath</code>(而不是
-<code>math</code>,后者只接受实数):</p>
-<div class="sourceCode" id="cb16"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> cmath</span>
-<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>z <span class="op">=</span> <span class="dv">1</span> <span class="op">+</span> <span class="ot">1j</span></span>
-<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(cmath.phase(z))        <span class="co"># 0.7853981633974483 —— 辐角(π/4 弧度)</span></span>
-<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">abs</span>(z))                <span class="co"># 1.4142135623730951 —— 模长</span></span>
-<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>r, phi <span class="op">=</span> cmath.polar(z)      <span class="co"># 转极坐标:(模, 辐角)</span></span>
-<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(cmath.rect(r, phi))    <span class="co"># (1.0000000000000002+1j) —— 转回来,浮点误差可见</span></span>
-<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>((<span class="op">-</span><span class="dv">1</span> <span class="op">+</span> <span class="ot">0j</span>) <span class="op">**</span> <span class="fl">0.5</span>)      <span class="co"># (6.123233995736766e-17+1j) —— √-1 ≈ i(实部是浮点噪声)</span></span></code></pre></div>
-<p>注意 <code>(-1) ** 0.5</code> 对 <code>float</code> 会抛错或返回
-<code>nan</code>,但对 <code>complex</code> 走复数开方,<code>√-1</code>
-得到约等于 <code>i</code>(实部那个 <code>6e-17</code>
-是浮点舍入噪声,理论上应为 0)。</p>
+<code>math</code>):</p>
+<div class="sourceCode" id="cb18"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> cmath</span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>z <span class="op">=</span> <span class="dv">1</span> <span class="op">+</span> <span class="ot">1j</span></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(cmath.phase(z))   <span class="co"># 0.7853981633974483 —— 辐角(π/4)</span></span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>((<span class="op">-</span><span class="dv">1</span> <span class="op">+</span> <span class="ot">0j</span>) <span class="op">**</span> <span class="fl">0.5</span>) <span class="co"># (6.12e-17+1j) —— √-1 ≈ i(实部是浮点噪声)</span></span></code></pre></div>
+<h3 id="底层与-c-对比-3">底层与 C 对比</h3>
+<p><code>complex</code> 就是一个装了两个 C double(实部、虚部)的对象:</p>
+<div class="sourceCode" id="cb19"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="kw">typedef</span> <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>    PyObject_HEAD</span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">double</span> real<span class="op">;</span></span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">double</span> imag<span class="op">;</span></span>
+<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> PyComplexObject<span class="op">;</span></span></code></pre></div>
+<p>和 <code>float</code> 同理,只是多一个 double。注意
+<code>(-1) ** 0.5</code> 对 <code>float</code> 会返回
+<code>nan</code>,但对 <code>complex</code> 走复数开方得到约等于
+<code>i</code>。</p>
 <hr />
-<h2 id="strpep-393-紧凑-unicode">4.6 <code>str</code>:PEP 393 紧凑
-Unicode</h2>
-<p>字符串是 C/Python 差异最大的地方之一。C 的 <code>char*</code>
-是一串以 <code>\0</code> 结尾的字节;Python 的 <code>str</code>
-是<strong>不可变的 Unicode 码点序列</strong>,且 CPython
-会根据内容选择最省的内部编码。</p>
-<h3 id="pep-393按最大码点选择存储宽度">4.6.1 PEP
-393:按最大码点选择存储宽度</h3>
-<p>从 Python 3.3 起(PEP 393),CPython 不再固定用 2 或 4
-字节存每个字符,而是看字符串里<strong>最大的码点</strong>,选三种紧凑表示之一:</p>
+<h2 id="strunicode-文本">4.7 <code>str</code>:Unicode 文本</h2>
+<h3 id="怎么用-4">怎么用</h3>
+<p>字符串是不可变的 Unicode 文本,可索引、可切片,但不能原地改:</p>
+<div class="sourceCode" id="cb20"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>s <span class="op">=</span> <span class="st">&quot;café😀&quot;</span></span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(s[<span class="dv">0</span>])             <span class="co"># c   —— 索引取单个字符</span></span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(s[<span class="dv">1</span>:<span class="dv">4</span>])           <span class="co"># afé —— 切片</span></span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(s.upper())        <span class="co"># CAFÉ😀</span></span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">&quot;a&quot;</span> <span class="kw">in</span> s)         <span class="co"># False</span></span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">len</span>(s))           <span class="co"># 5   —— 数的是「字符(码点)」,不是字节!</span></span>
+<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a><span class="co"># s[0] = &quot;C&quot;            # TypeError:字符串不可变</span></span>
+<span id="cb20-9"><a href="#cb20-9" aria-hidden="true" tabindex="-1"></a>s2 <span class="op">=</span> s.replace(<span class="st">&quot;c&quot;</span>, <span class="st">&quot;C&quot;</span>)<span class="co"># 任何「修改」都产生新字符串</span></span></code></pre></div>
+<p>和外部(文件、网络)打交道时,<code>str</code>(文本)与
+<code>bytes</code>(字节)必须显式编解码:</p>
+<div class="sourceCode" id="cb21"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>s <span class="op">=</span> <span class="st">&quot;café&quot;</span></span>
+<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a>data <span class="op">=</span> s.encode(<span class="st">&quot;utf-8&quot;</span>)     <span class="co"># str -&gt; bytes: b&#39;caf\xc3\xa9&#39;</span></span>
+<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a>back <span class="op">=</span> data.decode(<span class="st">&quot;utf-8&quot;</span>)  <span class="co"># bytes -&gt; str: café</span></span></code></pre></div>
+<h3 id="底层与-c-对比-4">底层与 C 对比</h3>
+<p>C 的 <code>char*</code> 是一串以 <code>\0</code> 结尾的字节;Python 的
+<code>str</code> 是<strong>不可变的 Unicode 码点序列</strong>,且 CPython
+会根据内容选最省的内部编码。</p>
+<p><strong>PEP 393</strong>:从 Python 3.3 起,CPython
+看字符串里<strong>最大的码点</strong>,选三种紧凑表示之一:</p>
 <table>
-<colgroup>
-<col style="width: 25%" />
-<col style="width: 25%" />
-<col style="width: 25%" />
-<col style="width: 25%" />
-</colgroup>
 <thead>
 <tr>
 <th>内部种类</th>
@@ -396,44 +426,32 @@ Unicode</h2>
 </thead>
 <tbody>
 <tr>
-<td>Latin-1 (<code>PyUnicode_1BYTE_KIND</code>)</td>
+<td>Latin-1</td>
 <td>1</td>
 <td>U+0000–U+00FF</td>
 <td><code>"hello"</code>, <code>"café"</code></td>
 </tr>
 <tr>
-<td>UCS-2 (<code>PyUnicode_2BYTE_KIND</code>)</td>
+<td>UCS-2</td>
 <td>2</td>
 <td>U+0000–U+FFFF</td>
 <td><code>"你好"</code></td>
 </tr>
 <tr>
-<td>UCS-4 (<code>PyUnicode_4BYTE_KIND</code>)</td>
+<td>UCS-4</td>
 <td>4</td>
 <td>U+0000–U+10FFFF</td>
-<td><code>"😀"</code>(需要补充平面)</td>
+<td><code>"😀"</code></td>
 </tr>
 </tbody>
 </table>
-<p>只要字符串里出现一个高码点字符,<strong>整个字符串</strong>升到更宽的表示。观察:</p>
-<div class="sourceCode" id="cb17"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sys</span>
-<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.getsizeof(<span class="st">&quot;&quot;</span>))        <span class="co"># 41(64 位 CPython 3.12+;3.11 及更早约 49,PEP 623 移除 wstr 后头部变小)</span></span>
-<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.getsizeof(<span class="st">&quot;a&quot;</span>))       <span class="co"># 42   —— +1 字节 (Latin-1)</span></span>
-<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.getsizeof(<span class="st">&quot;ab&quot;</span>))      <span class="co"># 43   —— +2 字节</span></span>
-<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.getsizeof(<span class="st">&quot;你&quot;</span>))      <span class="co"># 60 —— UCS-2,每字符 2 字节且基线更大</span></span>
-<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.getsizeof(<span class="st">&quot;😀&quot;</span>))      <span class="co"># 64 —— UCS-4,每字符 4 字节</span></span></code></pre></div>
-<p>内存布局(紧凑形式)概念图,<code>"café"</code>(全在 Latin-1
-范围内):</p>
-<pre><code>+---------------------------+
-| ob_refcnt / ob_type       |  对象头
-| length = 4                |  码点个数(不是字节数)
-| hash (缓存)               |
-| kind = 1BYTE, flags...    |  存储种类
-+---------------------------+
-| &#39;c&#39; &#39;a&#39; &#39;f&#39; &#39;é&#39; &#39;\0&#39;      |  紧接对象之后的连续码点数据
-+---------------------------+</code></pre>
-<p>关键差异与 C 对照:</p>
+<p>只要字符串里出现一个高码点字符,<strong>整个字符串</strong>升到更宽的表示:</p>
+<div class="sourceCode" id="cb22"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sys</span>
+<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.getsizeof(<span class="st">&quot;a&quot;</span>))       <span class="co"># 42 —— Latin-1,每字符 1 字节</span></span>
+<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.getsizeof(<span class="st">&quot;你&quot;</span>))      <span class="co"># 60 —— UCS-2,每字符 2 字节</span></span>
+<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.getsizeof(<span class="st">&quot;😀&quot;</span>))      <span class="co"># 64 —— UCS-4,每字符 4 字节</span></span></code></pre></div>
+<p>与 C 对照:</p>
 <table>
 <thead>
 <tr>
@@ -463,129 +481,88 @@ class="sourceCode python"><code class="sourceCode python"><span id="cb17-1"><a h
 <td>可改</td>
 <td>不可变</td>
 </tr>
-<tr>
-<td>索引</td>
-<td><code>s[i]</code> 取字节</td>
-<td><code>s[i]</code> 取码点,O(1)</td>
-</tr>
 </tbody>
 </table>
 <p><code>len()</code> 数的是<strong>码点</strong>不是字节,这点常让写惯 C
 的人踩坑:</p>
-<div class="sourceCode" id="cb19"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>s <span class="op">=</span> <span class="st">&quot;café😀&quot;</span></span>
-<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">len</span>(s))            <span class="co"># 5 个码点</span></span>
-<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">len</span>(s.encode()))   <span class="co"># 9 个 UTF-8 字节:c/a/f 各 1 + é(2) + 😀(4)</span></span></code></pre></div>
+<div class="sourceCode" id="cb23"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a>s <span class="op">=</span> <span class="st">&quot;café😀&quot;</span></span>
+<span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">len</span>(s))            <span class="co"># 5 个码点</span></span>
+<span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">len</span>(s.encode()))   <span class="co"># 9 个 UTF-8 字节:c/a/f 各 1 + é(2) + 😀(4)</span></span></code></pre></div>
 <blockquote>
 <p><strong>别把两件事搞混</strong>:<code>.encode()</code> 得到的是
 <strong>UTF-8 变长编码</strong>(每字符按码点占 1–4
-字节),和它在内存里怎么存<strong>无关</strong>,所以是 9 字节;而 4.6.1
-说的”整串升到 4 字节/字符”指的是 <code>str</code>
-<strong>对象在内存里的定宽缓冲区</strong>(这里是 UCS-4,约 5×4=20 字节,由
-<code>sys.getsizeof</code>
-反映)。同一个字符串:内存里用<strong>定宽</strong>存(便于
+字节),和它在内存里怎么存<strong>无关</strong>;而 PEP 393 说的”整串升到 4
+字节/字符”指的是 <code>str</code>
+<strong>对象在内存里的定宽缓冲区</strong>。内存里用<strong>定宽</strong>存(便于
 <code>s[i]</code> O(1) 索引),<code>.encode()</code> 序列化成 UTF-8
-用<strong>变长</strong>存(便于存储/传输)——两者字节数本来就不同。</p>
+用<strong>变长</strong>存(便于存储/传输)。</p>
 </blockquote>
-<h3 id="不可变性与哈希缓存">4.6.2 不可变性与哈希缓存</h3>
-<p><code>str</code>
-不可变,任何「修改」都会产生新对象。因为不可变,字符串可以缓存哈希值(见上面布局里的
-<code>hash</code> 字段),这让它成为高效的 dict 键(<a
-href="07-复合数据结构.html">见「复合数据结构」</a>)。</p>
-<div class="sourceCode" id="cb20"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>s <span class="op">=</span> <span class="st">&quot;hello&quot;</span></span>
-<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a><span class="co"># s[0] = &#39;H&#39;   # TypeError: &#39;str&#39; object does not support item assignment</span></span>
-<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>s2 <span class="op">=</span> s.replace(<span class="st">&quot;h&quot;</span>, <span class="st">&quot;H&quot;</span>)   <span class="co"># 新对象</span></span>
-<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(s <span class="kw">is</span> s2)             <span class="co"># False</span></span></code></pre></div>
-<h3 id="字符串驻留interning">4.6.3 字符串驻留(interning)</h3>
-<p>CPython 对看起来像标识符的短字符串字面量做
-interning(驻留到全局池),以便 <code>is</code> 快速比较、省内存:</p>
-<div class="sourceCode" id="cb21"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> <span class="st">&quot;hello&quot;</span></span>
-<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> <span class="st">&quot;hello&quot;</span></span>
-<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a <span class="kw">is</span> b)          <span class="co"># 通常 True —— 同一编译单元字面量被驻留</span></span>
-<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a>c <span class="op">=</span> <span class="st">&quot;&quot;</span>.join([<span class="st">&quot;h&quot;</span>, <span class="st">&quot;e&quot;</span>, <span class="st">&quot;l&quot;</span>, <span class="st">&quot;l&quot;</span>, <span class="st">&quot;o&quot;</span>])</span>
-<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a <span class="kw">is</span> c)          <span class="co"># 通常 False —— 运行期构造,未驻留</span></span>
-<span id="cb21-7"><a href="#cb21-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a <span class="op">==</span> c)          <span class="co"># True —— 内容相等</span></span></code></pre></div>
-<p>依旧那句话:比较内容用 <code>==</code>,<code>is</code>
-只判断是否同一对象。可用 <code>sys.intern()</code>
-手动驻留高频字符串。</p>
+<p>因为不可变,字符串可以缓存哈希值,成为高效的 dict 键。CPython
+还对看起来像标识符的短字符串字面量做<strong>驻留</strong>(interning),让
+<code>is</code> 快速比较、省内存——但比较内容仍然只用
+<code>==</code>。</p>
 <hr />
-<h2 id="bytes-与-bytearray才是c-的-char-数组">4.7 <code>bytes</code> 与
+<h2 id="bytes-bytearray才是c-的-char-数组">4.8 <code>bytes</code> /
 <code>bytearray</code>:才是「C 的 char 数组」</h2>
+<h3 id="怎么用-5">怎么用</h3>
 <p>如果你想要 C 里那个「一串裸字节」,对应的是
 <code>bytes</code>(不可变)和 <code>bytearray</code>(可变),不是
-<code>str</code>。</p>
-<div class="sourceCode" id="cb22"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> <span class="st">b&quot;hello&quot;</span>          <span class="co"># bytes 字面量,前缀 b</span></span>
-<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(b[<span class="dv">0</span>])           <span class="co"># 104 —— 取出的是 int(字节值),不是字符</span></span>
-<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">type</span>(b[<span class="dv">0</span>]))     <span class="co"># &lt;class &#39;int&#39;&gt;</span></span></code></pre></div>
+<code>str</code>:</p>
+<div class="sourceCode" id="cb24"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> <span class="st">b&quot;hello&quot;</span>          <span class="co"># bytes 字面量,前缀 b</span></span>
+<span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(b[<span class="dv">0</span>])           <span class="co"># 104 —— 取出的是 int(字节值),不是字符</span></span>
+<span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-4"><a href="#cb24-4" aria-hidden="true" tabindex="-1"></a>ba <span class="op">=</span> <span class="bu">bytearray</span>(<span class="st">b&quot;hi&quot;</span>) <span class="co"># 可变版本</span></span>
+<span id="cb24-5"><a href="#cb24-5" aria-hidden="true" tabindex="-1"></a>ba.append(<span class="dv">33</span>)         <span class="co"># 追加 &#39;!&#39; (0x21)</span></span>
+<span id="cb24-6"><a href="#cb24-6" aria-hidden="true" tabindex="-1"></a>ba[<span class="dv">0</span>] <span class="op">=</span> <span class="dv">72</span>            <span class="co"># 原地修改 -&gt; &#39;H&#39;</span></span>
+<span id="cb24-7"><a href="#cb24-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(ba)             <span class="co"># bytearray(b&#39;Hi!&#39;)</span></span></code></pre></div>
+<p>解析二进制协议时,把字节按大小端拼成整数——C 里做移位和
+<code>|</code>,Python 直接用 <code>int.from_bytes</code> /
+<code>int.to_bytes</code>:</p>
+<div class="sourceCode" id="cb25"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a>data <span class="op">=</span> <span class="st">b&#39;</span><span class="ch">\x00\x00\x01\x00</span><span class="st">&#39;</span></span>
+<span id="cb25-2"><a href="#cb25-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">int</span>.from_bytes(data, <span class="st">&quot;big&quot;</span>))     <span class="co"># 256   —— 大端</span></span>
+<span id="cb25-3"><a href="#cb25-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">int</span>.from_bytes(data, <span class="st">&quot;little&quot;</span>))  <span class="co"># 65536 —— 小端</span></span>
+<span id="cb25-4"><a href="#cb25-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>((<span class="dv">1000</span>).to_bytes(<span class="dv">4</span>, <span class="st">&quot;big&quot;</span>).<span class="bu">hex</span>()) <span class="co"># 000003e8</span></span></code></pre></div>
+<h3 id="底层与-c-对比-5">底层与 C 对比</h3>
 <ul>
 <li><code>bytes</code>:不可变字节序列,内部就是一段连续的
-<code>char</code>(<code>unsigned char</code>)缓冲 + 长度。最接近 C 的
+<code>unsigned char</code> 缓冲 + 长度。最接近 C 的
 <code>const char*</code> + 长度。</li>
 <li><code>bytearray</code>:可变版本,内部像 C++ 的
-<code>std::vector&lt;uint8_t&gt;</code>——有容量、可原地增删:</li>
+<code>std::vector&lt;uint8_t&gt;</code>——有容量、可原地增删。</li>
 </ul>
-<div class="sourceCode" id="cb23"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a>ba <span class="op">=</span> <span class="bu">bytearray</span>(<span class="st">b&quot;hi&quot;</span>)</span>
-<span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a>ba.append(<span class="dv">33</span>)         <span class="co"># 追加 &#39;!&#39; (0x21)</span></span>
-<span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a>ba[<span class="dv">0</span>] <span class="op">=</span> <span class="dv">72</span>            <span class="co"># 原地修改 -&gt; &#39;H&#39;</span></span>
-<span id="cb23-4"><a href="#cb23-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(ba)             <span class="co"># bytearray(b&#39;Hi!&#39;)</span></span></code></pre></div>
-<p>想要 C 里那种「拿一个指针指进缓冲区、零拷贝地读写一段字节」,对应的是
-<code>memoryview</code>:它不复制底层字节,只是一个开在已有 buffer
-上的视图,切片同样零拷贝(类比 C++ 的 <code>std::span</code> /
+<p>想要 C 里那种「拿一个指针指进缓冲区、零拷贝读写」,对应的是
+<code>memoryview</code>:它不复制底层字节,只是开在已有 buffer
+上的视图,切片也零拷贝(类比 C++ 的 <code>std::span</code> /
 <code>string_view</code>):</p>
-<div class="sourceCode" id="cb24"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a>ba <span class="op">=</span> <span class="bu">bytearray</span>(<span class="st">b&quot;hello world&quot;</span>)</span>
-<span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a>mv <span class="op">=</span> <span class="bu">memoryview</span>(ba)          <span class="co"># 零拷贝视图,不复制底层字节</span></span>
-<span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a>chunk <span class="op">=</span> mv[<span class="dv">6</span>:<span class="dv">11</span>]             <span class="co"># 切片仍是视图,仍指向原缓冲(没有新分配)</span></span>
-<span id="cb24-4"><a href="#cb24-4" aria-hidden="true" tabindex="-1"></a>chunk[<span class="dv">0</span>] <span class="op">=</span> <span class="bu">ord</span>(<span class="st">&#39;W&#39;</span>)          <span class="co"># 通过视图原地改第 6 个字节</span></span>
-<span id="cb24-5"><a href="#cb24-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(ba)                    <span class="co"># bytearray(b&#39;hello World&#39;) —— 原对象被改了</span></span>
-<span id="cb24-6"><a href="#cb24-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">bytes</span>(mv[:<span class="dv">5</span>]))         <span class="co"># b&#39;hello&#39; —— 需要真拷贝时显式转 bytes</span></span></code></pre></div>
-<p>这在处理大块二进制(网络包、图像、文件)时能避免 <code>data[a:b]</code>
-那种「切一次就复制一份」的开销。</p>
-<p><code>str</code> 与 <code>bytes</code> 的转换必须显式指定编码,这是
-Python 3 强制的(Python 2 的隐式转换是历史大坑):</p>
-<div class="sourceCode" id="cb25"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a>s <span class="op">=</span> <span class="st">&quot;café&quot;</span></span>
-<span id="cb25-2"><a href="#cb25-2" aria-hidden="true" tabindex="-1"></a>data <span class="op">=</span> s.encode(<span class="st">&quot;utf-8&quot;</span>)     <span class="co"># str -&gt; bytes</span></span>
-<span id="cb25-3"><a href="#cb25-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(data)                  <span class="co"># b&#39;caf\xc3\xa9&#39;</span></span>
-<span id="cb25-4"><a href="#cb25-4" aria-hidden="true" tabindex="-1"></a>back <span class="op">=</span> data.decode(<span class="st">&quot;utf-8&quot;</span>)  <span class="co"># bytes -&gt; str</span></span>
-<span id="cb25-5"><a href="#cb25-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(back)                  <span class="co"># café</span></span></code></pre></div>
-<p>对照 C:C 里 <code>char*</code> 既是文本又是字节,编码全靠约定;Python
-强制你在边界(文件、网络、系统调用)显式编解码,<code>str</code>
-处理文本,<code>bytes</code> 处理二进制。</p>
-<p>解析二进制协议时常要把几个字节按大小端拼成整数——C 里你会做移位和
-<code>|</code>,Python 直接用 <code>int.from_bytes</code> /
-<code>int.to_bytes</code>,字节序显式指定:</p>
 <div class="sourceCode" id="cb26"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a>data <span class="op">=</span> <span class="st">b&#39;</span><span class="ch">\x00\x00\x01\x00</span><span class="st">&#39;</span></span>
-<span id="cb26-2"><a href="#cb26-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">int</span>.from_bytes(data, <span class="st">&quot;big&quot;</span>))     <span class="co"># 256    —— 大端:0x00000100</span></span>
-<span id="cb26-3"><a href="#cb26-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">int</span>.from_bytes(data, <span class="st">&quot;little&quot;</span>))  <span class="co"># 65536  —— 小端:0x00010000</span></span>
-<span id="cb26-4"><a href="#cb26-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>((<span class="dv">1000</span>).to_bytes(<span class="dv">4</span>, <span class="st">&quot;big&quot;</span>))       <span class="co"># b&#39;\x00\x00\x03\xe8&#39; —— 打包成 4 字节大端</span></span>
-<span id="cb26-5"><a href="#cb26-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>((<span class="dv">1000</span>).to_bytes(<span class="dv">4</span>, <span class="st">&quot;big&quot;</span>).<span class="bu">hex</span>()) <span class="co"># 000003e8 —— 十六进制查看</span></span></code></pre></div>
-<p><code>byteorder</code> 必须显式写 <code>"big"</code> 或
-<code>"little"</code>,不像 C
-那样默认跟机器字节序走——这反而消除了跨平台的隐式坑。</p>
+class="sourceCode python"><code class="sourceCode python"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a>ba <span class="op">=</span> <span class="bu">bytearray</span>(<span class="st">b&quot;hello world&quot;</span>)</span>
+<span id="cb26-2"><a href="#cb26-2" aria-hidden="true" tabindex="-1"></a>mv <span class="op">=</span> <span class="bu">memoryview</span>(ba)          <span class="co"># 零拷贝视图</span></span>
+<span id="cb26-3"><a href="#cb26-3" aria-hidden="true" tabindex="-1"></a>chunk <span class="op">=</span> mv[<span class="dv">6</span>:<span class="dv">11</span>]             <span class="co"># 切片仍是视图,指向原缓冲(没有新分配)</span></span>
+<span id="cb26-4"><a href="#cb26-4" aria-hidden="true" tabindex="-1"></a>chunk[<span class="dv">0</span>] <span class="op">=</span> <span class="bu">ord</span>(<span class="st">&#39;W&#39;</span>)          <span class="co"># 通过视图原地改</span></span>
+<span id="cb26-5"><a href="#cb26-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(ba)                    <span class="co"># bytearray(b&#39;hello World&#39;) —— 原对象被改了</span></span></code></pre></div>
+<p>处理大块二进制(网络包、图像)时,这能避免 <code>data[a:b]</code>
+那种「切一次就复制一份」的开销。C 里 <code>char*</code>
+既是文本又是字节、编码全靠约定;Python
+强制你在边界显式编解码,<code>str</code> 处理文本、<code>bytes</code>
+处理二进制。</p>
 <hr />
-<h2 id="单例nonenotimplementedellipsis">4.8
+<h2 id="单例nonenotimplementedellipsis">4.9
 单例:<code>None</code>、<code>NotImplemented</code>、<code>Ellipsis</code></h2>
-<p>这三个是全程唯一的单例对象,类似 C++ 里你可能定义的全局 sentinel。</p>
-<h3 id="none"><code>None</code></h3>
-<p>表示「无值/空」,类比 C 的 <code>NULL</code>,但它是个真正的对象(类型
-<code>NoneType</code>),不是 0 指针:</p>
+<p>这三个是全程唯一的单例对象,用法本身就很简单。</p>
+<p><code>None</code> 表示「无值/空」,类比 C 的
+<code>NULL</code>,但它是真正的对象(类型 <code>NoneType</code>),不是 0
+指针:</p>
 <div class="sourceCode" id="cb27"><pre
 class="sourceCode python"><code class="sourceCode python"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a>x <span class="op">=</span> <span class="va">None</span></span>
-<span id="cb27-2"><a href="#cb27-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(x <span class="kw">is</span> <span class="va">None</span>)        <span class="co"># 判空的标准写法,永远用 is</span></span>
-<span id="cb27-3"><a href="#cb27-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">type</span>(<span class="va">None</span>))       <span class="co"># &lt;class &#39;NoneType&#39;&gt;</span></span></code></pre></div>
-<p><code>None</code> 全程只有一个实例,所以用 <code>is None</code> 而不是
-<code>== None</code>——既快又不会被自定义 <code>__eq__</code>
-干扰。函数没有 <code>return</code> 时默认返回 <code>None</code>(<a
-href="06-函数与调用栈.html">见「函数与调用栈」</a>)。</p>
-<h3 id="notimplemented"><code>NotImplemented</code></h3>
-<p>运算符重载里,当某类型不知道怎么和对方运算时,返回它(<strong>不是抛异常</strong>),让
+<span id="cb27-2"><a href="#cb27-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(x <span class="kw">is</span> <span class="va">None</span>)        <span class="co"># 判空的标准写法,永远用 is</span></span></code></pre></div>
+<p><code>None</code> 全程只有一个实例,用 <code>is None</code>
+既快又不会被自定义 <code>__eq__</code> 干扰。函数没有
+<code>return</code> 时默认返回 <code>None</code>。</p>
+<p><code>NotImplemented</code>
+用在运算符重载里,某类型不知道怎么和对方运算时返回它(不是抛异常),让
 Python 去尝试对方的反射方法:</p>
 <div class="sourceCode" id="cb28"><pre
 class="sourceCode python"><code class="sourceCode python"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Vec:</span>
@@ -594,26 +571,22 @@ class="sourceCode python"><code class="sourceCode python"><span id="cb28-1"><a h
 <span id="cb28-4"><a href="#cb28-4" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="kw">not</span> <span class="bu">isinstance</span>(other, Vec):</span>
 <span id="cb28-5"><a href="#cb28-5" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="va">NotImplemented</span>    <span class="co"># 交给对方处理</span></span>
 <span id="cb28-6"><a href="#cb28-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> Vec(<span class="va">self</span>.x <span class="op">+</span> other.x)</span></code></pre></div>
-<h3 id="ellipsis..."><code>Ellipsis</code>(<code>...</code>)</h3>
-<p>字面量就是三个点
-<code>...</code>。本身几乎无内置语义,常用作占位符,或被 NumPy
-用作多维切片(<code>arr[..., 0]</code>):</p>
+<p><code>Ellipsis</code>(<code>...</code>)字面量就是三个点,常用作占位符,或被
+NumPy 用作多维切片(<code>arr[..., 0]</code>):</p>
 <div class="sourceCode" id="cb29"><pre
 class="sourceCode python"><code class="sourceCode python"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> todo(): ...          <span class="co"># 合法的函数体占位(等价于 pass)</span></span>
 <span id="cb29-2"><a href="#cb29-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(... <span class="kw">is</span> <span class="va">Ellipsis</span>)   <span class="co"># True</span></span></code></pre></div>
 <hr />
-<h2 id="数值与字符串转换">4.9 数值与字符串转换</h2>
+<h2 id="数值与字符串转换">4.10 数值与字符串转换</h2>
 <p>显式构造/转换用类型名当函数(其实是调用类型对象):</p>
 <div class="sourceCode" id="cb30"><pre
 class="sourceCode python"><code class="sourceCode python"><span id="cb30-1"><a href="#cb30-1" aria-hidden="true" tabindex="-1"></a><span class="bu">int</span>(<span class="st">&quot;42&quot;</span>)           <span class="co"># 42        —— str -&gt; int</span></span>
 <span id="cb30-2"><a href="#cb30-2" aria-hidden="true" tabindex="-1"></a><span class="bu">int</span>(<span class="st">&quot;ff&quot;</span>, <span class="dv">16</span>)       <span class="co"># 255       —— 指定进制</span></span>
-<span id="cb30-3"><a href="#cb30-3" aria-hidden="true" tabindex="-1"></a><span class="bu">int</span>(<span class="fl">3.9</span>)            <span class="co"># 3         —— float 截断(向零取整,不是四舍五入)</span></span>
+<span id="cb30-3"><a href="#cb30-3" aria-hidden="true" tabindex="-1"></a><span class="bu">int</span>(<span class="fl">3.9</span>)            <span class="co"># 3         —— float 截断(向零取整)</span></span>
 <span id="cb30-4"><a href="#cb30-4" aria-hidden="true" tabindex="-1"></a><span class="bu">float</span>(<span class="st">&quot;3.14&quot;</span>)       <span class="co"># 3.14</span></span>
-<span id="cb30-5"><a href="#cb30-5" aria-hidden="true" tabindex="-1"></a><span class="bu">float</span>(<span class="st">&quot;inf&quot;</span>)        <span class="co"># inf</span></span>
-<span id="cb30-6"><a href="#cb30-6" aria-hidden="true" tabindex="-1"></a><span class="bu">str</span>(<span class="dv">255</span>)            <span class="co"># &quot;255&quot;</span></span>
-<span id="cb30-7"><a href="#cb30-7" aria-hidden="true" tabindex="-1"></a><span class="bu">bin</span>(<span class="dv">255</span>)            <span class="co"># &quot;0b11111111&quot;</span></span>
-<span id="cb30-8"><a href="#cb30-8" aria-hidden="true" tabindex="-1"></a><span class="bu">hex</span>(<span class="dv">255</span>)            <span class="co"># &quot;0xff&quot;</span></span>
-<span id="cb30-9"><a href="#cb30-9" aria-hidden="true" tabindex="-1"></a><span class="bu">oct</span>(<span class="dv">255</span>)            <span class="co"># &quot;0o377&quot;</span></span></code></pre></div>
+<span id="cb30-5"><a href="#cb30-5" aria-hidden="true" tabindex="-1"></a><span class="bu">str</span>(<span class="dv">255</span>)            <span class="co"># &quot;255&quot;</span></span>
+<span id="cb30-6"><a href="#cb30-6" aria-hidden="true" tabindex="-1"></a><span class="bu">bin</span>(<span class="dv">255</span>)            <span class="co"># &quot;0b11111111&quot;</span></span>
+<span id="cb30-7"><a href="#cb30-7" aria-hidden="true" tabindex="-1"></a><span class="bu">hex</span>(<span class="dv">255</span>)            <span class="co"># &quot;0xff&quot;</span></span></code></pre></div>
 <p>格式化(f-string,3.6+)是最常用的数值转字符串方式:</p>
 <div class="sourceCode" id="cb31"><pre
 class="sourceCode python"><code class="sourceCode python"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a>n <span class="op">=</span> <span class="dv">255</span></span>
@@ -634,21 +607,23 @@ href="09-错误处理与资源管理.html">见「错误处理与资源管理」<
 <hr />
 <h2 id="小结">小结</h2>
 <ul>
-<li>所有类型都是堆对象,共享 <code>PyObject</code> 头(引用计数 +
-类型指针,类型指针相当于 vptr)。</li>
+<li><strong>用法层面</strong>:字面量直接写(<code>42</code> /
+<code>3.14</code> / <code>"文本"</code> /
+<code>b"字节"</code>);<code>//</code> 是整除且向下取整、<code>**</code>
+是幂;<code>len</code> 数的是码点;字符串不可变;转换用类型名调用、失败抛
+<code>ValueError</code>。</li>
+<li><strong>底层层面</strong>:所有值都是堆对象,共享
+<code>PyObject</code> 头(引用计数 + 类型指针 ≈ vptr)。
+<ul>
 <li><code>int</code> 是变长 bignum(30-bit digit 数组 +
 符号),不溢出;<code>[-5,256]</code> 有缓存单例。</li>
 <li><code>bool</code> 是 <code>int</code>
-子类,<code>True</code>/<code>False</code> 是值 1/0 的单例。</li>
-<li><code>float</code>/<code>complex</code> 是装箱的 C
-double(一个/两个),运算都要新分配对象。</li>
+子类;<code>float</code>/<code>complex</code> 是装箱的 C
+double(一个/两个)。</li>
 <li><code>str</code> 是不可变 Unicode,按最大码点选 1/2/4
-字节紧凑存储(PEP 393),<code>len</code>
-数码点;<code>bytes</code>/<code>bytearray</code> 才对应 C
-的字节数组。</li>
-<li><code>None</code>/<code>NotImplemented</code>/<code>Ellipsis</code>
-是三个全程单例,判等用 <code>is</code>。</li>
-<li>转换用类型名调用,失败抛 <code>ValueError</code> 而非静默。</li>
+字节紧凑存储(PEP 393);<code>bytes</code>/<code>bytearray</code> 才对应 C
+的字节数组,<code>memoryview</code> 对应零拷贝视图。</li>
+</ul></li>
 </ul>
 <p>下一章进入控制流,你会看到 Python 的 <code>for</code> 根本不是 C
 的下标循环,而是建立在迭代器协议之上。</p>

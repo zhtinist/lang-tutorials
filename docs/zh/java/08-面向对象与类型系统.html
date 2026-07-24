@@ -2,20 +2,17 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="zh-CN" xml:lang="zh-CN">
 <head>
   <meta charset="utf-8" />
-  <meta name="generator" content="pandoc 3.10" />
+  <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
   <title>面向对象与类型系统</title>
   <style>
     /* Default styles provided by pandoc.
     ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
     */
+    code{white-space: pre-wrap;}
     span.smallcaps{font-variant: small-caps;}
-    div.columns{display: flex; gap: 1.5em;}
-    div.column{flex: auto;}
-    @media screen {
-    div.columns{gap: min(4vw, 1.5em);}
-    div.column{overflow-x: auto;}
-    }
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
     div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
     /* The extra [class] is a hack that increases specificity enough to
        override a similar rule in reveal.js */
@@ -110,6 +107,10 @@
 <li><a href="#面向对象与类型系统"
 id="toc-面向对象与类型系统">面向对象与类型系统</a>
 <ul>
+<li><a href="#先会用类与对象速览"
+id="toc-先会用类与对象速览">先会用:类与对象速览</a></li>
+<li><a href="#开始深入对象在内存里到底是什么"
+id="toc-开始深入对象在内存里到底是什么">开始深入:对象在内存里到底是什么</a></li>
 <li><a href="#一类对象初始化顺序"
 id="toc-一类对象初始化顺序">一、类、对象、初始化顺序</a></li>
 <li><a href="#二封装" id="toc-二封装">二、封装</a></li>
@@ -120,8 +121,8 @@ id="toc-四多态与虚方法表vtable">四、多态与虚方法表(vtable)</a><
 <li><a href="#五抽象类-vs-接口" id="toc-五抽象类-vs-接口">五、抽象类 vs
 接口</a></li>
 <li><a href="#六object-的方法与-equalshashcode-契约"
-id="toc-六object-的方法与-equalshashcode-契约">六、Object 的方法与
-equals/hashCode 契约</a></li>
+id="toc-六object-的方法与-equalshashcode-契约">六、<code>Object</code>
+的方法与 equals/hashCode 契约</a></li>
 <li><a href="#七泛型与类型擦除与-c-模板的根本分野"
 id="toc-七泛型与类型擦除与-c-模板的根本分野">七、泛型与类型擦除(与 C++
 模板的根本分野)</a></li>
@@ -134,85 +135,321 @@ id="toc-十enum是完整的类">十、enum:是完整的类</a></li>
 <li><a href="#十一内部类匿名类lambda-与变量捕获"
 id="toc-十一内部类匿名类lambda-与变量捕获">十一、内部类、匿名类、lambda
 与变量捕获</a></li>
+<li><a href="#小结" id="toc-小结">小结</a></li>
 </ul></li>
 </ul>
 </nav>
 <h1 id="面向对象与类型系统">面向对象与类型系统</h1>
-<p>你在 C++ 里熟悉类、继承、虚函数、模板。Java 的 OOP
-表面相似,但<strong>单继承 +
-接口</strong>、<strong>全员虚方法</strong>、<strong>泛型擦除</strong>(而非
-C++ 的模板单态化)三点是核心差异。本章逐一对照底层机制。</p>
-<h2 id="一类对象初始化顺序">一、类、对象、初始化顺序</h2>
-<p>Java 类的所有实例方法默认是”虚”的(除
-<code>private</code>/<code>static</code>/<code>final</code>);对象一律在堆上,变量存引用(见<a
+<p>你在 C/C++ 里可能从没写过
+<code>class</code>,或者写过但没深究过”一个对象在内存里到底是什么”。<strong>本章先讲「怎么用」——怎么定义一个类、怎么
+<code>new</code> 一个对象、怎么写继承和接口、怎么声明最简单的泛型和
+lambda,不需要你懂任何底层就能上手;再进入「底层与 C
+对比」——看对象在堆上到底摆了什么,虚方法怎么分派,泛型运行时剩下什么。</strong>
+只想会用的话,读每节的前半段即可;想搞懂运行机制,再往下看后半段。</p>
+<p>这是全书里 OOP
+概念最集中的一章,涉及类、继承、多态、泛型、record、sealed、enum、lambda
+十来个话题。别指望一遍读完全部记住——先把「怎么用」串起来,能写基本的类和接口,再逐节回来啃”底层与
+C 对比”。</p>
+<hr />
+<h2 id="先会用类与对象速览">先会用:类与对象速览</h2>
+<h3 id="定义一个类new-一个对象">定义一个类,<code>new</code>
+一个对象</h3>
+<p>Java 的类和 C 的 <code>struct</code>
+最大的不同:类里可以直接放函数(叫”方法”),<code>new</code>
+出来的对象永远在堆上,变量里存的是指向它的引用(细节见<a
 href="03-变量与内存模型.html">「变量与内存模型」</a>)。</p>
-<h3 id="初始化顺序务必背熟">初始化顺序(务必背熟)</h3>
-<p><code>new</code> 一个对象时,JVM 按固定顺序执行:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> <span class="bu">Point</span> <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> x<span class="op">,</span> y<span class="op">;</span>                          <span class="co">// 字段(成员变量)</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="bu">Point</span><span class="op">(</span><span class="dt">int</span> x<span class="op">,</span> <span class="dt">int</span> y<span class="op">)</span> <span class="op">{</span>              <span class="co">// 构造器:和类同名,没有返回类型</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>        <span class="kw">this</span><span class="op">.</span><span class="fu">x</span> <span class="op">=</span> x<span class="op">;</span>                    <span class="co">// this 指当前对象,区分字段和参数</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>        <span class="kw">this</span><span class="op">.</span><span class="fu">y</span> <span class="op">=</span> y<span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> <span class="fu">sum</span><span class="op">()</span> <span class="op">{</span>                        <span class="co">// 方法</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> x <span class="op">+</span> y<span class="op">;</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> PointBasics <span class="op">{</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Point</span> p <span class="op">=</span> <span class="kw">new</span> <span class="bu">Point</span><span class="op">(</span><span class="dv">3</span><span class="op">,</span> <span class="dv">4</span><span class="op">);</span>     <span class="co">// new 出一个实例</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>p<span class="op">.</span><span class="fu">sum</span><span class="op">());</span>  <span class="co">// 调用方法:7</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>p<span class="op">.</span><span class="fu">x</span><span class="op">);</span>      <span class="co">// 直接访问字段:3</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<pre><code>7
+3</code></pre>
+<p><code>class Point { ... }</code>
+只是”图纸”;<code>new Point(3, 4)</code>
+才真正在堆上造出一个对象,<code>p</code>
+里存的是这个对象的引用。同一张图纸能 <code>new</code>
+出无数个对象,彼此字段互不影响。</p>
+<h3 id="最简单的继承与接口">最简单的继承与接口</h3>
+<p><code>extends</code>
+表示”继承一个类”(单继承,只能写一个),<code>implements</code>
+表示”实现一个或多个接口”:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">interface</span> Greeter <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="bu">String</span> <span class="fu">greet</span><span class="op">();</span>                    <span class="co">// 接口方法:只有签名,没有实现</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Animal <span class="op">{</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="bu">String</span> name <span class="op">=</span> <span class="st">&quot;animal&quot;</span><span class="op">;</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    <span class="bu">String</span> <span class="fu">speak</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> name <span class="op">+</span> <span class="st">&quot; makes a sound&quot;</span><span class="op">;</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Dog <span class="kw">extends</span> Animal <span class="kw">implements</span> Greeter <span class="op">{</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>    <span class="fu">Dog</span><span class="op">()</span> <span class="op">{</span> name <span class="op">=</span> <span class="st">&quot;dog&quot;</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>    <span class="at">@Override</span> <span class="kw">public</span> <span class="bu">String</span> <span class="fu">greet</span><span class="op">()</span> <span class="op">{</span> <span class="cf">return</span> <span class="st">&quot;woof from &quot;</span> <span class="op">+</span> name<span class="op">;</span> <span class="op">}</span></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> InheritBasics <span class="op">{</span></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>        Dog d <span class="op">=</span> <span class="kw">new</span> <span class="fu">Dog</span><span class="op">();</span></span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>d<span class="op">.</span><span class="fu">speak</span><span class="op">());</span>   <span class="co">// 继承来的方法:dog makes a sound</span></span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>d<span class="op">.</span><span class="fu">greet</span><span class="op">());</span>   <span class="co">// 实现接口的方法:woof from dog</span></span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<pre><code>dog makes a sound
+woof from dog</code></pre>
+<p><code>Dog</code> 既拿到了 <code>Animal</code>
+的字段和方法(继承),又必须把 <code>Greeter</code> 承诺的
+<code>greet()</code> 写出来(实现接口)——<code>@Override</code>
+是给编译器和读者的标记,表示”这是在覆盖父类/接口的方法”,拼错方法名编译器会立刻报错。</p>
+<h3 id="最简单的泛型boxt">最简单的泛型:<code>Box&lt;T&gt;</code></h3>
+<p>类名后面的 <code>&lt;T&gt;</code>
+表示”这个类可以装任意类型,具体装什么由使用者决定”:</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> <span class="bu">Box</span><span class="op">&lt;</span>T<span class="op">&gt;</span> <span class="op">{</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    T value<span class="op">;</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    <span class="bu">Box</span><span class="op">(</span>T value<span class="op">)</span> <span class="op">{</span> <span class="kw">this</span><span class="op">.</span><span class="fu">value</span> <span class="op">=</span> value<span class="op">;</span> <span class="op">}</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    T <span class="fu">get</span><span class="op">()</span> <span class="op">{</span> <span class="cf">return</span> value<span class="op">;</span> <span class="op">}</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> BoxBasics <span class="op">{</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Box</span><span class="op">&lt;</span><span class="bu">String</span><span class="op">&gt;</span> b <span class="op">=</span> <span class="kw">new</span> <span class="bu">Box</span><span class="op">&lt;&gt;(</span><span class="st">&quot;hello&quot;</span><span class="op">);</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>b<span class="op">.</span><span class="fu">get</span><span class="op">());</span>       <span class="co">// hello</span></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Box</span><span class="op">&lt;</span><span class="bu">Integer</span><span class="op">&gt;</span> n <span class="op">=</span> <span class="kw">new</span> <span class="bu">Box</span><span class="op">&lt;&gt;(</span><span class="dv">42</span><span class="op">);</span></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>n<span class="op">.</span><span class="fu">get</span><span class="op">());</span>       <span class="co">// 42</span></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<pre><code>hello
+42</code></pre>
+<p><code>Box&lt;String&gt;</code> 和 <code>Box&lt;Integer&gt;</code>
+是同一份代码,<code>T</code>
+在使用处被替换成具体类型;编译器负责检查类型对不对,你不需要为每种类型各写一个
+<code>Box</code>。</p>
+<h3 id="最简单的-lambda">最简单的 lambda</h3>
+<p><code>Runnable</code> 是一个只有一个方法 <code>run()</code>
+的接口(这类接口叫”函数式接口”);lambda <code>() -&gt; ...</code>
+就是给这个方法直接写一段实现,不用专门定义一个类:</p>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> LambdaBasics <span class="op">{</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Runnable</span> r <span class="op">=</span> <span class="op">()</span> <span class="op">-&gt;</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;running!&quot;</span><span class="op">);</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>        r<span class="op">.</span><span class="fu">run</span><span class="op">();</span>                          <span class="co">// 像调用普通方法一样调用</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<pre><code>running!</code></pre>
+<p>这些够你开始读懂大多数 Java
+代码了。下面进入”底层”——对象在堆上到底长什么样,虚方法怎么分派,泛型运行时还剩下什么。</p>
+<hr />
+<h2
+id="开始深入对象在内存里到底是什么">开始深入:对象在内存里到底是什么</h2>
+<p>从这里开始讲底层。先记住一件事,后面每一节都会用到:<strong>Java
+对象一律在堆上分配</strong>,对象开头有一个隐藏的”对象头”,其中一部分指向它所属的类描述结构(HotSpot
+里叫 <code>klass</code>)——这个指针的作用和 C++ 里的 vptr
+很像:决定了调用虚方法时该跳到哪段代码。变量本身不存对象,只存这个引用(值/引用语义的细节见<a
+href="03-变量与内存模型.html">「变量与内存模型」</a>;对象头的具体字节布局见<a
+href="04-数据类型.html">「数据类型」</a>)。</p>
+<p>带着这个模型,我们逐一拆开:初始化顺序、封装、继承、多态(vtable)、抽象类
+vs 接口、<code>Object</code>、泛型擦除、record、sealed、enum、内部类与
+lambda。</p>
+<h2 id="一类对象初始化顺序">一、类、对象、初始化顺序</h2>
+<h3 id="怎么用">怎么用</h3>
+<p>构造器可以用 <code>this(...)</code> 委托本类的另一个构造器,也可以用
+<code>super(...)</code> 显式调用父类构造器(不写的话编译器会自动插入无参
+<code>super()</code>):</p>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Person <span class="op">{</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>    <span class="bu">String</span> name<span class="op">;</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> age<span class="op">;</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">Person</span><span class="op">(</span><span class="bu">String</span> name<span class="op">)</span> <span class="op">{</span> <span class="kw">this</span><span class="op">(</span>name<span class="op">,</span> <span class="dv">0</span><span class="op">);</span> <span class="op">}</span>          <span class="co">// this(...):委托本类另一个构造器</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>    <span class="fu">Person</span><span class="op">(</span><span class="bu">String</span> name<span class="op">,</span> <span class="dt">int</span> age<span class="op">)</span> <span class="op">{</span> <span class="kw">this</span><span class="op">.</span><span class="fu">name</span> <span class="op">=</span> name<span class="op">;</span> <span class="kw">this</span><span class="op">.</span><span class="fu">age</span> <span class="op">=</span> age<span class="op">;</span> <span class="op">}</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Student <span class="kw">extends</span> Person <span class="op">{</span></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>    <span class="bu">String</span> school<span class="op">;</span></span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>    <span class="fu">Student</span><span class="op">(</span><span class="bu">String</span> name<span class="op">,</span> <span class="dt">int</span> age<span class="op">,</span> <span class="bu">String</span> school<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a>        <span class="kw">super</span><span class="op">(</span>name<span class="op">,</span> age<span class="op">);</span>                            <span class="co">// super(...):调用父类构造器</span></span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a>        <span class="kw">this</span><span class="op">.</span><span class="fu">school</span> <span class="op">=</span> school<span class="op">;</span></span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb9-14"><a href="#cb9-14" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> ConstructorBasics <span class="op">{</span></span>
+<span id="cb9-15"><a href="#cb9-15" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb9-16"><a href="#cb9-16" aria-hidden="true" tabindex="-1"></a>        Student s <span class="op">=</span> <span class="kw">new</span> <span class="fu">Student</span><span class="op">(</span><span class="st">&quot;Ann&quot;</span><span class="op">,</span> <span class="dv">20</span><span class="op">,</span> <span class="st">&quot;MIT&quot;</span><span class="op">);</span></span>
+<span id="cb9-17"><a href="#cb9-17" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>s<span class="op">.</span><span class="fu">name</span> <span class="op">+</span> <span class="st">&quot; &quot;</span> <span class="op">+</span> s<span class="op">.</span><span class="fu">age</span> <span class="op">+</span> <span class="st">&quot; &quot;</span> <span class="op">+</span> s<span class="op">.</span><span class="fu">school</span><span class="op">);</span>  <span class="co">// Ann 20 MIT</span></span>
+<span id="cb9-18"><a href="#cb9-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-19"><a href="#cb9-19" aria-hidden="true" tabindex="-1"></a>        Person p <span class="op">=</span> <span class="kw">new</span> <span class="fu">Person</span><span class="op">(</span><span class="st">&quot;Bob&quot;</span><span class="op">);</span>                <span class="co">// 走 this(...) 委托,age 默认 0</span></span>
+<span id="cb9-20"><a href="#cb9-20" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>p<span class="op">.</span><span class="fu">name</span> <span class="op">+</span> <span class="st">&quot; &quot;</span> <span class="op">+</span> p<span class="op">.</span><span class="fu">age</span><span class="op">);</span>     <span class="co">// Bob 0</span></span>
+<span id="cb9-21"><a href="#cb9-21" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb9-22"><a href="#cb9-22" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<pre><code>Ann 20 MIT
+Bob 0</code></pre>
+<h3 id="底层与-c-对比">底层与 C 对比</h3>
+<p>Java 类的所有实例方法默认是”虚”的(除
+<code>private</code>/<code>static</code>/<code>final</code>)。<code>new</code>
+一个对象时,JVM 按固定顺序执行:</p>
 <pre><code>1. 类首次使用时:静态字段默认零值 → 静态初始化块 + 静态字段赋值(按源码顺序,仅一次)
 2. 实例创建:分配堆内存,所有实例字段置零值
 3. 父类实例初始化(递归:父类字段 → 父类实例块 → 父类构造器体)
 4. 本类实例字段默认值 → 实例初始化块 + 字段赋值(按源码顺序)
 5. 本类构造器体</code></pre>
-<div class="sourceCode" id="cb2"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Base <span class="op">{</span></span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> x <span class="op">=</span> <span class="fu">init</span><span class="op">(</span><span class="st">&quot;Base.x&quot;</span><span class="op">);</span>           <span class="co">// ③</span></span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="fu">Base</span><span class="op">()</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;Base()&quot;</span><span class="op">);</span> <span class="op">}</span></span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">int</span> s <span class="op">=</span> <span class="fu">init</span><span class="op">(</span><span class="st">&quot;Base.s&quot;</span><span class="op">);</span>    <span class="co">// ① 类加载时</span></span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="bu">String</span> <span class="fu">init</span><span class="op">(</span><span class="bu">String</span> m<span class="op">){</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>m<span class="op">);</span> <span class="cf">return</span> <span class="kw">null</span><span class="op">;</span> <span class="op">}</span></span>
-<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Derived <span class="kw">extends</span> Base <span class="op">{</span></span>
-<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> y <span class="op">=</span> Base<span class="op">.</span><span class="fu">init</span><span class="op">(</span><span class="st">&quot;Derived.y&quot;</span><span class="op">);</span>   <span class="co">// ④</span></span>
-<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="fu">Derived</span><span class="op">()</span> <span class="op">{</span> <span class="kw">super</span><span class="op">();</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;Derived()&quot;</span><span class="op">);</span> <span class="op">}</span> <span class="co">// super() 隐式在最前</span></span>
-<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="co">// new Derived() 输出:Base.s(首次) → Base.x → Base() → Derived.y → Derived()</span></span></code></pre></div>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Base <span class="op">{</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>    <span class="bu">String</span> x <span class="op">=</span> <span class="fu">init</span><span class="op">(</span><span class="st">&quot;Base.x&quot;</span><span class="op">);</span>        <span class="co">// ③</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>    <span class="fu">Base</span><span class="op">()</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;Base()&quot;</span><span class="op">);</span> <span class="op">}</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="bu">String</span> s <span class="op">=</span> <span class="fu">init</span><span class="op">(</span><span class="st">&quot;Base.s&quot;</span><span class="op">);</span>  <span class="co">// ① 类加载时</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="bu">String</span> <span class="fu">init</span><span class="op">(</span><span class="bu">String</span> m<span class="op">){</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>m<span class="op">);</span> <span class="cf">return</span> <span class="kw">null</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Derived <span class="kw">extends</span> Base <span class="op">{</span></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>    <span class="bu">String</span> y <span class="op">=</span> Base<span class="op">.</span><span class="fu">init</span><span class="op">(</span><span class="st">&quot;Derived.y&quot;</span><span class="op">);</span> <span class="co">// ④</span></span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>    <span class="fu">Derived</span><span class="op">()</span> <span class="op">{</span> <span class="kw">super</span><span class="op">();</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;Derived()&quot;</span><span class="op">);</span> <span class="op">}</span> <span class="co">// super() 隐式在最前</span></span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a><span class="co">// new Derived() 输出:Base.s(首次) → Base.x → Base() → Derived.y → Derived()</span></span></code></pre></div>
+<pre><code>Base.s
+Base.x
+Base()
+Derived.y
+Derived()</code></pre>
 <p>对比
 C++:成员按<strong>声明顺序</strong>在初始化列表构造,基类先于派生类——Java
 顺序类似,但没有初始化列表语法,且静态初始化是懒惰的(类首次主动使用时才触发,由类加载器保证线程安全地执行一次)。</p>
-<h3 id="构造器与-thissuper">构造器与 this/super</h3>
-<ul>
-<li>构造器第一行必须是 <code>this(...)</code>(委托本类另一构造器)或
-<code>super(...)</code>(调父类);不写则编译器插入无参
-<code>super()</code>。</li>
-<li><strong>构造期间调用虚方法很危险</strong>:父类构造器里调被子类重写的方法,此时子类字段尚未初始化(还是零值),会读到未初始化状态。C++
+<p>构造器第一行必须是 <code>this(...)</code> 或
+<code>super(...)</code>;不写则编译器插入无参
+<code>super()</code>。<strong>构造期间调用虚方法很危险</strong>:父类构造器里调被子类重写的方法,此时子类字段尚未初始化(还是零值),会读到未初始化状态。C++
 在构造期虚调用会静态绑定到当前类版本;<strong>Java
-则动态绑定到子类版本</strong>,更危险。</li>
-</ul>
+则动态绑定到子类版本</strong>,更危险。</p>
 <p>亲眼看这个坑:父类构造器调用虚方法
 <code>size()</code>,分派到子类版本,但此时子类字段 <code>value</code>
 还是零值:</p>
-<div class="sourceCode" id="cb3"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> CtorVirtual <span class="op">{</span></span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">class</span> Base <span class="op">{</span></span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>        <span class="fu">Base</span><span class="op">()</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;Base ctor sees size = &quot;</span> <span class="op">+</span> <span class="fu">size</span><span class="op">());</span> <span class="op">}</span> <span class="co">// 虚调用</span></span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span> <span class="fu">size</span><span class="op">()</span> <span class="op">{</span> <span class="cf">return</span> <span class="dv">0</span><span class="op">;</span> <span class="op">}</span></span>
-<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">class</span> Derived <span class="kw">extends</span> Base <span class="op">{</span></span>
-<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span> value <span class="op">=</span> <span class="dv">42</span><span class="op">;</span>                 <span class="co">// 在 super() 之后才初始化</span></span>
-<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>        <span class="at">@Override</span> <span class="dt">int</span> <span class="fu">size</span><span class="op">()</span> <span class="op">{</span> <span class="cf">return</span> value<span class="op">;</span> <span class="op">}</span></span>
-<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>        Derived d <span class="op">=</span> <span class="kw">new</span> <span class="fu">Derived</span><span class="op">();</span></span>
-<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;after ctor  size = &quot;</span> <span class="op">+</span> d<span class="op">.</span><span class="fu">size</span><span class="op">());</span></span>
-<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a><span class="co">// Base ctor sees size = 0    &lt;- 动态分派到 Derived.size(),但 value 尚未赋值(零值)</span></span>
-<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a><span class="co">// after ctor  size = 42      &lt;- 构造完成后才是 42</span></span></code></pre></div>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> CtorVirtual <span class="op">{</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">class</span> Base <span class="op">{</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>        <span class="fu">Base</span><span class="op">()</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;Base ctor sees size = &quot;</span> <span class="op">+</span> <span class="fu">size</span><span class="op">());</span> <span class="op">}</span> <span class="co">// 虚调用</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span> <span class="fu">size</span><span class="op">()</span> <span class="op">{</span> <span class="cf">return</span> <span class="dv">0</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">class</span> Derived <span class="kw">extends</span> Base <span class="op">{</span></span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span> value <span class="op">=</span> <span class="dv">42</span><span class="op">;</span>                 <span class="co">// 在 super() 之后才初始化</span></span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a>        <span class="at">@Override</span> <span class="dt">int</span> <span class="fu">size</span><span class="op">()</span> <span class="op">{</span> <span class="cf">return</span> value<span class="op">;</span> <span class="op">}</span></span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a>        Derived d <span class="op">=</span> <span class="kw">new</span> <span class="fu">Derived</span><span class="op">();</span></span>
+<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;after ctor  size = &quot;</span> <span class="op">+</span> d<span class="op">.</span><span class="fu">size</span><span class="op">());</span></span>
+<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb14-14"><a href="#cb14-14" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<pre><code>Base ctor sees size = 0    &lt;- 动态分派到 Derived.size(),但 value 尚未赋值(零值)
+after ctor  size = 42      &lt;- 构造完成后才是 42</code></pre>
 <h2 id="二封装">二、封装</h2>
-<p>访问修饰符:<code>private</code> &lt; 包级(默认,无关键字) &lt;
+<h3 id="怎么用-1">怎么用</h3>
+<p>访问修饰符控制”谁能访问这个字段/方法”,最常见的用法是把字段设为
+<code>private</code>,只暴露 getter/setter:</p>
+<div class="sourceCode" id="cb16"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Account <span class="op">{</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">private</span> <span class="dt">double</span> balance<span class="op">;</span>   <span class="co">// 外部不可直接访问</span></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">Account</span><span class="op">(</span><span class="dt">double</span> initial<span class="op">)</span> <span class="op">{</span> balance <span class="op">=</span> initial<span class="op">;</span> <span class="op">}</span></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">double</span> <span class="fu">getBalance</span><span class="op">()</span> <span class="op">{</span>     <span class="co">// 只能通过方法读取</span></span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> balance<span class="op">;</span></span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">void</span> <span class="fu">deposit</span><span class="op">(</span><span class="dt">double</span> amount<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>amount <span class="op">&gt;</span> <span class="dv">0</span><span class="op">)</span> balance <span class="op">+=</span> amount<span class="op">;</span>  <span class="co">// 借机会做校验</span></span>
+<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-14"><a href="#cb16-14" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> EncapBasics <span class="op">{</span></span>
+<span id="cb16-15"><a href="#cb16-15" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb16-16"><a href="#cb16-16" aria-hidden="true" tabindex="-1"></a>        Account a <span class="op">=</span> <span class="kw">new</span> <span class="fu">Account</span><span class="op">(</span><span class="dv">100</span><span class="op">);</span></span>
+<span id="cb16-17"><a href="#cb16-17" aria-hidden="true" tabindex="-1"></a>        a<span class="op">.</span><span class="fu">deposit</span><span class="op">(</span><span class="dv">50</span><span class="op">);</span></span>
+<span id="cb16-18"><a href="#cb16-18" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>a<span class="op">.</span><span class="fu">getBalance</span><span class="op">());</span>  <span class="co">// 150.0</span></span>
+<span id="cb16-19"><a href="#cb16-19" aria-hidden="true" tabindex="-1"></a>        <span class="co">// a.balance = -999;    // 编译错:balance 是 private,外部访问不到</span></span>
+<span id="cb16-20"><a href="#cb16-20" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb16-21"><a href="#cb16-21" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<pre><code>150.0</code></pre>
+<h3 id="底层与-c-对比-1">底层与 C 对比</h3>
+<p>访问修饰符从窄到宽:<code>private</code> &lt; 包级(默认,无关键字) &lt;
 <code>protected</code> &lt; <code>public</code>。注意 Java 的
 <code>protected</code> 还允许<strong>同包</strong>访问,语义比 C++ 宽。无
 <code>friend</code>。模块系统(JPMS)可在更粗粒度上封装整个包。</p>
 <h2 id="三继承单继承-多接口">三、继承:单继承 + 多接口</h2>
+<h3 id="怎么用-2">怎么用</h3>
+<p>一个类只能 <code>extends</code> 一个父类,但可以
+<code>implements</code> 任意多个接口,用逗号分隔:</p>
+<div class="sourceCode" id="cb18"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="kw">abstract</span> <span class="kw">class</span> AbstractBase <span class="op">{</span></span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">void</span> <span class="fu">base</span><span class="op">()</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;base&quot;</span><span class="op">);</span> <span class="op">}</span></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> <span class="bu">Service</span> <span class="kw">extends</span> AbstractBase <span class="kw">implements</span> <span class="bu">Runnable</span><span class="op">,</span> AutoCloseable <span class="op">{</span></span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">@Override</span> <span class="kw">public</span> <span class="dt">void</span> <span class="fu">run</span><span class="op">()</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;running&quot;</span><span class="op">);</span> <span class="op">}</span></span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>    <span class="at">@Override</span> <span class="kw">public</span> <span class="dt">void</span> <span class="fu">close</span><span class="op">()</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;closed&quot;</span><span class="op">);</span> <span class="op">}</span></span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> ServiceCheck <span class="op">{</span></span>
+<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Service</span> s <span class="op">=</span> <span class="kw">new</span> <span class="bu">Service</span><span class="op">();</span></span>
+<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a>        s<span class="op">.</span><span class="fu">base</span><span class="op">();</span></span>
+<span id="cb18-12"><a href="#cb18-12" aria-hidden="true" tabindex="-1"></a>        s<span class="op">.</span><span class="fu">run</span><span class="op">();</span></span>
+<span id="cb18-13"><a href="#cb18-13" aria-hidden="true" tabindex="-1"></a>        s<span class="op">.</span><span class="fu">close</span><span class="op">();</span></span>
+<span id="cb18-14"><a href="#cb18-14" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb18-15"><a href="#cb18-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<pre><code>base
+running
+closed</code></pre>
+<h3 id="底层与-c-对比-2">底层与 C 对比</h3>
 <p>Java <strong>类只能单继承</strong>(避免 C++
-菱形继承的复杂性与虚继承),但可实现任意多个接口:</p>
-<div class="sourceCode" id="cb4"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> <span class="bu">Service</span> <span class="kw">extends</span> AbstractBase <span class="kw">implements</span> <span class="bu">Runnable</span><span class="op">,</span> AutoCloseable <span class="op">{</span> <span class="op">}</span></span></code></pre></div>
+菱形继承的复杂性与虚继承),但可实现任意多个接口。</p>
 <p>接口曾经只能有抽象方法,JDK 8 起可有 <strong>default
 方法</strong>(带实现)和 <strong>static 方法</strong>,JDK 9 起可有
 <code>private</code>
 方法。这带来”多继承实现”的能力,但字段仍只有常量(<code>public static final</code>),所以没有状态菱形问题。若两个接口有同签名
-default 方法,子类必须显式覆盖解决冲突(否则编译错)。</p>
+default 方法,子类必须显式覆盖解决冲突,否则编译错:</p>
+<div class="sourceCode" id="cb20"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="kw">interface</span> A2 <span class="op">{</span> <span class="kw">default</span> <span class="bu">String</span> <span class="fu">who</span><span class="op">()</span> <span class="op">{</span> <span class="cf">return</span> <span class="st">&quot;A&quot;</span><span class="op">;</span> <span class="op">}</span> <span class="op">}</span></span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a><span class="kw">interface</span> B2 <span class="op">{</span> <span class="kw">default</span> <span class="bu">String</span> <span class="fu">who</span><span class="op">()</span> <span class="op">{</span> <span class="cf">return</span> <span class="st">&quot;B&quot;</span><span class="op">;</span> <span class="op">}</span> <span class="op">}</span></span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> C2 <span class="kw">implements</span> A2<span class="op">,</span> B2 <span class="op">{</span> <span class="op">}</span>   <span class="co">// 编译错</span></span></code></pre></div>
+<pre><code>error: types A2 and B2 are incompatible
+  class C2 inherits unrelated defaults for who() from types A2 and B2</code></pre>
+<p>用 <code>接口名.super.方法名()</code>
+显式指明走哪个接口的默认实现来解决冲突:</p>
+<div class="sourceCode" id="cb22"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="kw">interface</span> A <span class="op">{</span> <span class="kw">default</span> <span class="bu">String</span> <span class="fu">who</span><span class="op">()</span> <span class="op">{</span> <span class="cf">return</span> <span class="st">&quot;A&quot;</span><span class="op">;</span> <span class="op">}</span> <span class="op">}</span></span>
+<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a><span class="kw">interface</span> B <span class="op">{</span> <span class="kw">default</span> <span class="bu">String</span> <span class="fu">who</span><span class="op">()</span> <span class="op">{</span> <span class="cf">return</span> <span class="st">&quot;B&quot;</span><span class="op">;</span> <span class="op">}</span> <span class="op">}</span></span>
+<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> C <span class="kw">implements</span> A<span class="op">,</span> B <span class="op">{</span></span>
+<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">@Override</span> <span class="kw">public</span> <span class="bu">String</span> <span class="fu">who</span><span class="op">()</span> <span class="op">{</span> <span class="cf">return</span> A<span class="op">.</span><span class="fu">super</span><span class="op">.</span><span class="fu">who</span><span class="op">()</span> <span class="op">+</span> B<span class="op">.</span><span class="fu">super</span><span class="op">.</span><span class="fu">who</span><span class="op">();</span> <span class="op">}</span> <span class="co">// 显式解决冲突</span></span>
+<span id="cb22-5"><a href="#cb22-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<pre><code>AB</code></pre>
 <h2 id="四多态与虚方法表vtable">四、多态与虚方法表(vtable)</h2>
+<h3 id="怎么用-3">怎么用</h3>
+<p>子类重写(<code>@Override</code>)父类的方法后,即使用父类类型的引用去调用,实际执行的也是子类版本——这就是”动态分派”:</p>
+<div class="sourceCode" id="cb24"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Bird <span class="op">{</span></span>
+<span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a>    <span class="bu">String</span> <span class="fu">sound</span><span class="op">()</span> <span class="op">{</span> <span class="cf">return</span> <span class="st">&quot;...&quot;</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb24-4"><a href="#cb24-4" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Duck <span class="kw">extends</span> Bird <span class="op">{</span></span>
+<span id="cb24-5"><a href="#cb24-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">@Override</span> <span class="bu">String</span> <span class="fu">sound</span><span class="op">()</span> <span class="op">{</span> <span class="cf">return</span> <span class="st">&quot;quack&quot;</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb24-6"><a href="#cb24-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb24-7"><a href="#cb24-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-8"><a href="#cb24-8" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> PolyBasics <span class="op">{</span></span>
+<span id="cb24-9"><a href="#cb24-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb24-10"><a href="#cb24-10" aria-hidden="true" tabindex="-1"></a>        Bird b <span class="op">=</span> <span class="kw">new</span> <span class="fu">Duck</span><span class="op">();</span>          <span class="co">// 父类型引用指向子类对象</span></span>
+<span id="cb24-11"><a href="#cb24-11" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>b<span class="op">.</span><span class="fu">sound</span><span class="op">());</span> <span class="co">// quack —— 运行时按实际对象类型分派,而非引用声明类型</span></span>
+<span id="cb24-12"><a href="#cb24-12" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb24-13"><a href="#cb24-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<pre><code>quack</code></pre>
+<h3 id="底层与-c-对比-3">底层与 C 对比</h3>
 <p>Java 实例方法默认动态分派。HotSpot 的实现和 C++ 的 vtable
 高度相似:</p>
 <pre><code>每个类在方法区(Metaspace)有一个 klass 结构,内含 vtable:
@@ -244,6 +481,39 @@ cache)优化:记住上次调用的实际类型,单态时几乎零开销。</li>
 <code>invokedynamic</code>(lambda、字符串拼接)。详见<a
 href="06-函数与调用栈.html">「方法与调用栈」</a>。</p>
 <h2 id="五抽象类-vs-接口">五、抽象类 vs 接口</h2>
+<h3 id="怎么用-4">怎么用</h3>
+<p><code>abstract class</code>
+可以混合”抽象方法”(没有方法体,子类必须实现)和”具体方法”(有实现,直接继承用);接口在
+Java 8 之前只能有抽象方法:</p>
+<div class="sourceCode" id="cb27"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a><span class="kw">abstract</span> <span class="kw">class</span> <span class="bu">Shape</span> <span class="op">{</span></span>
+<span id="cb27-2"><a href="#cb27-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">abstract</span> <span class="dt">double</span> <span class="fu">area</span><span class="op">();</span>          <span class="co">// 抽象方法,没有方法体</span></span>
+<span id="cb27-3"><a href="#cb27-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">void</span> <span class="fu">describe</span><span class="op">()</span> <span class="op">{</span>                <span class="co">// 具体方法,可以有实现</span></span>
+<span id="cb27-4"><a href="#cb27-4" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;area = &quot;</span> <span class="op">+</span> <span class="fu">area</span><span class="op">());</span></span>
+<span id="cb27-5"><a href="#cb27-5" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb27-6"><a href="#cb27-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb27-7"><a href="#cb27-7" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Circle <span class="kw">extends</span> <span class="bu">Shape</span> <span class="op">{</span></span>
+<span id="cb27-8"><a href="#cb27-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">double</span> r<span class="op">;</span></span>
+<span id="cb27-9"><a href="#cb27-9" aria-hidden="true" tabindex="-1"></a>    <span class="fu">Circle</span><span class="op">(</span><span class="dt">double</span> r<span class="op">)</span> <span class="op">{</span> <span class="kw">this</span><span class="op">.</span><span class="fu">r</span> <span class="op">=</span> r<span class="op">;</span> <span class="op">}</span></span>
+<span id="cb27-10"><a href="#cb27-10" aria-hidden="true" tabindex="-1"></a>    <span class="at">@Override</span> <span class="dt">double</span> <span class="fu">area</span><span class="op">()</span> <span class="op">{</span> <span class="cf">return</span> <span class="bu">Math</span><span class="op">.</span><span class="fu">PI</span> <span class="op">*</span> r <span class="op">*</span> r<span class="op">;</span> <span class="op">}</span></span>
+<span id="cb27-11"><a href="#cb27-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb27-12"><a href="#cb27-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb27-13"><a href="#cb27-13" aria-hidden="true" tabindex="-1"></a><span class="kw">interface</span> Movable <span class="op">{</span></span>
+<span id="cb27-14"><a href="#cb27-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">void</span> <span class="fu">move</span><span class="op">();</span>                     <span class="co">// 抽象方法</span></span>
+<span id="cb27-15"><a href="#cb27-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb27-16"><a href="#cb27-16" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Car <span class="kw">implements</span> Movable <span class="op">{</span></span>
+<span id="cb27-17"><a href="#cb27-17" aria-hidden="true" tabindex="-1"></a>    <span class="at">@Override</span> <span class="kw">public</span> <span class="dt">void</span> <span class="fu">move</span><span class="op">()</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;car moves&quot;</span><span class="op">);</span> <span class="op">}</span></span>
+<span id="cb27-18"><a href="#cb27-18" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb27-19"><a href="#cb27-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb27-20"><a href="#cb27-20" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> AbstractVsInterfaceBasics <span class="op">{</span></span>
+<span id="cb27-21"><a href="#cb27-21" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb27-22"><a href="#cb27-22" aria-hidden="true" tabindex="-1"></a>        <span class="kw">new</span> <span class="fu">Circle</span><span class="op">(</span><span class="dv">2</span><span class="op">).</span><span class="fu">describe</span><span class="op">();</span></span>
+<span id="cb27-23"><a href="#cb27-23" aria-hidden="true" tabindex="-1"></a>        <span class="kw">new</span> <span class="fu">Car</span><span class="op">().</span><span class="fu">move</span><span class="op">();</span></span>
+<span id="cb27-24"><a href="#cb27-24" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb27-25"><a href="#cb27-25" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<pre><code>area = 12.566370614359172
+car moves</code></pre>
+<h3 id="底层与-c-对比-4">底层与 C 对比</h3>
 <table>
 <thead>
 <tr>
@@ -282,14 +552,51 @@ href="06-函数与调用栈.html">「方法与调用栈」</a>。</p>
 </table>
 <p>经验:表达类型层级共享状态用抽象类;表达能力/契约、需要多重组合用接口。JDK
 里 <code>AbstractList</code> 是抽象类骨架,<code>List</code> 是接口。</p>
-<h2 id="六object-的方法与-equalshashcode-契约">六、Object 的方法与
-equals/hashCode 契约</h2>
-<p>所有类隐式继承 <code>Object</code>(类比但强于 C++——C++
-没有统一根)。关键方法:<code>equals</code>、<code>hashCode</code>、<code>toString</code>、<code>getClass</code>、<code>clone</code>、<code>wait</code>/<code>notify</code>(见<a
+<h2 id="六object-的方法与-equalshashcode-契约">六、<code>Object</code>
+的方法与 equals/hashCode 契约</h2>
+<h3 id="怎么用-5">怎么用</h3>
+<p>所有类隐式继承 <code>Object</code>。最常重写的三个方法是
+<code>equals</code>(判断”值相等”)、<code>hashCode</code>(配合
+<code>HashMap</code>/<code>HashSet</code>)、<code>toString</code>(打印时看到的文字):</p>
+<div class="sourceCode" id="cb29"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">Objects</span><span class="op">;</span></span>
+<span id="cb29-2"><a href="#cb29-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb29-3"><a href="#cb29-3" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Point2 <span class="op">{</span></span>
+<span id="cb29-4"><a href="#cb29-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> x<span class="op">,</span> y<span class="op">;</span></span>
+<span id="cb29-5"><a href="#cb29-5" aria-hidden="true" tabindex="-1"></a>    <span class="fu">Point2</span><span class="op">(</span><span class="dt">int</span> x<span class="op">,</span> <span class="dt">int</span> y<span class="op">)</span> <span class="op">{</span> <span class="kw">this</span><span class="op">.</span><span class="fu">x</span> <span class="op">=</span> x<span class="op">;</span> <span class="kw">this</span><span class="op">.</span><span class="fu">y</span> <span class="op">=</span> y<span class="op">;</span> <span class="op">}</span></span>
+<span id="cb29-6"><a href="#cb29-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb29-7"><a href="#cb29-7" aria-hidden="true" tabindex="-1"></a>    <span class="at">@Override</span> <span class="kw">public</span> <span class="dt">boolean</span> <span class="fu">equals</span><span class="op">(</span><span class="bu">Object</span> o<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb29-8"><a href="#cb29-8" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span><span class="kw">this</span> <span class="op">==</span> o<span class="op">)</span> <span class="cf">return</span> <span class="kw">true</span><span class="op">;</span></span>
+<span id="cb29-9"><a href="#cb29-9" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(!(</span>o <span class="kw">instanceof</span> Point2 p<span class="op">))</span> <span class="cf">return</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb29-10"><a href="#cb29-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> x <span class="op">==</span> p<span class="op">.</span><span class="fu">x</span> <span class="op">&amp;&amp;</span> y <span class="op">==</span> p<span class="op">.</span><span class="fu">y</span><span class="op">;</span></span>
+<span id="cb29-11"><a href="#cb29-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb29-12"><a href="#cb29-12" aria-hidden="true" tabindex="-1"></a>    <span class="at">@Override</span> <span class="kw">public</span> <span class="dt">int</span> <span class="fu">hashCode</span><span class="op">()</span> <span class="op">{</span> <span class="cf">return</span> Objects<span class="op">.</span><span class="fu">hash</span><span class="op">(</span>x<span class="op">,</span> y<span class="op">);</span> <span class="op">}</span></span>
+<span id="cb29-13"><a href="#cb29-13" aria-hidden="true" tabindex="-1"></a>    <span class="at">@Override</span> <span class="kw">public</span> <span class="bu">String</span> <span class="fu">toString</span><span class="op">()</span> <span class="op">{</span> <span class="cf">return</span> <span class="st">&quot;Point2(&quot;</span> <span class="op">+</span> x <span class="op">+</span> <span class="st">&quot;, &quot;</span> <span class="op">+</span> y <span class="op">+</span> <span class="st">&quot;)&quot;</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb29-14"><a href="#cb29-14" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb29-15"><a href="#cb29-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb29-16"><a href="#cb29-16" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> EqualsBasics <span class="op">{</span></span>
+<span id="cb29-17"><a href="#cb29-17" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb29-18"><a href="#cb29-18" aria-hidden="true" tabindex="-1"></a>        Point2 a <span class="op">=</span> <span class="kw">new</span> <span class="fu">Point2</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">);</span></span>
+<span id="cb29-19"><a href="#cb29-19" aria-hidden="true" tabindex="-1"></a>        Point2 b <span class="op">=</span> <span class="kw">new</span> <span class="fu">Point2</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">);</span></span>
+<span id="cb29-20"><a href="#cb29-20" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>a<span class="op">.</span><span class="fu">equals</span><span class="op">(</span>b<span class="op">));</span>   <span class="co">// true</span></span>
+<span id="cb29-21"><a href="#cb29-21" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>a <span class="op">==</span> b<span class="op">);</span>        <span class="co">// false —— 不同对象</span></span>
+<span id="cb29-22"><a href="#cb29-22" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>a<span class="op">);</span>             <span class="co">// Point2(1, 2) —— toString 被调用</span></span>
+<span id="cb29-23"><a href="#cb29-23" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb29-24"><a href="#cb29-24" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<pre><code>true
+false
+Point2(1, 2)</code></pre>
+<p><code>==</code>
+永远比较的是引用(是不是同一个对象);要比较”内容是否相等”,必须重写
+<code>equals</code>。<code>System.out.println(a)</code> 会自动调用
+<code>a.toString()</code>。</p>
+<h3 id="底层与-c-对比-5">底层与 C 对比</h3>
+<p><code>Object</code> 类比但强于 C++——C++
+没有统一根。关键方法:<code>equals</code>、<code>hashCode</code>、<code>toString</code>、<code>getClass</code>、<code>clone</code>、<code>wait</code>/<code>notify</code>(见<a
 href="10-并发模型.html">并发</a>)、<code>finalize</code>(已弃用,见<a
 href="09-错误处理与资源管理.html">GC</a>)。</p>
-<h3 id="equalshashcode-契约违反会导致集合行为错乱">equals/hashCode
-契约(违反会导致集合行为错乱)</h3>
+<h4 id="equalshashcode-契约违反会导致集合行为错乱">equals/hashCode
+契约(违反会导致集合行为错乱)</h4>
 <ol type="1">
 <li><code>a.equals(b)</code> 为 true ⟹
 <code>a.hashCode() == b.hashCode()</code>(<strong>相等必同哈希</strong>)。</li>
@@ -305,61 +612,82 @@ hash)</strong>——常被误说成”由对象地址派生”,但那站不住�
 移动对象后哈希就会变);现代 HotSpot(JDK8+ 默认)用一个<strong>线程本地的
 xorshift 伪随机数</strong>生成,首次调用时惰性算出、存进对象头 mark
 word,此后不变(见<a href="04-数据类型.html">「数据类型」</a>)。</p>
-<div class="sourceCode" id="cb6"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="dt">final</span> <span class="kw">class</span> <span class="bu">Point</span> <span class="op">{</span></span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">final</span> <span class="dt">int</span> x<span class="op">,</span> y<span class="op">;</span></span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    <span class="bu">Point</span><span class="op">(</span><span class="dt">int</span> x<span class="op">,</span> <span class="dt">int</span> y<span class="op">){</span> <span class="kw">this</span><span class="op">.</span><span class="fu">x</span><span class="op">=</span>x<span class="op">;</span> <span class="kw">this</span><span class="op">.</span><span class="fu">y</span><span class="op">=</span>y<span class="op">;</span> <span class="op">}</span></span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">@Override</span> <span class="kw">public</span> <span class="dt">boolean</span> <span class="fu">equals</span><span class="op">(</span><span class="bu">Object</span> o<span class="op">){</span></span>
-<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span><span class="kw">this</span> <span class="op">==</span> o<span class="op">)</span> <span class="cf">return</span> <span class="kw">true</span><span class="op">;</span></span>
-<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(!(</span>o <span class="kw">instanceof</span> <span class="bu">Point</span> p<span class="op">))</span> <span class="cf">return</span> <span class="kw">false</span><span class="op">;</span> <span class="co">// 模式匹配 instanceof</span></span>
-<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> x <span class="op">==</span> p<span class="op">.</span><span class="fu">x</span> <span class="op">&amp;&amp;</span> y <span class="op">==</span> p<span class="op">.</span><span class="fu">y</span><span class="op">;</span></span>
-<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>    <span class="at">@Override</span> <span class="kw">public</span> <span class="dt">int</span> <span class="fu">hashCode</span><span class="op">(){</span> <span class="cf">return</span> Objects<span class="op">.</span><span class="fu">hash</span><span class="op">(</span>x<span class="op">,</span> y<span class="op">);</span> <span class="op">}</span></span>
-<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb31"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a><span class="dt">final</span> <span class="kw">class</span> <span class="bu">Point</span> <span class="op">{</span></span>
+<span id="cb31-2"><a href="#cb31-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">final</span> <span class="dt">int</span> x<span class="op">,</span> y<span class="op">;</span></span>
+<span id="cb31-3"><a href="#cb31-3" aria-hidden="true" tabindex="-1"></a>    <span class="bu">Point</span><span class="op">(</span><span class="dt">int</span> x<span class="op">,</span> <span class="dt">int</span> y<span class="op">){</span> <span class="kw">this</span><span class="op">.</span><span class="fu">x</span><span class="op">=</span>x<span class="op">;</span> <span class="kw">this</span><span class="op">.</span><span class="fu">y</span><span class="op">=</span>y<span class="op">;</span> <span class="op">}</span></span>
+<span id="cb31-4"><a href="#cb31-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">@Override</span> <span class="kw">public</span> <span class="dt">boolean</span> <span class="fu">equals</span><span class="op">(</span><span class="bu">Object</span> o<span class="op">){</span></span>
+<span id="cb31-5"><a href="#cb31-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span><span class="kw">this</span> <span class="op">==</span> o<span class="op">)</span> <span class="cf">return</span> <span class="kw">true</span><span class="op">;</span></span>
+<span id="cb31-6"><a href="#cb31-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(!(</span>o <span class="kw">instanceof</span> <span class="bu">Point</span> p<span class="op">))</span> <span class="cf">return</span> <span class="kw">false</span><span class="op">;</span> <span class="co">// 模式匹配 instanceof</span></span>
+<span id="cb31-7"><a href="#cb31-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> x <span class="op">==</span> p<span class="op">.</span><span class="fu">x</span> <span class="op">&amp;&amp;</span> y <span class="op">==</span> p<span class="op">.</span><span class="fu">y</span><span class="op">;</span></span>
+<span id="cb31-8"><a href="#cb31-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb31-9"><a href="#cb31-9" aria-hidden="true" tabindex="-1"></a>    <span class="at">@Override</span> <span class="kw">public</span> <span class="dt">int</span> <span class="fu">hashCode</span><span class="op">(){</span> <span class="cf">return</span> Objects<span class="op">.</span><span class="fu">hash</span><span class="op">(</span>x<span class="op">,</span> y<span class="op">);</span> <span class="op">}</span></span>
+<span id="cb31-10"><a href="#cb31-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>用 <code>record</code> 可自动生成这些(下文)。</p>
 <p>违反契约的代价可直接看到:只重写 <code>equals</code>、不重写
 <code>hashCode</code>,相等对象散到不同桶,<code>HashSet</code>
 里就找不回来:</p>
-<div class="sourceCode" id="cb7"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.*;</span></span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> HashContract <span class="op">{</span></span>
-<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 重写了 equals,但没重写 hashCode —— 违反契约</span></span>
-<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">class</span> Bad <span class="op">{</span></span>
-<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>        <span class="dt">final</span> <span class="dt">int</span> id<span class="op">;</span> <span class="fu">Bad</span><span class="op">(</span><span class="dt">int</span> id<span class="op">){</span> <span class="kw">this</span><span class="op">.</span><span class="fu">id</span> <span class="op">=</span> id<span class="op">;</span> <span class="op">}</span></span>
-<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>        <span class="at">@Override</span> <span class="kw">public</span> <span class="dt">boolean</span> <span class="fu">equals</span><span class="op">(</span><span class="bu">Object</span> o<span class="op">){</span> <span class="cf">return</span> o <span class="kw">instanceof</span> Bad b <span class="op">&amp;&amp;</span> b<span class="op">.</span><span class="fu">id</span> <span class="op">==</span> id<span class="op">;</span> <span class="op">}</span></span>
-<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 两个都重写 —— 正确</span></span>
-<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">class</span> Good <span class="op">{</span></span>
-<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>        <span class="dt">final</span> <span class="dt">int</span> id<span class="op">;</span> <span class="fu">Good</span><span class="op">(</span><span class="dt">int</span> id<span class="op">){</span> <span class="kw">this</span><span class="op">.</span><span class="fu">id</span> <span class="op">=</span> id<span class="op">;</span> <span class="op">}</span></span>
-<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>        <span class="at">@Override</span> <span class="kw">public</span> <span class="dt">boolean</span> <span class="fu">equals</span><span class="op">(</span><span class="bu">Object</span> o<span class="op">){</span> <span class="cf">return</span> o <span class="kw">instanceof</span> Good g <span class="op">&amp;&amp;</span> g<span class="op">.</span><span class="fu">id</span> <span class="op">==</span> id<span class="op">;</span> <span class="op">}</span></span>
-<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>        <span class="at">@Override</span> <span class="kw">public</span> <span class="dt">int</span> <span class="fu">hashCode</span><span class="op">(){</span> <span class="cf">return</span> <span class="bu">Integer</span><span class="op">.</span><span class="fu">hashCode</span><span class="op">(</span>id<span class="op">);</span> <span class="op">}</span></span>
-<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;Bad  equal? &quot;</span> <span class="op">+</span> <span class="kw">new</span> <span class="fu">Bad</span><span class="op">(</span><span class="dv">1</span><span class="op">).</span><span class="fu">equals</span><span class="op">(</span><span class="kw">new</span> <span class="fu">Bad</span><span class="op">(</span><span class="dv">1</span><span class="op">)));</span></span>
-<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Set</span><span class="op">&lt;</span>Bad<span class="op">&gt;</span> bad <span class="op">=</span> <span class="kw">new</span> <span class="bu">HashSet</span><span class="op">&lt;&gt;();</span> bad<span class="op">.</span><span class="fu">add</span><span class="op">(</span><span class="kw">new</span> <span class="fu">Bad</span><span class="op">(</span><span class="dv">1</span><span class="op">));</span></span>
-<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;Bad  contains equal obj? &quot;</span> <span class="op">+</span> bad<span class="op">.</span><span class="fu">contains</span><span class="op">(</span><span class="kw">new</span> <span class="fu">Bad</span><span class="op">(</span><span class="dv">1</span><span class="op">)));</span></span>
-<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Set</span><span class="op">&lt;</span>Good<span class="op">&gt;</span> good <span class="op">=</span> <span class="kw">new</span> <span class="bu">HashSet</span><span class="op">&lt;&gt;();</span> good<span class="op">.</span><span class="fu">add</span><span class="op">(</span><span class="kw">new</span> <span class="fu">Good</span><span class="op">(</span><span class="dv">1</span><span class="op">));</span></span>
-<span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;Good contains equal obj? &quot;</span> <span class="op">+</span> good<span class="op">.</span><span class="fu">contains</span><span class="op">(</span><span class="kw">new</span> <span class="fu">Good</span><span class="op">(</span><span class="dv">1</span><span class="op">)));</span></span>
-<span id="cb7-21"><a href="#cb7-21" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb7-22"><a href="#cb7-22" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb7-23"><a href="#cb7-23" aria-hidden="true" tabindex="-1"></a><span class="co">// Bad  equal? true                 &lt;- 两个 Bad(1) 相等</span></span>
-<span id="cb7-24"><a href="#cb7-24" aria-hidden="true" tabindex="-1"></a><span class="co">// Bad  contains equal obj? false   &lt;- 但默认 hashCode 不同,散到别的桶,找不到!</span></span>
-<span id="cb7-25"><a href="#cb7-25" aria-hidden="true" tabindex="-1"></a><span class="co">// Good contains equal obj? true    &lt;- 正确重写后才能找回</span></span></code></pre></div>
+<div class="sourceCode" id="cb32"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.*;</span></span>
+<span id="cb32-2"><a href="#cb32-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> HashContract <span class="op">{</span></span>
+<span id="cb32-3"><a href="#cb32-3" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 重写了 equals,但没重写 hashCode —— 违反契约</span></span>
+<span id="cb32-4"><a href="#cb32-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">class</span> Bad <span class="op">{</span></span>
+<span id="cb32-5"><a href="#cb32-5" aria-hidden="true" tabindex="-1"></a>        <span class="dt">final</span> <span class="dt">int</span> id<span class="op">;</span> <span class="fu">Bad</span><span class="op">(</span><span class="dt">int</span> id<span class="op">){</span> <span class="kw">this</span><span class="op">.</span><span class="fu">id</span> <span class="op">=</span> id<span class="op">;</span> <span class="op">}</span></span>
+<span id="cb32-6"><a href="#cb32-6" aria-hidden="true" tabindex="-1"></a>        <span class="at">@Override</span> <span class="kw">public</span> <span class="dt">boolean</span> <span class="fu">equals</span><span class="op">(</span><span class="bu">Object</span> o<span class="op">){</span> <span class="cf">return</span> o <span class="kw">instanceof</span> Bad b <span class="op">&amp;&amp;</span> b<span class="op">.</span><span class="fu">id</span> <span class="op">==</span> id<span class="op">;</span> <span class="op">}</span></span>
+<span id="cb32-7"><a href="#cb32-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb32-8"><a href="#cb32-8" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 两个都重写 —— 正确</span></span>
+<span id="cb32-9"><a href="#cb32-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">class</span> Good <span class="op">{</span></span>
+<span id="cb32-10"><a href="#cb32-10" aria-hidden="true" tabindex="-1"></a>        <span class="dt">final</span> <span class="dt">int</span> id<span class="op">;</span> <span class="fu">Good</span><span class="op">(</span><span class="dt">int</span> id<span class="op">){</span> <span class="kw">this</span><span class="op">.</span><span class="fu">id</span> <span class="op">=</span> id<span class="op">;</span> <span class="op">}</span></span>
+<span id="cb32-11"><a href="#cb32-11" aria-hidden="true" tabindex="-1"></a>        <span class="at">@Override</span> <span class="kw">public</span> <span class="dt">boolean</span> <span class="fu">equals</span><span class="op">(</span><span class="bu">Object</span> o<span class="op">){</span> <span class="cf">return</span> o <span class="kw">instanceof</span> Good g <span class="op">&amp;&amp;</span> g<span class="op">.</span><span class="fu">id</span> <span class="op">==</span> id<span class="op">;</span> <span class="op">}</span></span>
+<span id="cb32-12"><a href="#cb32-12" aria-hidden="true" tabindex="-1"></a>        <span class="at">@Override</span> <span class="kw">public</span> <span class="dt">int</span> <span class="fu">hashCode</span><span class="op">(){</span> <span class="cf">return</span> <span class="bu">Integer</span><span class="op">.</span><span class="fu">hashCode</span><span class="op">(</span>id<span class="op">);</span> <span class="op">}</span></span>
+<span id="cb32-13"><a href="#cb32-13" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb32-14"><a href="#cb32-14" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb32-15"><a href="#cb32-15" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;Bad  equal? &quot;</span> <span class="op">+</span> <span class="kw">new</span> <span class="fu">Bad</span><span class="op">(</span><span class="dv">1</span><span class="op">).</span><span class="fu">equals</span><span class="op">(</span><span class="kw">new</span> <span class="fu">Bad</span><span class="op">(</span><span class="dv">1</span><span class="op">)));</span></span>
+<span id="cb32-16"><a href="#cb32-16" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Set</span><span class="op">&lt;</span>Bad<span class="op">&gt;</span> bad <span class="op">=</span> <span class="kw">new</span> <span class="bu">HashSet</span><span class="op">&lt;&gt;();</span> bad<span class="op">.</span><span class="fu">add</span><span class="op">(</span><span class="kw">new</span> <span class="fu">Bad</span><span class="op">(</span><span class="dv">1</span><span class="op">));</span></span>
+<span id="cb32-17"><a href="#cb32-17" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;Bad  contains equal obj? &quot;</span> <span class="op">+</span> bad<span class="op">.</span><span class="fu">contains</span><span class="op">(</span><span class="kw">new</span> <span class="fu">Bad</span><span class="op">(</span><span class="dv">1</span><span class="op">)));</span></span>
+<span id="cb32-18"><a href="#cb32-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-19"><a href="#cb32-19" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Set</span><span class="op">&lt;</span>Good<span class="op">&gt;</span> good <span class="op">=</span> <span class="kw">new</span> <span class="bu">HashSet</span><span class="op">&lt;&gt;();</span> good<span class="op">.</span><span class="fu">add</span><span class="op">(</span><span class="kw">new</span> <span class="fu">Good</span><span class="op">(</span><span class="dv">1</span><span class="op">));</span></span>
+<span id="cb32-20"><a href="#cb32-20" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;Good contains equal obj? &quot;</span> <span class="op">+</span> good<span class="op">.</span><span class="fu">contains</span><span class="op">(</span><span class="kw">new</span> <span class="fu">Good</span><span class="op">(</span><span class="dv">1</span><span class="op">)));</span></span>
+<span id="cb32-21"><a href="#cb32-21" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb32-22"><a href="#cb32-22" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<pre><code>Bad  equal? true                 &lt;- 两个 Bad(1) 相等
+Bad  contains equal obj? false   &lt;- 但默认 hashCode 不同,散到别的桶,找不到!
+Good contains equal obj? true    &lt;- 正确重写后才能找回</code></pre>
 <h2 id="七泛型与类型擦除与-c-模板的根本分野">七、泛型与类型擦除(与 C++
 模板的根本分野)</h2>
-<p>这是 Java 类型系统最”反直觉”的部分,也是与 C++ 差异最大之处。</p>
-<h3 id="擦除运行时没有泛型信息">擦除:运行时没有泛型信息</h3>
+<h3 id="怎么用-6">怎么用</h3>
+<p>声明泛型类用 <code>class 类名&lt;T&gt;</code>(上文的
+<code>Box&lt;T&gt;</code> 已经见过);泛型方法把 <code>&lt;T&gt;</code>
+写在返回类型前面,类型参数由调用时传入的实参自动推断:</p>
+<div class="sourceCode" id="cb34"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> GenericMethodBasics <span class="op">{</span></span>
+<span id="cb34-2"><a href="#cb34-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="op">&lt;</span>T<span class="op">&gt;</span> T <span class="fu">firstOf</span><span class="op">(</span>T<span class="op">[]</span> arr<span class="op">)</span> <span class="op">{</span>     <span class="co">// 泛型方法:类型参数写在返回类型前</span></span>
+<span id="cb34-3"><a href="#cb34-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> arr<span class="op">[</span><span class="dv">0</span><span class="op">];</span></span>
+<span id="cb34-4"><a href="#cb34-4" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb34-5"><a href="#cb34-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb34-6"><a href="#cb34-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">String</span><span class="op">[]</span> names <span class="op">=</span> <span class="op">{</span><span class="st">&quot;Ann&quot;</span><span class="op">,</span> <span class="st">&quot;Bob&quot;</span><span class="op">};</span></span>
+<span id="cb34-7"><a href="#cb34-7" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="fu">firstOf</span><span class="op">(</span>names<span class="op">));</span>   <span class="co">// Ann</span></span>
+<span id="cb34-8"><a href="#cb34-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb34-9"><a href="#cb34-9" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Integer</span><span class="op">[]</span> nums <span class="op">=</span> <span class="op">{</span><span class="dv">10</span><span class="op">,</span> <span class="dv">20</span><span class="op">};</span></span>
+<span id="cb34-10"><a href="#cb34-10" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="fu">firstOf</span><span class="op">(</span>nums<span class="op">));</span>    <span class="co">// 10</span></span>
+<span id="cb34-11"><a href="#cb34-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb34-12"><a href="#cb34-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<pre><code>Ann
+10</code></pre>
+<p>这是 Java 类型系统最”反直觉”的部分,也是与 C++
+差异最大之处,下面展开讲运行时到底发生了什么。</p>
+<h3 id="底层与-c-对比-6">底层与 C 对比</h3>
+<h4 id="擦除运行时没有泛型信息">擦除:运行时没有泛型信息</h4>
 <p>Java
 泛型是<strong>编译期</strong>特性。编译后类型参数被”擦除”:<code>List&lt;String&gt;</code>
 和 <code>List&lt;Integer&gt;</code> 运行时都是同一个 <code>List</code>
 类(裸类型 <code>List</code>,<code>T</code> 擦除为
 <code>Object</code>,有界则擦到上界)。编译器在需要处插入<strong>强制转换</strong>并做静态类型检查。</p>
-<div class="sourceCode" id="cb8"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="bu">List</span><span class="op">&lt;</span><span class="bu">String</span><span class="op">&gt;</span> ls <span class="op">=</span> <span class="kw">new</span> <span class="bu">ArrayList</span><span class="op">&lt;&gt;();</span></span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>ls<span class="op">.</span><span class="fu">add</span><span class="op">(</span><span class="st">&quot;hi&quot;</span><span class="op">);</span></span>
-<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> s <span class="op">=</span> ls<span class="op">.</span><span class="fu">get</span><span class="op">(</span><span class="dv">0</span><span class="op">);</span>   <span class="co">// 编译器插入 (String) 转换</span></span>
-<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="co">// 运行时:ls.getClass() == ArrayList.class,与 List&lt;Integer&gt; 完全相同</span></span></code></pre></div>
+<div class="sourceCode" id="cb36"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb36-1"><a href="#cb36-1" aria-hidden="true" tabindex="-1"></a><span class="bu">List</span><span class="op">&lt;</span><span class="bu">String</span><span class="op">&gt;</span> ls <span class="op">=</span> <span class="kw">new</span> <span class="bu">ArrayList</span><span class="op">&lt;&gt;();</span></span>
+<span id="cb36-2"><a href="#cb36-2" aria-hidden="true" tabindex="-1"></a>ls<span class="op">.</span><span class="fu">add</span><span class="op">(</span><span class="st">&quot;hi&quot;</span><span class="op">);</span></span>
+<span id="cb36-3"><a href="#cb36-3" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> s <span class="op">=</span> ls<span class="op">.</span><span class="fu">get</span><span class="op">(</span><span class="dv">0</span><span class="op">);</span>   <span class="co">// 编译器插入 (String) 转换</span></span>
+<span id="cb36-4"><a href="#cb36-4" aria-hidden="true" tabindex="-1"></a><span class="co">// 运行时:ls.getClass() == ArrayList.class,与 List&lt;Integer&gt; 完全相同</span></span></code></pre></div>
 <p>对比
 C++:模板是<strong>单态化</strong>(monomorphization),<code>vector&lt;int&gt;</code>
 与 <code>vector&lt;string&gt;</code>
@@ -367,54 +695,58 @@ C++:模板是<strong>单态化</strong>(monomorphization),<code>vector&lt;int&gt
 只有一份代码,无膨胀,但运行时丢失了类型,由此产生一系列限制。</p>
 <p>运行时两种泛型实例是<strong>同一个</strong> <code>Class</code>
 对象;裸类型更能暴露”运行时不再有类型检查”:</p>
-<div class="sourceCode" id="cb9"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.*;</span></span>
-<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Erasure <span class="op">{</span></span>
-<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>        <span class="bu">List</span><span class="op">&lt;</span><span class="bu">String</span><span class="op">&gt;</span>  ls <span class="op">=</span> <span class="kw">new</span> <span class="bu">ArrayList</span><span class="op">&lt;&gt;();</span></span>
-<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>        <span class="bu">List</span><span class="op">&lt;</span><span class="bu">Integer</span><span class="op">&gt;</span> li <span class="op">=</span> <span class="kw">new</span> <span class="bu">ArrayList</span><span class="op">&lt;&gt;();</span></span>
-<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>ls<span class="op">.</span><span class="fu">getClass</span><span class="op">());</span>                 <span class="co">// 都擦除成 ArrayList</span></span>
-<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>li<span class="op">.</span><span class="fu">getClass</span><span class="op">());</span></span>
-<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;same Class object? &quot;</span> <span class="op">+</span> <span class="op">(</span>ls<span class="op">.</span><span class="fu">getClass</span><span class="op">()</span> <span class="op">==</span> li<span class="op">.</span><span class="fu">getClass</span><span class="op">()));</span></span>
-<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>        <span class="co">// 运行时不保留类型参数,下面这行能存进去,直到取出来用才会暴露:</span></span>
-<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a>        <span class="bu">List</span> raw <span class="op">=</span> li<span class="op">;</span>                 <span class="co">// 裸类型</span></span>
-<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a>        raw<span class="op">.</span><span class="fu">add</span><span class="op">(</span><span class="st">&quot;oops&quot;</span><span class="op">);</span>               <span class="co">// 此处不抛 ClassCastException(仅编译告警)</span></span>
-<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;li now holds: &quot;</span> <span class="op">+</span> li<span class="op">.</span><span class="fu">get</span><span class="op">(</span><span class="dv">0</span><span class="op">));</span>  <span class="co">// 尽管声明是 List&lt;Integer&gt;</span></span>
-<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb9-14"><a href="#cb9-14" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb9-15"><a href="#cb9-15" aria-hidden="true" tabindex="-1"></a><span class="co">// 编译期:raw.add(&quot;oops&quot;) 处有一条 unchecked 警告</span></span>
-<span id="cb9-16"><a href="#cb9-16" aria-hidden="true" tabindex="-1"></a><span class="co">// 运行输出(stdout):</span></span>
-<span id="cb9-17"><a href="#cb9-17" aria-hidden="true" tabindex="-1"></a><span class="co">// class java.util.ArrayList</span></span>
-<span id="cb9-18"><a href="#cb9-18" aria-hidden="true" tabindex="-1"></a><span class="co">// class java.util.ArrayList</span></span>
-<span id="cb9-19"><a href="#cb9-19" aria-hidden="true" tabindex="-1"></a><span class="co">// same Class object? true</span></span>
-<span id="cb9-20"><a href="#cb9-20" aria-hidden="true" tabindex="-1"></a><span class="co">// li now holds: oops</span></span></code></pre></div>
-<h3 id="擦除带来的四大限制">擦除带来的四大限制</h3>
-<div class="sourceCode" id="cb10"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="co">// 1. 不能 new T[](无法确定运行时类型,协变数组会漏检)</span></span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="co">// T[] arr = new T[10];              // 编译错</span></span>
-<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>T<span class="op">[]</span> arr <span class="op">=</span> <span class="op">(</span>T<span class="op">[])</span> <span class="kw">new</span> <span class="bu">Object</span><span class="op">[</span><span class="dv">10</span><span class="op">];</span>       <span class="co">// 变通:强转,有 unchecked warning</span></span>
-<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a><span class="co">// 2. 不能 new T()(不知道构造哪个类)</span></span>
-<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a><span class="co">// T t = new T();                     // 编译错,需传 Supplier&lt;T&gt; 或 Class&lt;T&gt;</span></span>
-<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a><span class="co">// 3. instanceof 不能带类型参数(运行时无此信息)</span></span>
-<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a><span class="co">// if (x instanceof List&lt;String&gt;)     // 编译错</span></span>
-<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="op">(</span>x <span class="kw">instanceof</span> <span class="bu">List</span><span class="op">&lt;?&gt;)</span> <span class="op">{</span> <span class="op">}</span>         <span class="co">// 只能用通配符</span></span>
-<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a><span class="co">// 4. 静态字段不能用类型参数;不能 catch 泛型异常</span></span></code></pre></div>
-<h3 id="桥接方法bridge-method">桥接方法(bridge method)</h3>
+<div class="sourceCode" id="cb37"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb37-1"><a href="#cb37-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.*;</span></span>
+<span id="cb37-2"><a href="#cb37-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Erasure <span class="op">{</span></span>
+<span id="cb37-3"><a href="#cb37-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb37-4"><a href="#cb37-4" aria-hidden="true" tabindex="-1"></a>        <span class="bu">List</span><span class="op">&lt;</span><span class="bu">String</span><span class="op">&gt;</span>  ls <span class="op">=</span> <span class="kw">new</span> <span class="bu">ArrayList</span><span class="op">&lt;&gt;();</span></span>
+<span id="cb37-5"><a href="#cb37-5" aria-hidden="true" tabindex="-1"></a>        <span class="bu">List</span><span class="op">&lt;</span><span class="bu">Integer</span><span class="op">&gt;</span> li <span class="op">=</span> <span class="kw">new</span> <span class="bu">ArrayList</span><span class="op">&lt;&gt;();</span></span>
+<span id="cb37-6"><a href="#cb37-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>ls<span class="op">.</span><span class="fu">getClass</span><span class="op">());</span>                 <span class="co">// 都擦除成 ArrayList</span></span>
+<span id="cb37-7"><a href="#cb37-7" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>li<span class="op">.</span><span class="fu">getClass</span><span class="op">());</span></span>
+<span id="cb37-8"><a href="#cb37-8" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;same Class object? &quot;</span> <span class="op">+</span> <span class="op">(</span>ls<span class="op">.</span><span class="fu">getClass</span><span class="op">()</span> <span class="op">==</span> li<span class="op">.</span><span class="fu">getClass</span><span class="op">()));</span></span>
+<span id="cb37-9"><a href="#cb37-9" aria-hidden="true" tabindex="-1"></a>        <span class="co">// 运行时不保留类型参数,下面这行能存进去,直到取出来用才会暴露:</span></span>
+<span id="cb37-10"><a href="#cb37-10" aria-hidden="true" tabindex="-1"></a>        <span class="bu">List</span> raw <span class="op">=</span> li<span class="op">;</span>                 <span class="co">// 裸类型</span></span>
+<span id="cb37-11"><a href="#cb37-11" aria-hidden="true" tabindex="-1"></a>        raw<span class="op">.</span><span class="fu">add</span><span class="op">(</span><span class="st">&quot;oops&quot;</span><span class="op">);</span>               <span class="co">// 此处不抛 ClassCastException(仅编译告警)</span></span>
+<span id="cb37-12"><a href="#cb37-12" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;li now holds: &quot;</span> <span class="op">+</span> li<span class="op">.</span><span class="fu">get</span><span class="op">(</span><span class="dv">0</span><span class="op">));</span>  <span class="co">// 尽管声明是 List&lt;Integer&gt;</span></span>
+<span id="cb37-13"><a href="#cb37-13" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb37-14"><a href="#cb37-14" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<pre><code>class java.util.ArrayList
+class java.util.ArrayList
+same Class object? true
+li now holds: oops</code></pre>
+<p>编译期在 <code>raw.add("oops")</code> 处会有一条 unchecked
+警告,但不会阻止编译或运行时报错。</p>
+<h4 id="擦除带来的四大限制">擦除带来的四大限制</h4>
+<div class="sourceCode" id="cb39"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb39-1"><a href="#cb39-1" aria-hidden="true" tabindex="-1"></a><span class="co">// 1. 不能 new T[](无法确定运行时类型,协变数组会漏检)</span></span>
+<span id="cb39-2"><a href="#cb39-2" aria-hidden="true" tabindex="-1"></a><span class="co">// T[] arr = new T[10];              // 编译错</span></span>
+<span id="cb39-3"><a href="#cb39-3" aria-hidden="true" tabindex="-1"></a>T<span class="op">[]</span> arr <span class="op">=</span> <span class="op">(</span>T<span class="op">[])</span> <span class="kw">new</span> <span class="bu">Object</span><span class="op">[</span><span class="dv">10</span><span class="op">];</span>       <span class="co">// 变通:强转,有 unchecked warning</span></span>
+<span id="cb39-4"><a href="#cb39-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb39-5"><a href="#cb39-5" aria-hidden="true" tabindex="-1"></a><span class="co">// 2. 不能 new T()(不知道构造哪个类)</span></span>
+<span id="cb39-6"><a href="#cb39-6" aria-hidden="true" tabindex="-1"></a><span class="co">// T t = new T();                     // 编译错,需传 Supplier&lt;T&gt; 或 Class&lt;T&gt;</span></span>
+<span id="cb39-7"><a href="#cb39-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb39-8"><a href="#cb39-8" aria-hidden="true" tabindex="-1"></a><span class="co">// 3. instanceof 不能带类型参数(运行时无此信息)</span></span>
+<span id="cb39-9"><a href="#cb39-9" aria-hidden="true" tabindex="-1"></a><span class="co">// if (x instanceof List&lt;String&gt;)     // 编译错</span></span>
+<span id="cb39-10"><a href="#cb39-10" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="op">(</span>x <span class="kw">instanceof</span> <span class="bu">List</span><span class="op">&lt;?&gt;)</span> <span class="op">{</span> <span class="op">}</span>         <span class="co">// 只能用通配符</span></span>
+<span id="cb39-11"><a href="#cb39-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb39-12"><a href="#cb39-12" aria-hidden="true" tabindex="-1"></a><span class="co">// 4. 静态字段不能用类型参数;不能 catch 泛型异常</span></span></code></pre></div>
+<h4 id="桥接方法bridge-method">桥接方法(bridge method)</h4>
 <p>擦除会破坏协变返回和泛型覆盖,编译器生成<strong>桥接方法</strong>弥合:</p>
-<div class="sourceCode" id="cb11"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> <span class="bu">Node</span><span class="op">&lt;</span>T<span class="op">&gt;</span> <span class="op">{</span> T <span class="fu">get</span><span class="op">(){</span><span class="kw">...</span><span class="op">}</span> <span class="dt">void</span> <span class="fu">set</span><span class="op">(</span>T t<span class="op">){</span><span class="kw">...</span><span class="op">}</span> <span class="op">}</span></span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> StrNode <span class="kw">extends</span> <span class="bu">Node</span><span class="op">&lt;</span><span class="bu">String</span><span class="op">&gt;</span> <span class="op">{</span></span>
-<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>    <span class="at">@Override</span> <span class="bu">String</span> <span class="fu">get</span><span class="op">(){</span><span class="kw">...</span><span class="op">}</span>        <span class="co">// 你写的</span></span>
-<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 编译器还偷偷生成:Object get(){ return get(); }  ← 桥接,匹配父类擦除后签名 Object get()</span></span>
-<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb40"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb40-1"><a href="#cb40-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> <span class="bu">Node</span><span class="op">&lt;</span>T<span class="op">&gt;</span> <span class="op">{</span> T <span class="fu">get</span><span class="op">(){</span><span class="kw">...</span><span class="op">}</span> <span class="dt">void</span> <span class="fu">set</span><span class="op">(</span>T t<span class="op">){</span><span class="kw">...</span><span class="op">}</span> <span class="op">}</span></span>
+<span id="cb40-2"><a href="#cb40-2" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> StrNode <span class="kw">extends</span> <span class="bu">Node</span><span class="op">&lt;</span><span class="bu">String</span><span class="op">&gt;</span> <span class="op">{</span></span>
+<span id="cb40-3"><a href="#cb40-3" aria-hidden="true" tabindex="-1"></a>    <span class="at">@Override</span> <span class="bu">String</span> <span class="fu">get</span><span class="op">(){</span><span class="kw">...</span><span class="op">}</span>        <span class="co">// 你写的</span></span>
+<span id="cb40-4"><a href="#cb40-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 编译器还偷偷生成:Object get(){ return get(); }  ← 桥接,匹配父类擦除后签名 Object get()</span></span>
+<span id="cb40-5"><a href="#cb40-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>否则父类 <code>Node</code> 擦除后是 <code>Object get()</code>,子类
 <code>String get()</code> 签名不同,虚分派对不上。桥接方法用
 <code>javap -v</code> 可见,标记
-<code>ACC_BRIDGE ACC_SYNTHETIC</code>。</p>
-<h3 id="通配符pecs-原则">通配符:PECS 原则</h3>
+<code>ACC_BRIDGE ACC_SYNTHETIC</code>——实测 <code>StrNode.class</code>
+里确实能看到两个 <code>get</code>:一个
+<code>()Ljava/lang/String;</code>(你写的),一个
+<code>()Ljava/lang/Object;</code> 带
+<code>ACC_BRIDGE, ACC_SYNTHETIC</code> 标志(编译器生成的)。</p>
+<h4 id="通配符pecs-原则">通配符:PECS 原则</h4>
 <p>泛型是<strong>不变</strong>的:<code>List&lt;String&gt;</code> 不是
 <code>List&lt;Object&gt;</code>(和数组协变相反,更安全)。要放松用通配符:</p>
 <ul>
@@ -424,75 +756,155 @@ T,不能写入,因为不知道确切子类型)。</li>
 T,读出只能当 Object)。</li>
 <li>口诀 <strong>PECS</strong>:Producer-Extends, Consumer-Super。</li>
 </ul>
-<div class="sourceCode" id="cb12"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="co">// 从 src 读、往 dst 写:src 是生产者用 extends,dst 是消费者用 super</span></span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="dt">static</span> <span class="op">&lt;</span>T<span class="op">&gt;</span> <span class="dt">void</span> <span class="fu">copy</span><span class="op">(</span><span class="bu">List</span><span class="op">&lt;?</span> <span class="kw">super</span> T<span class="op">&gt;</span> dst<span class="op">,</span> <span class="bu">List</span><span class="op">&lt;?</span> <span class="kw">extends</span> T<span class="op">&gt;</span> src<span class="op">){</span></span>
-<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span>T t <span class="op">:</span> src<span class="op">)</span> dst<span class="op">.</span><span class="fu">add</span><span class="op">(</span>t<span class="op">);</span></span>
-<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb41"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb41-1"><a href="#cb41-1" aria-hidden="true" tabindex="-1"></a><span class="co">// 从 src 读、往 dst 写:src 是生产者用 extends,dst 是消费者用 super</span></span>
+<span id="cb41-2"><a href="#cb41-2" aria-hidden="true" tabindex="-1"></a><span class="dt">static</span> <span class="op">&lt;</span>T<span class="op">&gt;</span> <span class="dt">void</span> <span class="fu">copy</span><span class="op">(</span><span class="bu">List</span><span class="op">&lt;?</span> <span class="kw">super</span> T<span class="op">&gt;</span> dst<span class="op">,</span> <span class="bu">List</span><span class="op">&lt;?</span> <span class="kw">extends</span> T<span class="op">&gt;</span> src<span class="op">){</span></span>
+<span id="cb41-3"><a href="#cb41-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span>T t <span class="op">:</span> src<span class="op">)</span> dst<span class="op">.</span><span class="fu">add</span><span class="op">(</span>t<span class="op">);</span></span>
+<span id="cb41-4"><a href="#cb41-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>C++20 concepts / 老式 SFINAE
 解决的是类似”约束类型参数”的问题,但机制完全不同(编译期鸭子类型 vs
 名义子类型 + 擦除)。</p>
 <h2 id="八record不可变数据载体">八、record:不可变数据载体</h2>
-<div class="sourceCode" id="cb13"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="kw">record</span> <span class="bu">Point</span><span class="op">(</span><span class="dt">int</span> x<span class="op">,</span> <span class="dt">int</span> y<span class="op">)</span> <span class="op">{</span> <span class="op">}</span></span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="co">// 自动生成:private final 字段、全参构造器、访问器 x()/y()、equals/hashCode/toString</span></span></code></pre></div>
+<h3 id="怎么用-7">怎么用</h3>
+<p><code>record</code>
+一行声明字段,编译器自动生成构造器、访问器(名字就是字段名,不加
+<code>get</code>
+前缀)、<code>equals</code>/<code>hashCode</code>/<code>toString</code>:</p>
+<div class="sourceCode" id="cb42"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb42-1"><a href="#cb42-1" aria-hidden="true" tabindex="-1"></a><span class="kw">record</span> <span class="fu">Point3</span><span class="op">(</span><span class="dt">int</span> x<span class="op">,</span> <span class="dt">int</span> y<span class="op">)</span> <span class="op">{</span> <span class="op">}</span></span>
+<span id="cb42-2"><a href="#cb42-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb42-3"><a href="#cb42-3" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> RecordBasics <span class="op">{</span></span>
+<span id="cb42-4"><a href="#cb42-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb42-5"><a href="#cb42-5" aria-hidden="true" tabindex="-1"></a>        Point3 p <span class="op">=</span> <span class="kw">new</span> <span class="fu">Point3</span><span class="op">(</span><span class="dv">3</span><span class="op">,</span> <span class="dv">4</span><span class="op">);</span></span>
+<span id="cb42-6"><a href="#cb42-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>p<span class="op">.</span><span class="fu">x</span><span class="op">());</span>      <span class="co">// 3   —— 访问器,不叫 getX()</span></span>
+<span id="cb42-7"><a href="#cb42-7" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>p<span class="op">.</span><span class="fu">y</span><span class="op">());</span>      <span class="co">// 4</span></span>
+<span id="cb42-8"><a href="#cb42-8" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>p<span class="op">);</span>          <span class="co">// Point3[x=3, y=4] —— 自动生成的 toString</span></span>
+<span id="cb42-9"><a href="#cb42-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb42-10"><a href="#cb42-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<pre><code>3
+4
+Point3[x=3, y=4]</code></pre>
+<h3 id="底层与-c-对比-7">底层与 C 对比</h3>
+<div class="sourceCode" id="cb44"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb44-1"><a href="#cb44-1" aria-hidden="true" tabindex="-1"></a><span class="kw">record</span> <span class="bu">Point</span><span class="op">(</span><span class="dt">int</span> x<span class="op">,</span> <span class="dt">int</span> y<span class="op">)</span> <span class="op">{</span> <span class="op">}</span></span>
+<span id="cb44-2"><a href="#cb44-2" aria-hidden="true" tabindex="-1"></a><span class="co">// 自动生成:private final 字段、全参构造器、访问器 x()/y()、equals/hashCode/toString</span></span></code></pre></div>
 <p><code>record</code> 是<strong>隐式 final</strong> 的、字段
 final、语义上是”透明的数据聚合”。类比 C++ 的聚合 struct + 自动生成的
 <code>operator==</code>。可加紧凑构造器做校验:</p>
-<div class="sourceCode" id="cb14"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="kw">record</span> <span class="fu">Range</span><span class="op">(</span><span class="dt">int</span> lo<span class="op">,</span> <span class="dt">int</span> hi<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>    Range <span class="op">{</span>   <span class="co">// 紧凑构造器,校验后自动赋值</span></span>
-<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>lo <span class="op">&gt;</span> hi<span class="op">)</span> <span class="cf">throw</span> <span class="kw">new</span> <span class="bu">IllegalArgumentException</span><span class="op">();</span></span>
-<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb45"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb45-1"><a href="#cb45-1" aria-hidden="true" tabindex="-1"></a><span class="kw">record</span> <span class="fu">Range</span><span class="op">(</span><span class="dt">int</span> lo<span class="op">,</span> <span class="dt">int</span> hi<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb45-2"><a href="#cb45-2" aria-hidden="true" tabindex="-1"></a>    Range <span class="op">{</span>   <span class="co">// 紧凑构造器,校验后自动赋值</span></span>
+<span id="cb45-3"><a href="#cb45-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>lo <span class="op">&gt;</span> hi<span class="op">)</span> <span class="cf">throw</span> <span class="kw">new</span> <span class="bu">IllegalArgumentException</span><span class="op">();</span></span>
+<span id="cb45-4"><a href="#cb45-4" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb45-5"><a href="#cb45-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb46"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb46-1"><a href="#cb46-1" aria-hidden="true" tabindex="-1"></a>Range r <span class="op">=</span> <span class="kw">new</span> <span class="fu">Range</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">5</span><span class="op">);</span></span>
+<span id="cb46-2"><a href="#cb46-2" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>r<span class="op">);</span>           <span class="co">// Range[lo=1, hi=5]</span></span>
+<span id="cb46-3"><a href="#cb46-3" aria-hidden="true" tabindex="-1"></a><span class="kw">new</span> <span class="fu">Range</span><span class="op">(</span><span class="dv">5</span><span class="op">,</span> <span class="dv">1</span><span class="op">);</span>                 <span class="co">// 抛 IllegalArgumentException —— 紧凑构造器里的校验生效</span></span></code></pre></div>
 <h2 id="九sealed密封类型受控继承">九、sealed:密封类型(受控继承)</h2>
+<h3 id="怎么用-8">怎么用</h3>
+<p><code>sealed interface ... permits ...</code>
+明确列出”谁能实现它”,不在列表里的类无法实现:</p>
+<div class="sourceCode" id="cb47"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb47-1"><a href="#cb47-1" aria-hidden="true" tabindex="-1"></a><span class="kw">sealed</span> <span class="kw">interface</span> Vehicle <span class="kw">permits</span> Car2<span class="op">,</span> Bike <span class="op">{</span> <span class="op">}</span></span>
+<span id="cb47-2"><a href="#cb47-2" aria-hidden="true" tabindex="-1"></a><span class="kw">record</span> <span class="fu">Car2</span><span class="op">(</span><span class="dt">int</span> wheels<span class="op">)</span> <span class="kw">implements</span> Vehicle <span class="op">{</span> <span class="op">}</span></span>
+<span id="cb47-3"><a href="#cb47-3" aria-hidden="true" tabindex="-1"></a><span class="kw">record</span> <span class="fu">Bike</span><span class="op">()</span> <span class="kw">implements</span> Vehicle <span class="op">{</span> <span class="op">}</span></span>
+<span id="cb47-4"><a href="#cb47-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb47-5"><a href="#cb47-5" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> SealedBasics <span class="op">{</span></span>
+<span id="cb47-6"><a href="#cb47-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb47-7"><a href="#cb47-7" aria-hidden="true" tabindex="-1"></a>        Vehicle v <span class="op">=</span> <span class="kw">new</span> <span class="fu">Car2</span><span class="op">(</span><span class="dv">4</span><span class="op">);</span></span>
+<span id="cb47-8"><a href="#cb47-8" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>v<span class="op">);</span>   <span class="co">// Car2[wheels=4]</span></span>
+<span id="cb47-9"><a href="#cb47-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb47-10"><a href="#cb47-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<pre><code>Car2[wheels=4]</code></pre>
+<h3 id="底层与-c-对比-8">底层与 C 对比</h3>
 <p>限制谁能继承/实现,配合模式匹配做穷尽性检查:</p>
-<div class="sourceCode" id="cb15"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="kw">sealed</span> <span class="kw">interface</span> <span class="bu">Shape</span> <span class="kw">permits</span> Circle<span class="op">,</span> Square <span class="op">{</span> <span class="op">}</span></span>
-<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="kw">record</span> <span class="fu">Circle</span><span class="op">(</span><span class="dt">double</span> r<span class="op">)</span> <span class="kw">implements</span> <span class="bu">Shape</span> <span class="op">{</span> <span class="op">}</span></span>
-<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a><span class="kw">record</span> <span class="fu">Square</span><span class="op">(</span><span class="dt">double</span> s<span class="op">)</span> <span class="kw">implements</span> <span class="bu">Shape</span> <span class="op">{</span> <span class="op">}</span></span>
-<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a><span class="dt">double</span> <span class="fu">area</span><span class="op">(</span><span class="bu">Shape</span> sh<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="cf">switch</span> <span class="op">(</span>sh<span class="op">)</span> <span class="op">{</span>          <span class="co">// 编译器知道只有两种,无需 default</span></span>
-<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> Circle c <span class="op">-&gt;</span> <span class="bu">Math</span><span class="op">.</span><span class="fu">PI</span> <span class="op">*</span> c<span class="op">.</span><span class="fu">r</span><span class="op">()</span> <span class="op">*</span> c<span class="op">.</span><span class="fu">r</span><span class="op">();</span></span>
-<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> Square s <span class="op">-&gt;</span> s<span class="op">.</span><span class="fu">s</span><span class="op">()</span> <span class="op">*</span> s<span class="op">.</span><span class="fu">s</span><span class="op">();</span></span>
-<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">};</span></span>
-<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb49"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb49-1"><a href="#cb49-1" aria-hidden="true" tabindex="-1"></a><span class="kw">sealed</span> <span class="kw">interface</span> <span class="bu">Shape</span> <span class="kw">permits</span> Circle<span class="op">,</span> Square <span class="op">{</span> <span class="op">}</span></span>
+<span id="cb49-2"><a href="#cb49-2" aria-hidden="true" tabindex="-1"></a><span class="kw">record</span> <span class="fu">Circle</span><span class="op">(</span><span class="dt">double</span> r<span class="op">)</span> <span class="kw">implements</span> <span class="bu">Shape</span> <span class="op">{</span> <span class="op">}</span></span>
+<span id="cb49-3"><a href="#cb49-3" aria-hidden="true" tabindex="-1"></a><span class="kw">record</span> <span class="fu">Square</span><span class="op">(</span><span class="dt">double</span> s<span class="op">)</span> <span class="kw">implements</span> <span class="bu">Shape</span> <span class="op">{</span> <span class="op">}</span></span>
+<span id="cb49-4"><a href="#cb49-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb49-5"><a href="#cb49-5" aria-hidden="true" tabindex="-1"></a><span class="dt">double</span> <span class="fu">area</span><span class="op">(</span><span class="bu">Shape</span> sh<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb49-6"><a href="#cb49-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="cf">switch</span> <span class="op">(</span>sh<span class="op">)</span> <span class="op">{</span>          <span class="co">// 编译器知道只有两种,无需 default</span></span>
+<span id="cb49-7"><a href="#cb49-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> Circle c <span class="op">-&gt;</span> <span class="bu">Math</span><span class="op">.</span><span class="fu">PI</span> <span class="op">*</span> c<span class="op">.</span><span class="fu">r</span><span class="op">()</span> <span class="op">*</span> c<span class="op">.</span><span class="fu">r</span><span class="op">();</span></span>
+<span id="cb49-8"><a href="#cb49-8" aria-hidden="true" tabindex="-1"></a>        <span class="cf">case</span> Square s <span class="op">-&gt;</span> s<span class="op">.</span><span class="fu">s</span><span class="op">()</span> <span class="op">*</span> s<span class="op">.</span><span class="fu">s</span><span class="op">();</span></span>
+<span id="cb49-9"><a href="#cb49-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">};</span></span>
+<span id="cb49-10"><a href="#cb49-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb50"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb50-1"><a href="#cb50-1" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="fu">area</span><span class="op">(</span><span class="kw">new</span> <span class="fu">Circle</span><span class="op">(</span><span class="dv">2</span><span class="op">)));</span>  <span class="co">// 12.566370614359172</span></span>
+<span id="cb50-2"><a href="#cb50-2" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="fu">area</span><span class="op">(</span><span class="kw">new</span> <span class="fu">Square</span><span class="op">(</span><span class="dv">3</span><span class="op">)));</span>  <span class="co">// 9.0</span></span></code></pre></div>
 <p>类似 C++ 里用 <code>std::variant</code> + <code>std::visit</code>
 表达封闭的和类型(sum type)。<code>sealed</code> 让编译器验证 switch
-穷尽。</p>
+穷尽——少覆盖一种子类型,<code>switch</code>
+表达式会编译报错而不是留一个运行时才暴露的漏洞。</p>
 <h2 id="十enum是完整的类">十、enum:是完整的类</h2>
+<h3 id="怎么用-9">怎么用</h3>
+<p>最简单的枚举就是列一串常量名,像 C 里的 <code>enum</code>
+但更安全——不能和整数混用,<code>switch</code>/<code>==</code>
+都能直接用:</p>
+<div class="sourceCode" id="cb51"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb51-1"><a href="#cb51-1" aria-hidden="true" tabindex="-1"></a><span class="kw">enum</span> Day <span class="op">{</span> MON<span class="op">,</span> TUE<span class="op">,</span> WED<span class="op">,</span> THU<span class="op">,</span> FRI<span class="op">,</span> SAT<span class="op">,</span> SUN <span class="op">}</span></span>
+<span id="cb51-2"><a href="#cb51-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb51-3"><a href="#cb51-3" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> EnumBasics <span class="op">{</span></span>
+<span id="cb51-4"><a href="#cb51-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb51-5"><a href="#cb51-5" aria-hidden="true" tabindex="-1"></a>        Day d <span class="op">=</span> Day<span class="op">.</span><span class="fu">MON</span><span class="op">;</span></span>
+<span id="cb51-6"><a href="#cb51-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>d<span class="op">);</span>            <span class="co">// MON</span></span>
+<span id="cb51-7"><a href="#cb51-7" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>d <span class="op">==</span> Day<span class="op">.</span><span class="fu">MON</span><span class="op">);</span> <span class="co">// true —— 枚举常量可以直接用 == 比较</span></span>
+<span id="cb51-8"><a href="#cb51-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb51-9"><a href="#cb51-9" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span>Day day <span class="op">:</span> Day<span class="op">.</span><span class="fu">values</span><span class="op">())</span> <span class="op">{</span>    <span class="co">// 遍历所有常量</span></span>
+<span id="cb51-10"><a href="#cb51-10" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">print</span><span class="op">(</span>day <span class="op">+</span> <span class="st">&quot; &quot;</span><span class="op">);</span></span>
+<span id="cb51-11"><a href="#cb51-11" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb51-12"><a href="#cb51-12" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">();</span></span>
+<span id="cb51-13"><a href="#cb51-13" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb51-14"><a href="#cb51-14" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<pre><code>MON
+true
+MON TUE WED THU FRI SAT SUN</code></pre>
+<h3 id="底层与-c-对比-9">底层与 C 对比</h3>
 <p>Java 枚举<strong>不是</strong> C/C++ 的整数常量,而是编译成继承
 <code>java.lang.Enum</code>
 的类,每个枚举常量是一个<strong>单例对象</strong>(JVM
 保证)。可有字段、方法、构造器,甚至每个常量各自的方法体(常量特定行为):</p>
-<div class="sourceCode" id="cb16"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="kw">enum</span> Planet <span class="op">{</span></span>
-<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>    <span class="fu">EARTH</span><span class="op">(</span><span class="fl">5.97e24</span><span class="op">,</span> <span class="fl">6.37e6</span><span class="op">),</span> <span class="fu">MARS</span><span class="op">(</span><span class="fl">6.42e23</span><span class="op">,</span> <span class="fl">3.39e6</span><span class="op">);</span>  <span class="co">// 调用构造器</span></span>
-<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">private</span> <span class="dt">final</span> <span class="dt">double</span> mass<span class="op">,</span> radius<span class="op">;</span></span>
-<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">Planet</span><span class="op">(</span><span class="dt">double</span> m<span class="op">,</span> <span class="dt">double</span> r<span class="op">){</span> mass<span class="op">=</span>m<span class="op">;</span> radius<span class="op">=</span>r<span class="op">;</span> <span class="op">}</span></span>
-<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">double</span> <span class="fu">gravity</span><span class="op">(){</span> <span class="cf">return</span> <span class="fl">6.67e-11</span> <span class="op">*</span> mass <span class="op">/</span> <span class="op">(</span>radius<span class="op">*</span>radius<span class="op">);</span> <span class="op">}</span></span>
-<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb53"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb53-1"><a href="#cb53-1" aria-hidden="true" tabindex="-1"></a><span class="kw">enum</span> Planet <span class="op">{</span></span>
+<span id="cb53-2"><a href="#cb53-2" aria-hidden="true" tabindex="-1"></a>    <span class="fu">EARTH</span><span class="op">(</span><span class="fl">5.97e24</span><span class="op">,</span> <span class="fl">6.37e6</span><span class="op">),</span> <span class="fu">MARS</span><span class="op">(</span><span class="fl">6.42e23</span><span class="op">,</span> <span class="fl">3.39e6</span><span class="op">);</span>  <span class="co">// 调用构造器</span></span>
+<span id="cb53-3"><a href="#cb53-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">private</span> <span class="dt">final</span> <span class="dt">double</span> mass<span class="op">,</span> radius<span class="op">;</span></span>
+<span id="cb53-4"><a href="#cb53-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">Planet</span><span class="op">(</span><span class="dt">double</span> m<span class="op">,</span> <span class="dt">double</span> r<span class="op">){</span> mass<span class="op">=</span>m<span class="op">;</span> radius<span class="op">=</span>r<span class="op">;</span> <span class="op">}</span></span>
+<span id="cb53-5"><a href="#cb53-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">double</span> <span class="fu">gravity</span><span class="op">(){</span> <span class="cf">return</span> <span class="fl">6.67e-11</span> <span class="op">*</span> mass <span class="op">/</span> <span class="op">(</span>radius<span class="op">*</span>radius<span class="op">);</span> <span class="op">}</span></span>
+<span id="cb53-6"><a href="#cb53-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb54"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb54-1"><a href="#cb54-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span>Planet p <span class="op">:</span> Planet<span class="op">.</span><span class="fu">values</span><span class="op">())</span> <span class="op">{</span></span>
+<span id="cb54-2"><a href="#cb54-2" aria-hidden="true" tabindex="-1"></a>    <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>p <span class="op">+</span> <span class="st">&quot; gravity = &quot;</span> <span class="op">+</span> p<span class="op">.</span><span class="fu">gravity</span><span class="op">());</span></span>
+<span id="cb54-3"><a href="#cb54-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<pre><code>EARTH gravity = 9.813440652193735
+MARS gravity = 3.726159709713629</code></pre>
 <p>因是单例,枚举可安全用 <code>==</code>
 比较,是实现单例模式的最佳方式,<code>EnumMap</code>/<code>EnumSet</code>
 用序号做位图/数组,极高效。</p>
 <h2 id="十一内部类匿名类lambda-与变量捕获">十一、内部类、匿名类、lambda
 与变量捕获</h2>
-<h3 id="内部类种类">内部类种类</h3>
+<h3 id="怎么用-10">怎么用</h3>
+<p>函数式接口(只有一个抽象方法的接口,如内置的
+<code>Runnable</code>)可以直接用 lambda 赋值,不需要专门写一个实现类:</p>
+<div class="sourceCode" id="cb56"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb56-1"><a href="#cb56-1" aria-hidden="true" tabindex="-1"></a><span class="bu">Runnable</span> r <span class="op">=</span> <span class="op">()</span> <span class="op">-&gt;</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;running!&quot;</span><span class="op">);</span></span>
+<span id="cb56-2"><a href="#cb56-2" aria-hidden="true" tabindex="-1"></a>r<span class="op">.</span><span class="fu">run</span><span class="op">();</span></span></code></pre></div>
+<h3 id="底层与-c-对比-10">底层与 C 对比</h3>
+<h4 id="内部类种类">内部类种类</h4>
 <ul>
 <li><strong>静态嵌套类</strong>(<code>static class</code>):无外部实例引用,等价顶层类放里面。</li>
 <li><strong>成员内部类</strong>:持有隐藏的 <code>outer this</code>
 引用,能访问外部实例字段——这也是内存泄漏源(内部类实例存活会拖住外部实例)。</li>
 <li><strong>局部类 / 匿名类</strong>:定义在方法内。</li>
 </ul>
-<h3 id="变量捕获必须-effectively-final">变量捕获必须 effectively
-final</h3>
+<h4 id="变量捕获必须-effectively-final">变量捕获必须 effectively
+final</h4>
 <p>匿名类/lambda 捕获的<strong>局部变量必须是 final 或 effectively
 final</strong>(初始化后不再赋值):</p>
-<div class="sourceCode" id="cb17"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> base <span class="op">=</span> <span class="dv">10</span><span class="op">;</span>                 <span class="co">// effectively final</span></span>
-<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="bu">Runnable</span> r <span class="op">=</span> <span class="op">()</span> <span class="op">-&gt;</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>base <span class="op">+</span> <span class="dv">1</span><span class="op">);</span></span>
-<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a><span class="co">// base = 20;                  // 若取消注释,上面编译错</span></span></code></pre></div>
+<div class="sourceCode" id="cb57"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb57-1"><a href="#cb57-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> base <span class="op">=</span> <span class="dv">10</span><span class="op">;</span>                 <span class="co">// effectively final</span></span>
+<span id="cb57-2"><a href="#cb57-2" aria-hidden="true" tabindex="-1"></a><span class="bu">Runnable</span> r <span class="op">=</span> <span class="op">()</span> <span class="op">-&gt;</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>base <span class="op">+</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb57-3"><a href="#cb57-3" aria-hidden="true" tabindex="-1"></a><span class="co">// base = 20;                  // 若取消注释,上面编译错</span></span></code></pre></div>
 <p><strong>为什么?</strong>
 局部变量在<strong>栈帧</strong>里,方法返回后栈帧销毁;而
 lambda/匿名类对象在<strong>堆</strong>上,可能活得更久。Java
@@ -504,13 +916,47 @@ lambda/匿名类对象在<strong>堆</strong>上,可能活得更久。Java
 用 effectively final
 从语言层堵死了这个坑(只能按值,且值不变)。捕获实例字段则不同:lambda
 捕获的是 <code>this</code>,通过它访问字段,字段可变。</p>
-<h3 id="lambda-的底层invokedynamic">lambda 的底层:invokedynamic</h3>
+<h4 id="lambda-的底层invokedynamic">lambda 的底层:invokedynamic</h4>
 <p>lambda <strong>不是</strong>匿名类语法糖。javac 生成
 <code>invokedynamic</code> 指令,首次执行时由
 <code>LambdaMetafactory</code>
 在运行时动态生成实现函数式接口的类。好处:无捕获的 lambda
 可复用同一实例(无状态),避免匿名类那种每处一个 class
 文件的膨胀。方法引用(<code>String::length</code>)同理。</p>
+<hr />
+<h2 id="小结">小结</h2>
+<ul>
+<li><strong>用法层面</strong>:<code>class 类名 { 字段; 构造器; 方法; }</code>
+定义类,<code>new 类名(...)</code> 造对象,<code>.</code>
+访问字段/调用方法;<code>extends</code>
+单继承一个类,<code>implements</code>
+实现任意多个接口;<code>class Box&lt;T&gt;</code>
+声明泛型类,<code>&lt;T&gt; T method(...)</code>
+声明泛型方法;函数式接口变量可以直接用 <code>() -&gt; ...</code> 的
+lambda 赋值;<code>private</code> 字段配 getter
+是封装的基本写法;重写方法要加
+<code>@Override</code>,子类引用父类类型的变量调用方法时按实际对象类型分派;<code>abstract class</code>
+混合抽象和具体方法,接口表达”能做什么”;重写 <code>equals</code>
+记得同时重写
+<code>hashCode</code>;<code>record Point(int x, int y)</code>
+一行声明不可变数据类;<code>sealed interface ... permits ...</code>
+限定实现者;<code>enum</code> 列常量,配
+<code>switch</code>/<code>==</code> 使用。</li>
+<li><strong>底层层面</strong>:对象一律在堆上,对象头里的 klass 指针类比
+C++ 的 vptr;初始化顺序是”父类静态 → 父类实例 → 父类构造器 → 本类实例 →
+本类构造器”,构造期调用虚方法会踩到子类字段未初始化的坑;<code>protected</code>
+比 C++ 语义宽,允许同包访问;接口 default
+方法带来”多继承实现”但无状态菱形问题,冲突需显式覆盖解决;多态靠
+vtable(类方法)+ itable(接口方法)实现,JIT
+用内联缓存和去虚化优化;<code>Object.hashCode</code>
+默认是线程本地伪随机生成的标识哈希,不是地址派生;泛型在编译期做类型检查,运行时被<strong>擦除</strong>成裸类型,由此产生不能
+<code>new T[]</code>/<code>new T()</code>、<code>instanceof</code>
+不能带类型参数等限制,编译器还会生成桥接方法弥合擦除导致的签名不一致;<code>record</code>/<code>sealed</code>/<code>enum</code>
+都是编译器生成大量样板代码的语法糖,<code>enum</code>
+常量本质是单例对象;lambda 捕获局部变量必须 effectively
+final(值拷贝语义),底层靠 <code>invokedynamic</code> +
+<code>LambdaMetafactory</code> 运行时生成实现类,而非匿名类语法糖。</li>
+</ul>
 <hr />
 <p><a href="07-复合数据结构.html">← 上一章:集合框架的内部实现</a> · <a
 href="index.html">返回目录</a> · <a

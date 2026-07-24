@@ -2,20 +2,17 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="zh-CN" xml:lang="zh-CN">
 <head>
   <meta charset="utf-8" />
-  <meta name="generator" content="pandoc 3.10" />
+  <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
   <title>标准库算法:排序、堆、容器与迭代器</title>
   <style>
     /* Default styles provided by pandoc.
     ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
     */
+    code{white-space: pre-wrap;}
     span.smallcaps{font-variant: small-caps;}
-    div.columns{display: flex; gap: 1.5em;}
-    div.column{flex: auto;}
-    @media screen {
-    div.columns{gap: min(4vw, 1.5em);}
-    div.column{overflow-x: auto;}
-    }
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
     div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
     /* The extra [class] is a hack that increases specificity enough to
        override a similar rule in reveal.js */
@@ -138,16 +135,34 @@ random</a></li>
 id="标准库算法排序堆容器与迭代器">标准库算法:排序、堆、容器与迭代器</h1>
 <p>C++ 有
 STL——<code>std::sort</code>(内省排序)、<code>std::priority_queue</code>、<code>std::lower_bound</code>、各种容器。Python
-标准库提供了功能对等、但在底层实现上各有取舍的工具。本章重点讲每个工具<strong>底层的数据结构与算法</strong>,并给出复杂度表。</p>
+标准库提供了功能对等、但在底层实现上各有取舍的工具。每一节都先给出最基本的调用方式,再讲清楚它<strong>底层的数据结构与算法</strong>,并给出复杂度表。</p>
 <h2 id="一sorted-list.sorttimsort">一、sorted / list.sort:Timsort</h2>
+<h3 id="怎么用">怎么用</h3>
+<p><code>sorted(iterable)</code> 返回一个新的、排好序的
+list;<code>list.sort()</code> 原地排序、不返回新对象。两者都支持
+<code>key</code>(提取排序依据)和 <code>reverse</code>(倒序):</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>data <span class="op">=</span> [(<span class="st">&quot;b&quot;</span>, <span class="dv">2</span>), (<span class="st">&quot;a&quot;</span>, <span class="dv">2</span>), (<span class="st">&quot;c&quot;</span>, <span class="dv">1</span>)]</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co"># key:提取排序键;类似 C++ 的比较器,但只算一次键(装饰-排序-去装饰),更快</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>s <span class="op">=</span> <span class="bu">sorted</span>(data, key<span class="op">=</span><span class="kw">lambda</span> x: x[<span class="dv">1</span>])</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(s)  <span class="co"># [(&#39;c&#39;, 1), (&#39;b&#39;, 2), (&#39;a&#39;, 2)] —— 稳定:b 仍在 a 前</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="co"># reverse 保持稳定性(不是简单反转结果)</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">sorted</span>(data, key<span class="op">=</span><span class="kw">lambda</span> x: x[<span class="dv">1</span>], reverse<span class="op">=</span><span class="va">True</span>))  <span class="co"># [(&#39;b&#39;,2),(&#39;a&#39;,2),(&#39;c&#39;,1)]</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>nums <span class="op">=</span> [<span class="dv">5</span>, <span class="dv">3</span>, <span class="dv">1</span>, <span class="dv">4</span>, <span class="dv">2</span>]</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>nums.sort()          <span class="co"># 原地排序,返回 None(修改自身)</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">sorted</span>(nums))  <span class="co"># 返回新列表,原列表不动</span></span></code></pre></div>
+<h3 id="底层timsort">底层:Timsort</h3>
 <p>Python 的排序用 <strong>Timsort</strong>——由 Tim Peters 于 2002 年为
-CPython 设计,后来被 Java、Android、V8 等采用。</p>
-<h3 id="timsort-的本质">Timsort 的本质</h3>
-<p>它是一种<strong>自适应的、稳定的归并排序</strong>,融合了归并排序和插入排序:</p>
+CPython 设计,后来被 Java、Android、V8
+等采用。它是一种<strong>自适应的、稳定的归并排序</strong>,融合了归并排序和插入排序:</p>
 <ul>
 <li><strong>稳定(stable)</strong>:相等元素保持原相对顺序。这是与 C++
 <code>std::sort</code>(不稳定,需 <code>std::stable_sort</code>
-才稳定)的关键区别。</li>
+才稳定)的关键区别——上面例子里 <code>key</code> 相同的
+<code>("b",2)</code>/<code>("a",2)</code> 排序后仍保持 b 在 a 前。</li>
 <li><strong>自适应(adaptive)</strong>:识别数据中已有序的连续片段(称为
 <strong>run</strong>)。对<strong>近乎有序</strong>的数据接近 O(n)。</li>
 <li><strong>最坏 O(n log n)</strong>,不像快排会退化到 O(n²)。</li>
@@ -157,19 +172,6 @@ CPython 设计,后来被 Java、Android、V8 等采用。</p>
 2. run 长度不足 minrun(32~64)时,用二分插入排序补足
 3. 用一个栈维护 run,按特定规则(保证栈上 run 长度近似斐波那契)合并相邻 run
 4. 合并时用 galloping(飞驰)模式加速一方元素连续胜出的情况</code></pre>
-<div class="sourceCode" id="cb2"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>data <span class="op">=</span> [(<span class="st">&quot;b&quot;</span>, <span class="dv">2</span>), (<span class="st">&quot;a&quot;</span>, <span class="dv">2</span>), (<span class="st">&quot;c&quot;</span>, <span class="dv">1</span>)]</span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="co"># key:提取排序键;类似 C++ 的比较器,但只算一次键(装饰-排序-去装饰),更快</span></span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>s <span class="op">=</span> <span class="bu">sorted</span>(data, key<span class="op">=</span><span class="kw">lambda</span> x: x[<span class="dv">1</span>])</span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(s)  <span class="co"># [(&#39;c&#39;, 1), (&#39;b&#39;, 2), (&#39;a&#39;, 2)] —— 稳定:b 仍在 a 前</span></span>
-<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="co"># reverse 保持稳定性(不是简单反转结果)</span></span>
-<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">sorted</span>(data, key<span class="op">=</span><span class="kw">lambda</span> x: x[<span class="dv">1</span>], reverse<span class="op">=</span><span class="va">True</span>))  <span class="co"># [(&#39;b&#39;,2),(&#39;a&#39;,2),(&#39;c&#39;,1)]</span></span>
-<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>nums <span class="op">=</span> [<span class="dv">5</span>, <span class="dv">3</span>, <span class="dv">1</span>, <span class="dv">4</span>, <span class="dv">2</span>]</span>
-<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>nums.sort()          <span class="co"># 原地排序,返回 None(修改自身)</span></span>
-<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">sorted</span>(nums))  <span class="co"># 返回新列表,原列表不动</span></span></code></pre></div>
 <p><code>key</code>
 函数对每个元素只调用一次,结果缓存起来参与比较(Schwartzian
 transform)。所以用 <code>key</code> 远比
@@ -199,10 +201,7 @@ class="sourceCode python"><code class="sourceCode python"><span id="cb4-1"><a hr
 <span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> grades[bisect.bisect(breakpoints, score)]</span>
 <span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>([grade(s) <span class="cf">for</span> s <span class="kw">in</span> (<span class="dv">55</span>, <span class="dv">65</span>, <span class="dv">85</span>, <span class="dv">95</span>)])  <span class="co"># [&#39;F&#39;, &#39;D&#39;, &#39;B&#39;, &#39;A&#39;]</span></span></code></pre></div>
 <h2 id="三heapq基于-list-的二叉堆">三、heapq:基于 list 的二叉堆</h2>
-<p><code>heapq</code> 把一个<strong>普通 list
-当作二叉最小堆</strong>来操作——没有单独的堆类型,而是一组作用于 list
-的函数。堆用<strong>数组隐式表示</strong>完全二叉树:节点 <code>i</code>
-的孩子是 <code>2i+1</code> 和 <code>2i+2</code>,无需指针。</p>
+<h3 id="怎么用-1">怎么用</h3>
 <div class="sourceCode" id="cb5"><pre
 class="sourceCode python"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> heapq</span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a></span>
@@ -234,6 +233,13 @@ class="sourceCode python"><code class="sourceCode python"><span id="cb6-1"><a hr
 <span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>    heapq.heappush(h, (<span class="op">-</span>pri, name))   <span class="co"># 取负 =&gt; 最大优先级落到堆顶</span></span>
 <span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>([heapq.heappop(h)[<span class="dv">1</span>] <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">3</span>)])</span>
 <span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a><span class="co"># [&#39;report&#39;, &#39;email&#39;, &#39;backup&#39;]  —— 按优先级 3、2、1 依次出队</span></span></code></pre></div>
+<h3 id="底层数组表示的二叉堆">底层:数组表示的二叉堆</h3>
+<p><code>heapq</code> 没有单独的堆类型,而是一组作用于<strong>普通
+list</strong> 的函数,把这个 list
+当作二叉最小堆来操作。堆用<strong>数组隐式表示</strong>完全二叉树:节点
+<code>i</code> 的孩子是 <code>2i+1</code> 和
+<code>2i+2</code>,不需要像链式二叉树那样存指针,<code>push</code>/<code>pop</code>
+靠”上浮”/“下沉”维护堆序。</p>
 <h2 id="四collections专用容器">四、collections:专用容器</h2>
 <p>标准 <code>dict</code>/<code>list</code>/<code>set</code>
 之外,<code>collections</code> 提供了针对特定模式优化的容器。</p>

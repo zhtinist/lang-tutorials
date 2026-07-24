@@ -2,20 +2,17 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="zh-CN" xml:lang="zh-CN">
 <head>
   <meta charset="utf-8" />
-  <meta name="generator" content="pandoc 3.10" />
+  <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
   <title>错误处理与资源管理:异常与垃圾回收</title>
   <style>
     /* Default styles provided by pandoc.
     ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
     */
+    code{white-space: pre-wrap;}
     span.smallcaps{font-variant: small-caps;}
-    div.columns{display: flex; gap: 1.5em;}
-    div.column{flex: auto;}
-    @media screen {
-    div.columns{gap: min(4vw, 1.5em);}
-    div.column{overflow-x: auto;}
-    }
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
     div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
     /* The extra [class] is a hack that increases specificity enough to
        override a similar rule in reveal.js */
@@ -110,6 +107,10 @@
 <li><a href="#错误处理与资源管理异常与垃圾回收"
 id="toc-错误处理与资源管理异常与垃圾回收">错误处理与资源管理:异常与垃圾回收</a>
 <ul>
+<li><a href="#先会用trycatch-速览"
+id="toc-先会用trycatch-速览">先会用:try/catch 速览</a></li>
+<li><a href="#开始深入异常在底层如何传播"
+id="toc-开始深入异常在底层如何传播">开始深入:异常在底层如何传播</a></li>
 <li><a href="#异常体系" id="toc-异常体系">异常体系</a></li>
 <li><a href="#trycatchfinally-与栈展开"
 id="toc-trycatchfinally-与栈展开">try/catch/finally 与栈展开</a></li>
@@ -133,6 +134,7 @@ id="toc-引用强度强软弱虚">引用强度:强/软/弱/虚</a></li>
 id="toc-java-里内存泄漏长什么样">Java 里内存泄漏长什么样</a></li>
 <li><a href="#常见-oom-与调优参数" id="toc-常见-oom-与调优参数">常见 OOM
 与调优参数</a></li>
+<li><a href="#小结" id="toc-小结">小结</a></li>
 </ul></li>
 </ul>
 </nav>
@@ -141,8 +143,117 @@ id="错误处理与资源管理异常与垃圾回收">错误处理与资源管�
 <p>C++ 用异常做错误传播,用 RAII(析构函数)做资源释放,用手动
 <code>delete</code>/智能指针管内存。Java
 把这三件事拆成:异常体系、try-with-resources(近似
-RAII)、以及<strong>自动垃圾回收(GC)</strong>。本章讲清楚异常在栈上如何展开、资源如何确定性释放、以及堆对象在什么时候、被谁、以何种机制回收。</p>
+RAII)、以及<strong>自动垃圾回收(GC)</strong>。本章分两大块——<strong>异常处理</strong>和<strong>垃圾回收</strong>——每一块都遵循同样的顺序:<strong>先讲怎么写、怎么用</strong>(会抛异常、会捕获、会关资源就够你写业务代码了),<strong>再讲底层</strong>(异常表怎么工作、栈怎么展开、堆里对象怎么被判定为垃圾)。只想应付日常编码,读每节前半段;想调优性能、诊断内存问题,再看后半段。</p>
+<hr />
+<h2 id="先会用trycatch-速览">先会用:try/catch 速览</h2>
+<p>不用先弄懂”异常表”“栈展开”这些词,你现在就能写会抛异常、会捕获异常的
+Java 代码。</p>
+<p><strong>抛出并捕获一个异常</strong>(除以 0 会抛
+<code>ArithmeticException</code>):</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> QuickTry <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">{</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>            <span class="dt">int</span> x <span class="op">=</span> <span class="dv">10</span> <span class="op">/</span> <span class="dv">0</span><span class="op">;</span>          <span class="co">// 抛出 ArithmeticException</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;不会执行到这里: &quot;</span> <span class="op">+</span> x<span class="op">);</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="cf">catch</span> <span class="op">(</span><span class="bu">ArithmeticException</span> e<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;捕获异常: &quot;</span> <span class="op">+</span> e<span class="op">.</span><span class="fu">getMessage</span><span class="op">());</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="cf">finally</span> <span class="op">{</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;finally 总会执行&quot;</span><span class="op">);</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;程序继续往下跑&quot;</span><span class="op">);</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="co">// 捕获异常: / by zero</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="co">// finally 总会执行</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="co">// 程序继续往下跑</span></span></code></pre></div>
+<p>要点:<code>try</code>
+包住可能出错的代码;<code>catch (类型 变量)</code>
+按类型匹配来接住异常;<code>finally</code>
+里的代码不管有没有异常都会跑一遍(常用来做扫尾清理)。异常发生后,<code>try</code>
+块里从出错点开始的代码不会再执行(上例里 <code>x</code> 那行的
+<code>println</code> 不会跑),直接跳到匹配的 <code>catch</code>。</p>
+<p><strong>关闭一次资源</strong>(<code>try-with-resources</code>):C
+里打开文件要记得 <code>fclose</code>,Java 里只要资源实现了
+<code>AutoCloseable</code>,写 <code>try (...)</code>
+就能保证用完自动关闭,不用手写 <code>finally { close(); }</code>:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> QuickTWR <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 一个最简单的可关闭资源:实现 AutoCloseable 即可</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">class</span> SimpleResource <span class="kw">implements</span> AutoCloseable <span class="op">{</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>        <span class="fu">SimpleResource</span><span class="op">()</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;打开资源&quot;</span><span class="op">);</span> <span class="op">}</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>        <span class="dt">void</span> <span class="fu">use</span><span class="op">()</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;使用资源&quot;</span><span class="op">);</span> <span class="op">}</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>        <span class="at">@Override</span> <span class="kw">public</span> <span class="dt">void</span> <span class="fu">close</span><span class="op">()</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;关闭资源&quot;</span><span class="op">);</span> <span class="op">}</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">(</span>SimpleResource r <span class="op">=</span> <span class="kw">new</span> <span class="fu">SimpleResource</span><span class="op">())</span> <span class="op">{</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>            r<span class="op">.</span><span class="fu">use</span><span class="op">();</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;try 块结束后 close() 已经被自动调用&quot;</span><span class="op">);</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a><span class="co">// 打开资源</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a><span class="co">// 使用资源</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a><span class="co">// 关闭资源</span></span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a><span class="co">// try 块结束后 close() 已经被自动调用</span></span></code></pre></div>
+<p><code>try (SimpleResource r = new SimpleResource())</code>
+括号里声明的资源,在 <code>try</code>
+块(不管正常结束还是抛异常)结束时,<code>close()</code>
+都会被自动调用一次——这是 Java 里最接近 C++ RAII/析构函数的写法。</p>
+<p>这两个例子够你开始写”能处理错误、能管资源”的 Java
+代码了。下面从这里往下,进入异常和 GC 的底层机制。</p>
+<hr />
+<h2 id="开始深入异常在底层如何传播">开始深入:异常在底层如何传播</h2>
+<p>从这一节起讲底层。你已经会写 <code>try/catch/finally</code> 和
+<code>try-with-resources</code> 了,但还有几个问题没回答:异常抛出后 JVM
+到底怎么找到该由哪个 <code>catch</code> 接住?<code>finally</code>
+为什么”总会执行”,它在字节码层面是怎么实现的?<code>try-with-resources</code>
+关闭多个资源时顺序是怎样的、如果 <code>close()</code>
+本身也抛异常怎么办?下面依次展开——每个特性还是先给”怎么用”的最小示例,再挖底层。</p>
 <h2 id="异常体系">异常体系</h2>
+<h3 id="怎么用">怎么用</h3>
+<p>Java
+异常分两大类,写代码时的实际区别是:<strong>受检异常编译器强制你处理,非受检异常不强制</strong>。</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">io</span><span class="op">.*;</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> QuickChecked <span class="op">{</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 受检异常:方法签名必须写 throws,否则编译不过</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">mightFail</span><span class="op">(</span><span class="dt">boolean</span> fail<span class="op">)</span> <span class="kw">throws</span> <span class="bu">IOException</span> <span class="op">{</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>fail<span class="op">)</span> <span class="cf">throw</span> <span class="kw">new</span> <span class="bu">IOException</span><span class="op">(</span><span class="st">&quot;模拟IO失败&quot;</span><span class="op">);</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;读取成功&quot;</span><span class="op">);</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 非受检异常:不需要 throws 声明</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">int</span> <span class="fu">divide</span><span class="op">(</span><span class="dt">int</span> a<span class="op">,</span> <span class="dt">int</span> b<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> a <span class="op">/</span> b<span class="op">;</span> <span class="co">// b=0 时抛 ArithmeticException,编译器不会强制处理</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">{</span></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>            <span class="fu">mightFail</span><span class="op">(</span><span class="kw">true</span><span class="op">);</span></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="cf">catch</span> <span class="op">(</span><span class="bu">IOException</span> e<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;捕获受检异常: &quot;</span> <span class="op">+</span> e<span class="op">.</span><span class="fu">getMessage</span><span class="op">());</span></span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">{</span></span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>            <span class="fu">divide</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">0</span><span class="op">);</span></span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="cf">catch</span> <span class="op">(</span><span class="bu">ArithmeticException</span> e<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;捕获非受检异常: &quot;</span> <span class="op">+</span> e<span class="op">.</span><span class="fu">getMessage</span><span class="op">());</span></span>
+<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a><span class="co">// 捕获受检异常: 模拟IO失败</span></span>
+<span id="cb3-30"><a href="#cb3-30" aria-hidden="true" tabindex="-1"></a><span class="co">// 捕获非受检异常: / by zero</span></span></code></pre></div>
+<p>如果 <code>mightFail</code> 声明了
+<code>throws IOException</code>,调用它的代码要么用
+<code>try/catch</code> 接住,要么自己也在方法签名上写
+<code>throws IOException</code>
+往外抛——否则编译器直接报错。<code>divide</code> 抛的
+<code>ArithmeticException</code>
+没有这个约束,你可以选择捕获,也可以不管,编译器不拦。</p>
+<h3 id="底层与-c-对比">底层与 C 对比</h3>
 <p>一切可抛出对象继承自 <code>Throwable</code>。它有两条主线:</p>
 <pre><code>                Throwable
                /         \
@@ -193,19 +304,28 @@ RAII)、以及<strong>自动垃圾回收(GC)</strong>。本章讲清楚异常在
 <code>try/catch</code>,否则编译不过。C++
 早期的动态异常规格(<code>throw(...)</code>)因难用被废弃,Java
 保留了但也饱受争议。</p>
-<div class="sourceCode" id="cb2"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">io</span><span class="op">.*;</span></span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Checked <span class="op">{</span></span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 受检:必须声明 throws,否则编译错误</span></span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="bu">String</span> <span class="fu">readFirst</span><span class="op">(</span><span class="bu">String</span> path<span class="op">)</span> <span class="kw">throws</span> <span class="bu">IOException</span> <span class="op">{</span></span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">(</span><span class="bu">BufferedReader</span> r <span class="op">=</span> <span class="kw">new</span> <span class="bu">BufferedReader</span><span class="op">(</span><span class="kw">new</span> <span class="bu">FileReader</span><span class="op">(</span>path<span class="op">)))</span> <span class="op">{</span></span>
-<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> r<span class="op">.</span><span class="fu">readLine</span><span class="op">();</span></span>
-<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
-<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 非受检:无需声明,编译器不拦</span></span>
-<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">int</span> <span class="fu">div</span><span class="op">(</span><span class="dt">int</span> a<span class="op">,</span> <span class="dt">int</span> b<span class="op">)</span> <span class="op">{</span> <span class="cf">return</span> a <span class="op">/</span> b<span class="op">;</span> <span class="op">}</span> <span class="co">// b=0 抛 ArithmeticException</span></span>
-<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">io</span><span class="op">.*;</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Checked <span class="op">{</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 受检:必须声明 throws,否则编译错误</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="bu">String</span> <span class="fu">readFirst</span><span class="op">(</span><span class="bu">String</span> path<span class="op">)</span> <span class="kw">throws</span> <span class="bu">IOException</span> <span class="op">{</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">(</span><span class="bu">BufferedReader</span> r <span class="op">=</span> <span class="kw">new</span> <span class="bu">BufferedReader</span><span class="op">(</span><span class="kw">new</span> <span class="bu">FileReader</span><span class="op">(</span>path<span class="op">)))</span> <span class="op">{</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> r<span class="op">.</span><span class="fu">readLine</span><span class="op">();</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 非受检:无需声明,编译器不拦</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">int</span> <span class="fu">div</span><span class="op">(</span><span class="dt">int</span> a<span class="op">,</span> <span class="dt">int</span> b<span class="op">)</span> <span class="op">{</span> <span class="cf">return</span> a <span class="op">/</span> b<span class="op">;</span> <span class="op">}</span> <span class="co">// b=0 抛 ArithmeticException</span></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<hr />
 <h2 id="trycatchfinally-与栈展开">try/catch/finally 与栈展开</h2>
+<h3 id="怎么用-1">怎么用</h3>
+<p><code>finally</code> 块不管 <code>try</code>
+里是正常返回还是抛了异常,都会执行一遍——上一节 <code>QuickTry</code>
+已经演示过:即使 <code>10 / 0</code> 抛出了异常,<code>finally</code> 里的
+<code>println</code>
+照样跑。这让它很适合放”不管成不成功都要做”的收尾动作,比如打日志、释放非
+<code>AutoCloseable</code> 的资源。</p>
+<h3 id="底层与-c-对比-1">底层与 C 对比</h3>
 <p>抛出异常时,JVM 从当前方法开始查其 <strong>异常表(exception
 table)</strong>——<code>javac</code> 为每个 <code>try</code> 块生成一条
 [起始PC, 结束PC, 处理器PC, 捕获类型]
@@ -216,26 +336,33 @@ unwinding),沿调用链回溯,直到找到匹配的 <code>catch</code>
 <code>finally</code>
 的代码<strong>复制</strong>到每条正常/异常出口路径上(或用异常表 +
 <code>athrow</code> 兜底),这是它”必然执行”的实现方式。</p>
-<div class="sourceCode" id="cb3"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Finally <span class="op">{</span></span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">int</span> <span class="fu">tricky</span><span class="op">()</span> <span class="op">{</span></span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">{</span></span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="dv">1</span><span class="op">;</span>          <span class="co">// 先算出返回值 1 压栈</span></span>
-<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="cf">finally</span> <span class="op">{</span></span>
-<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="dv">2</span><span class="op">;</span>          <span class="co">// finally 的 return 覆盖它 -&gt; 实际返回 2(反模式!)</span></span>
-<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
-<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="fu">tricky</span><span class="op">());</span> <span class="co">// 2</span></span>
-<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Finally <span class="op">{</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">int</span> <span class="fu">tricky</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">{</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="dv">1</span><span class="op">;</span>          <span class="co">// 先算出返回值 1 压栈</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="cf">finally</span> <span class="op">{</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="dv">2</span><span class="op">;</span>          <span class="co">// finally 的 return 覆盖它 -&gt; 实际返回 2(反模式!)</span></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="fu">tricky</span><span class="op">());</span> <span class="co">// 2</span></span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <blockquote>
 <p>陷阱:<code>finally</code> 里 <code>return</code> 或抛异常会吞掉
 <code>try</code> 中的返回值/异常。切勿在 <code>finally</code> 里
 <code>return</code>。</p>
 </blockquote>
+<hr />
 <h2 id="try-with-resourcesjava-的-raii">try-with-resources:Java 的
 RAII</h2>
+<h3 id="怎么用-2">怎么用</h3>
+<p>上一节 <code>QuickTWR</code> 已经展示了最基本的用法:资源类实现
+<code>AutoCloseable</code>,写在 <code>try (...)</code>
+括号里,<code>close()</code> 就会在 <code>try</code>
+块结束时自动调用——不管块里是正常跑完还是中途抛了异常。</p>
+<h3 id="底层与-c-对比-2">底层与 C 对比</h3>
 <p>C++
 靠对象离开作用域时<strong>析构函数</strong>确定性释放资源(RAII)。Java
 对象的回收时机不确定(GC 说了算),所以不能靠 <code>finalize</code>
@@ -243,26 +370,26 @@ RAII</h2>
 <code>AutoCloseable</code>(<code>close()</code>)的对象,在 try
 块结束时<strong>保证</strong>按声明的逆序调用 <code>close()</code>——这是
 Java 最接近 RAII 的确定性资源管理。</p>
-<div class="sourceCode" id="cb4"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">io</span><span class="op">.*;</span></span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> TWR <span class="kw">implements</span> AutoCloseable <span class="op">{</span></span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">private</span> <span class="dt">final</span> <span class="bu">String</span> name<span class="op">;</span></span>
-<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">TWR</span><span class="op">(</span><span class="bu">String</span> name<span class="op">)</span> <span class="op">{</span> <span class="kw">this</span><span class="op">.</span><span class="fu">name</span> <span class="op">=</span> name<span class="op">;</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;open &quot;</span> <span class="op">+</span> name<span class="op">);</span> <span class="op">}</span></span>
-<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">@Override</span> <span class="kw">public</span> <span class="dt">void</span> <span class="fu">close</span><span class="op">()</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;close &quot;</span> <span class="op">+</span> name<span class="op">);</span> <span class="op">}</span></span>
-<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>        <span class="co">// 逆序关闭:先 close b,再 close a(类似 C++ 局部对象逆序析构)</span></span>
-<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">(</span>TWR a <span class="op">=</span> <span class="kw">new</span> <span class="fu">TWR</span><span class="op">(</span><span class="st">&quot;A&quot;</span><span class="op">);</span> TWR b <span class="op">=</span> <span class="kw">new</span> <span class="fu">TWR</span><span class="op">(</span><span class="st">&quot;B&quot;</span><span class="op">))</span> <span class="op">{</span></span>
-<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;body&quot;</span><span class="op">);</span></span>
-<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>            <span class="cf">throw</span> <span class="kw">new</span> <span class="bu">RuntimeException</span><span class="op">(</span><span class="st">&quot;boom&quot;</span><span class="op">);</span></span>
-<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="cf">catch</span> <span class="op">(</span><span class="bu">RuntimeException</span> e<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;caught: &quot;</span> <span class="op">+</span> e<span class="op">.</span><span class="fu">getMessage</span><span class="op">());</span></span>
-<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>            <span class="co">// close 抛出的异常会作为“被抑制异常”挂在主异常上:</span></span>
-<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> <span class="op">(</span><span class="bu">Throwable</span> s <span class="op">:</span> e<span class="op">.</span><span class="fu">getSuppressed</span><span class="op">())</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;suppressed: &quot;</span> <span class="op">+</span> s<span class="op">);</span></span>
-<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
-<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 输出:open A / open B / body / close B / close A / caught: boom</span></span>
-<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">io</span><span class="op">.*;</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> TWR <span class="kw">implements</span> AutoCloseable <span class="op">{</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">private</span> <span class="dt">final</span> <span class="bu">String</span> name<span class="op">;</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">TWR</span><span class="op">(</span><span class="bu">String</span> name<span class="op">)</span> <span class="op">{</span> <span class="kw">this</span><span class="op">.</span><span class="fu">name</span> <span class="op">=</span> name<span class="op">;</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;open &quot;</span> <span class="op">+</span> name<span class="op">);</span> <span class="op">}</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">@Override</span> <span class="kw">public</span> <span class="dt">void</span> <span class="fu">close</span><span class="op">()</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;close &quot;</span> <span class="op">+</span> name<span class="op">);</span> <span class="op">}</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>        <span class="co">// 逆序关闭:先 close b,再 close a(类似 C++ 局部对象逆序析构)</span></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">(</span>TWR a <span class="op">=</span> <span class="kw">new</span> <span class="fu">TWR</span><span class="op">(</span><span class="st">&quot;A&quot;</span><span class="op">);</span> TWR b <span class="op">=</span> <span class="kw">new</span> <span class="fu">TWR</span><span class="op">(</span><span class="st">&quot;B&quot;</span><span class="op">))</span> <span class="op">{</span></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;body&quot;</span><span class="op">);</span></span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>            <span class="cf">throw</span> <span class="kw">new</span> <span class="bu">RuntimeException</span><span class="op">(</span><span class="st">&quot;boom&quot;</span><span class="op">);</span></span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="cf">catch</span> <span class="op">(</span><span class="bu">RuntimeException</span> e<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;caught: &quot;</span> <span class="op">+</span> e<span class="op">.</span><span class="fu">getMessage</span><span class="op">());</span></span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>            <span class="co">// close 抛出的异常会作为“被抑制异常”挂在主异常上:</span></span>
+<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> <span class="op">(</span><span class="bu">Throwable</span> s <span class="op">:</span> e<span class="op">.</span><span class="fu">getSuppressed</span><span class="op">())</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;suppressed: &quot;</span> <span class="op">+</span> s<span class="op">);</span></span>
+<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 输出:open A / open B / body / close B / close A / caught: boom</span></span>
+<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>区别于 C++:<code>close()</code> 的调用点由编译器插桩在 try
 出口,而<strong>对象内存本身</strong>仍由 GC
 稍后回收。即”资源(fd/句柄)确定性释放”与”内存非确定性回收”是分离的两件事。</p>
@@ -271,60 +398,98 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb4-1"><a href="
 <code>close()</code>
 都抛异常</strong>时,才看得到”被抑制异常”机制:主异常是 try 体抛的,两个
 <code>close()</code> 的异常按逆序挂到主异常上:</p>
-<div class="sourceCode" id="cb5"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Suppressed <span class="kw">implements</span> AutoCloseable <span class="op">{</span></span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">private</span> <span class="dt">final</span> <span class="bu">String</span> name<span class="op">;</span></span>
-<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    <span class="fu">Suppressed</span><span class="op">(</span><span class="bu">String</span> name<span class="op">){</span> <span class="kw">this</span><span class="op">.</span><span class="fu">name</span> <span class="op">=</span> name<span class="op">;</span> <span class="op">}</span></span>
-<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">@Override</span> <span class="kw">public</span> <span class="dt">void</span> <span class="fu">close</span><span class="op">()</span> <span class="op">{</span></span>
-<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;close &quot;</span> <span class="op">+</span> name<span class="op">);</span></span>
-<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">throw</span> <span class="kw">new</span> <span class="bu">RuntimeException</span><span class="op">(</span><span class="st">&quot;close-fail-&quot;</span> <span class="op">+</span> name<span class="op">);</span>   <span class="co">// close() 自己也抛</span></span>
-<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">(</span>Suppressed a <span class="op">=</span> <span class="kw">new</span> <span class="fu">Suppressed</span><span class="op">(</span><span class="st">&quot;A&quot;</span><span class="op">);</span> Suppressed b <span class="op">=</span> <span class="kw">new</span> <span class="fu">Suppressed</span><span class="op">(</span><span class="st">&quot;B&quot;</span><span class="op">))</span> <span class="op">{</span></span>
-<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>            <span class="cf">throw</span> <span class="kw">new</span> <span class="bu">RuntimeException</span><span class="op">(</span><span class="st">&quot;body-fail&quot;</span><span class="op">);</span>         <span class="co">// 主异常</span></span>
-<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="cf">catch</span> <span class="op">(</span><span class="bu">RuntimeException</span> e<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;primary   : &quot;</span> <span class="op">+</span> e<span class="op">.</span><span class="fu">getMessage</span><span class="op">());</span></span>
-<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> <span class="op">(</span><span class="bu">Throwable</span> s <span class="op">:</span> e<span class="op">.</span><span class="fu">getSuppressed</span><span class="op">())</span>            <span class="co">// close 抛的异常挂在这里</span></span>
-<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>                <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;suppressed: &quot;</span> <span class="op">+</span> s<span class="op">.</span><span class="fu">getMessage</span><span class="op">());</span></span>
-<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
-<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a><span class="co">// close B                   &lt;- 逆序关闭</span></span>
-<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a><span class="co">// close A</span></span>
-<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a><span class="co">// primary   : body-fail     &lt;- try 体的异常胜出为主异常</span></span>
-<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a><span class="co">// suppressed: close-fail-B  &lt;- close 的异常被&quot;抑制&quot;,逆序附加</span></span>
-<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a><span class="co">// suppressed: close-fail-A</span></span></code></pre></div>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Suppressed <span class="kw">implements</span> AutoCloseable <span class="op">{</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">private</span> <span class="dt">final</span> <span class="bu">String</span> name<span class="op">;</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    <span class="fu">Suppressed</span><span class="op">(</span><span class="bu">String</span> name<span class="op">){</span> <span class="kw">this</span><span class="op">.</span><span class="fu">name</span> <span class="op">=</span> name<span class="op">;</span> <span class="op">}</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">@Override</span> <span class="kw">public</span> <span class="dt">void</span> <span class="fu">close</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;close &quot;</span> <span class="op">+</span> name<span class="op">);</span></span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">throw</span> <span class="kw">new</span> <span class="bu">RuntimeException</span><span class="op">(</span><span class="st">&quot;close-fail-&quot;</span> <span class="op">+</span> name<span class="op">);</span>   <span class="co">// close() 自己也抛</span></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">(</span>Suppressed a <span class="op">=</span> <span class="kw">new</span> <span class="fu">Suppressed</span><span class="op">(</span><span class="st">&quot;A&quot;</span><span class="op">);</span> Suppressed b <span class="op">=</span> <span class="kw">new</span> <span class="fu">Suppressed</span><span class="op">(</span><span class="st">&quot;B&quot;</span><span class="op">))</span> <span class="op">{</span></span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>            <span class="cf">throw</span> <span class="kw">new</span> <span class="bu">RuntimeException</span><span class="op">(</span><span class="st">&quot;body-fail&quot;</span><span class="op">);</span>         <span class="co">// 主异常</span></span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="cf">catch</span> <span class="op">(</span><span class="bu">RuntimeException</span> e<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;primary   : &quot;</span> <span class="op">+</span> e<span class="op">.</span><span class="fu">getMessage</span><span class="op">());</span></span>
+<span id="cb8-13"><a href="#cb8-13" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> <span class="op">(</span><span class="bu">Throwable</span> s <span class="op">:</span> e<span class="op">.</span><span class="fu">getSuppressed</span><span class="op">())</span>            <span class="co">// close 抛的异常挂在这里</span></span>
+<span id="cb8-14"><a href="#cb8-14" aria-hidden="true" tabindex="-1"></a>                <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;suppressed: &quot;</span> <span class="op">+</span> s<span class="op">.</span><span class="fu">getMessage</span><span class="op">());</span></span>
+<span id="cb8-15"><a href="#cb8-15" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb8-16"><a href="#cb8-16" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb8-17"><a href="#cb8-17" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb8-18"><a href="#cb8-18" aria-hidden="true" tabindex="-1"></a><span class="co">// close B                   &lt;- 逆序关闭</span></span>
+<span id="cb8-19"><a href="#cb8-19" aria-hidden="true" tabindex="-1"></a><span class="co">// close A</span></span>
+<span id="cb8-20"><a href="#cb8-20" aria-hidden="true" tabindex="-1"></a><span class="co">// primary   : body-fail     &lt;- try 体的异常胜出为主异常</span></span>
+<span id="cb8-21"><a href="#cb8-21" aria-hidden="true" tabindex="-1"></a><span class="co">// suppressed: close-fail-B  &lt;- close 的异常被&quot;抑制&quot;,逆序附加</span></span>
+<span id="cb8-22"><a href="#cb8-22" aria-hidden="true" tabindex="-1"></a><span class="co">// suppressed: close-fail-A</span></span></code></pre></div>
+<hr />
 <h2 id="多重捕获与异常链">多重捕获与异常链</h2>
-<div class="sourceCode" id="cb6"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> MultiCatch <span class="op">{</span></span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">handle</span><span class="op">(</span><span class="bu">String</span> s<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">{</span></span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>            <span class="bu">Integer</span><span class="op">.</span><span class="fu">parseInt</span><span class="op">(</span>s<span class="op">);</span></span>
-<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="cf">catch</span> <span class="op">(</span><span class="bu">NumberFormatException</span> <span class="op">|</span> <span class="bu">NullPointerException</span> e<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>            <span class="co">// 多重捕获:一个 catch 处理多种类型,e 是隐式 final,类型为共同父类</span></span>
-<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>            <span class="co">// 异常链:保留“根因(cause)”,便于定位原始故障</span></span>
-<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>            <span class="cf">throw</span> <span class="kw">new</span> <span class="bu">IllegalStateException</span><span class="op">(</span><span class="st">&quot;处理失败: &quot;</span> <span class="op">+</span> s<span class="op">,</span> e<span class="op">);</span></span>
-<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
-<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">{</span> <span class="fu">handle</span><span class="op">(</span><span class="kw">null</span><span class="op">);</span> <span class="op">}</span></span>
-<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>        <span class="cf">catch</span> <span class="op">(</span><span class="bu">IllegalStateException</span> e<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>e<span class="op">.</span><span class="fu">getMessage</span><span class="op">());</span></span>
-<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;根因: &quot;</span> <span class="op">+</span> e<span class="op">.</span><span class="fu">getCause</span><span class="op">());</span> <span class="co">// NullPointerException</span></span>
-<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
-<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h3 id="怎么用-3">怎么用</h3>
+<p>一个 <code>catch</code> 用 <code>|</code>
+分隔多个类型,就能用同一段处理逻辑接住不同种类的异常,不用写重复代码:</p>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> QuickMultiCatch <span class="op">{</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">parse</span><span class="op">(</span><span class="bu">String</span> s<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>s <span class="op">==</span> <span class="kw">null</span><span class="op">)</span> s<span class="op">.</span><span class="fu">length</span><span class="op">();</span>   <span class="co">// 对 null 调方法,直接触发 NullPointerException</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Integer</span><span class="op">.</span><span class="fu">parseInt</span><span class="op">(</span>s<span class="op">);</span>         <span class="co">// 格式不对时抛 NumberFormatException</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>        <span class="bu">String</span><span class="op">[]</span> inputs <span class="op">=</span> <span class="op">{</span> <span class="kw">null</span><span class="op">,</span> <span class="st">&quot;abc&quot;</span> <span class="op">};</span></span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span><span class="bu">String</span> s <span class="op">:</span> inputs<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a>            <span class="cf">try</span> <span class="op">{</span></span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a>                <span class="fu">parse</span><span class="op">(</span>s<span class="op">);</span></span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span> <span class="cf">catch</span> <span class="op">(</span><span class="bu">NumberFormatException</span> <span class="op">|</span> <span class="bu">NullPointerException</span> e<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a>                <span class="co">// 一个 catch 同时处理两种类型</span></span>
+<span id="cb9-14"><a href="#cb9-14" aria-hidden="true" tabindex="-1"></a>                <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;解析失败: &quot;</span> <span class="op">+</span> e<span class="op">.</span><span class="fu">getClass</span><span class="op">().</span><span class="fu">getSimpleName</span><span class="op">());</span></span>
+<span id="cb9-15"><a href="#cb9-15" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
+<span id="cb9-16"><a href="#cb9-16" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb9-17"><a href="#cb9-17" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb9-18"><a href="#cb9-18" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb9-19"><a href="#cb9-19" aria-hidden="true" tabindex="-1"></a><span class="co">// 解析失败: NullPointerException</span></span>
+<span id="cb9-20"><a href="#cb9-20" aria-hidden="true" tabindex="-1"></a><span class="co">// 解析失败: NumberFormatException</span></span></code></pre></div>
+<h3 id="底层与-c-对比-3">底层与 C 对比</h3>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> MultiCatch <span class="op">{</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">handle</span><span class="op">(</span><span class="bu">String</span> s<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">{</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>            <span class="bu">Integer</span><span class="op">.</span><span class="fu">parseInt</span><span class="op">(</span>s<span class="op">);</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="cf">catch</span> <span class="op">(</span><span class="bu">NumberFormatException</span> <span class="op">|</span> <span class="bu">NullPointerException</span> e<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>            <span class="co">// 多重捕获:一个 catch 处理多种类型,e 是隐式 final,类型为共同父类</span></span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>            <span class="co">// 异常链:保留“根因(cause)”,便于定位原始故障</span></span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>            <span class="cf">throw</span> <span class="kw">new</span> <span class="bu">IllegalStateException</span><span class="op">(</span><span class="st">&quot;处理失败: &quot;</span> <span class="op">+</span> s<span class="op">,</span> e<span class="op">);</span></span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">{</span> <span class="fu">handle</span><span class="op">(</span><span class="kw">null</span><span class="op">);</span> <span class="op">}</span></span>
+<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a>        <span class="cf">catch</span> <span class="op">(</span><span class="bu">IllegalStateException</span> e<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb10-14"><a href="#cb10-14" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>e<span class="op">.</span><span class="fu">getMessage</span><span class="op">());</span></span>
+<span id="cb10-15"><a href="#cb10-15" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;根因: &quot;</span> <span class="op">+</span> e<span class="op">.</span><span class="fu">getCause</span><span class="op">());</span></span>
+<span id="cb10-16"><a href="#cb10-16" aria-hidden="true" tabindex="-1"></a>            <span class="co">// 根因: java.lang.NumberFormatException: Cannot parse null string</span></span>
+<span id="cb10-17"><a href="#cb10-17" aria-hidden="true" tabindex="-1"></a>            <span class="co">// 注:现代 JDK 里 Integer.parseInt(null) 内部已显式判空并直接抛</span></span>
+<span id="cb10-18"><a href="#cb10-18" aria-hidden="true" tabindex="-1"></a>            <span class="co">// NumberFormatException(&quot;Cannot parse null string&quot;),而不是 NPE——</span></span>
+<span id="cb10-19"><a href="#cb10-19" aria-hidden="true" tabindex="-1"></a>            <span class="co">// 这里 catch 两种类型仍然有意义:换一种解析方式(比如先手动取 s.length()),</span></span>
+<span id="cb10-20"><a href="#cb10-20" aria-hidden="true" tabindex="-1"></a>            <span class="co">// 空指针路径就会走 NullPointerException 分支。</span></span>
+<span id="cb10-21"><a href="#cb10-21" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb10-22"><a href="#cb10-22" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb10-23"><a href="#cb10-23" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>异常链(<code>initCause</code> / 带 cause
 的构造器)让你在转译异常时不丢原始堆栈,打印时会出现
 <code>Caused by:</code> 段落。</p>
 <hr />
 <h2 id="垃圾回收gc">垃圾回收(GC)</h2>
-<p>C++ 你自己
-<code>new</code>/<code>delete</code>,生命周期尽在掌握。Java 的堆对象由
-GC
-自动回收,你付出的代价是<strong>回收时机不可控</strong>和<strong>偶发停顿(STW)</strong>。理解
-GC 才能诊断内存问题、调优延迟。</p>
+<p>C 和 C++
+里,内存归你自己管:<code>malloc</code>/<code>free</code>,<code>new</code>/<code>delete</code>,忘了
+<code>free</code> 就是泄漏,多 <code>free</code> 一次就是崩溃。Java
+里没有 <code>delete</code>——你 <code>new</code>
+出来的对象,什么时候释放、被谁释放,完全交给一个后台机制:<strong>垃圾回收器(Garbage
+Collector,GC)</strong>。它会在合适的时候扫一遍堆,把”没人再用得到”的对象内存收回来。代价是:你不知道确切的回收时刻,而且回收本身可能让程序短暂卡顿(即”停顿”/STW)。理解
+GC 的原理,才能在出问题时看懂日志、调对参数。</p>
+<p>GC 全程自动运行,你能直接调用的 API 不多,主要是
+<code>WeakReference</code>/<code>SoftReference</code>/<code>Cleaner</code>/<code>System.gc()</code>
+这几个——它们仍然遵循”先怎么用、再底层”的顺序;而”分代假设”“收集器怎么演进”这类纯概念内容,直接进底层讲。</p>
 <h2 id="分代假设与堆布局">分代假设与堆布局</h2>
+<p>这部分是纯理解性内容——GC
+自己运行,你不需要写代码触发它,但看懂堆是怎么分区的,才能看懂后面”收集器怎么选”“调优参数改哪个”。</p>
 <p>GC 建立在<strong>弱分代假设(weak generational
 hypothesis)</strong>上:绝大多数对象朝生夕死;活得久的对象很少指向年轻对象。于是把堆分代管理:</p>
 <pre><code>                Java 堆
@@ -465,25 +630,90 @@ STW</strong>的历史。</p>
 牺牲一点吞吐换取几乎无感的停顿(适合交互/在线服务)。没有”最好”,只有”最匹配场景”。</p>
 <p>选择:<code>-XX:+UseG1GC</code>、<code>-XX:+UseZGC</code>、<code>-XX:+UseParallelGC</code>。</p>
 <h2 id="finalize-弃用与-cleaner">finalize 弃用与 Cleaner</h2>
+<h3 id="怎么用-4">怎么用</h3>
+<p>释放资源永远优先用你已经会的 <code>try-with-resources</code>/显式
+<code>close()</code>——它是确定性的,用完立刻执行。<code>Cleaner</code>
+只是”万一你忘了调用 <code>close()</code>“的兜底网,不该当成主要手段:</p>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">lang</span><span class="op">.</span><span class="im">ref</span><span class="op">.</span><span class="im">Cleaner</span><span class="op">;</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> QuickCleaner <span class="kw">implements</span> AutoCloseable <span class="op">{</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">private</span> <span class="dt">static</span> <span class="dt">final</span> Cleaner CLEANER <span class="op">=</span> Cleaner<span class="op">.</span><span class="fu">create</span><span class="op">();</span></span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">private</span> <span class="dt">final</span> Cleaner<span class="op">.</span><span class="fu">Cleanable</span> cleanable<span class="op">;</span></span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>    <span class="fu">QuickCleaner</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>        <span class="co">// 注册一个&quot;忘记 close 时的兜底清理动作&quot;</span></span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>        cleanable <span class="op">=</span> CLEANER<span class="op">.</span><span class="fu">register</span><span class="op">(</span><span class="kw">this</span><span class="op">,</span> <span class="op">()</span> <span class="op">-&gt;</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;兜底清理被触发&quot;</span><span class="op">));</span></span>
+<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a>    <span class="at">@Override</span></span>
+<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">void</span> <span class="fu">close</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb13-14"><a href="#cb13-14" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;显式 close() 被调用&quot;</span><span class="op">);</span> <span class="co">// 首选路径:确定性、立即执行</span></span>
+<span id="cb13-15"><a href="#cb13-15" aria-hidden="true" tabindex="-1"></a>        cleanable<span class="op">.</span><span class="fu">clean</span><span class="op">();</span>                          <span class="co">// 手动触发清理,之后兜底动作不会再重复执行</span></span>
+<span id="cb13-16"><a href="#cb13-16" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb13-17"><a href="#cb13-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-18"><a href="#cb13-18" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb13-19"><a href="#cb13-19" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">(</span>QuickCleaner r <span class="op">=</span> <span class="kw">new</span> <span class="fu">QuickCleaner</span><span class="op">())</span> <span class="op">{</span></span>
+<span id="cb13-20"><a href="#cb13-20" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;使用资源&quot;</span><span class="op">);</span></span>
+<span id="cb13-21"><a href="#cb13-21" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb13-22"><a href="#cb13-22" aria-hidden="true" tabindex="-1"></a>        <span class="co">// 因为 try-with-resources 已经调用了 close(),兜底的 Cleaner 动作只打印一次</span></span>
+<span id="cb13-23"><a href="#cb13-23" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb13-24"><a href="#cb13-24" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb13-25"><a href="#cb13-25" aria-hidden="true" tabindex="-1"></a><span class="co">// 使用资源</span></span>
+<span id="cb13-26"><a href="#cb13-26" aria-hidden="true" tabindex="-1"></a><span class="co">// 显式 close() 被调用</span></span>
+<span id="cb13-27"><a href="#cb13-27" aria-hidden="true" tabindex="-1"></a><span class="co">// 兜底清理被触发</span></span></code></pre></div>
+<p><code>close()</code> 里主动调用
+<code>cleanable.clean()</code>,清理动作立刻执行一次;如果你忘了写
+<code>try-with-resources</code>、这个对象最终变得不可达,GC 之后
+<code>Cleaner</code>
+内部的后台线程也会自动跑一次同样的动作——但那是”最后一道保险”,不该是你依赖的主路径。</p>
+<h3 id="底层与-c-对比-4">底层与 C 对比</h3>
 <p>C++ 的析构函数确定性执行。Java 的 <code>Object.finalize()</code>
 曾想扮演这个角色,但它<strong>执行时机不确定、可能永不执行、拖慢
 GC、还能复活对象</strong>,已在 JDK9 标记 <code>@Deprecated</code>,JDK18
 起进一步废弃。</p>
 <p>替代方案:<strong><code>java.lang.ref.Cleaner</code></strong>,注册一个清理动作,当对象变得幻象可达时由后台线程执行。但它仍非确定性——<strong>关键资源永远用
 try-with-resources 显式释放</strong>,Cleaner 只作最后兜底。</p>
-<div class="sourceCode" id="cb9"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">lang</span><span class="op">.</span><span class="im">ref</span><span class="op">.</span><span class="im">Cleaner</span><span class="op">;</span></span>
-<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> CleanerDemo <span class="kw">implements</span> AutoCloseable <span class="op">{</span></span>
-<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">private</span> <span class="dt">static</span> <span class="dt">final</span> Cleaner CLEANER <span class="op">=</span> Cleaner<span class="op">.</span><span class="fu">create</span><span class="op">();</span></span>
-<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 清理动作必须是静态/独立类,绝不能持有外层对象引用,否则对象永不可回收</span></span>
-<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">class</span> <span class="bu">State</span> <span class="kw">implements</span> <span class="bu">Runnable</span> <span class="op">{</span></span>
-<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>        <span class="kw">public</span> <span class="dt">void</span> <span class="fu">run</span><span class="op">()</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;释放本地资源(兜底)&quot;</span><span class="op">);</span> <span class="op">}</span></span>
-<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>    <span class="kw">private</span> <span class="dt">final</span> Cleaner<span class="op">.</span><span class="fu">Cleanable</span> cleanable<span class="op">;</span></span>
-<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>    <span class="fu">CleanerDemo</span><span class="op">()</span> <span class="op">{</span> cleanable <span class="op">=</span> CLEANER<span class="op">.</span><span class="fu">register</span><span class="op">(</span><span class="kw">this</span><span class="op">,</span> <span class="kw">new</span> <span class="bu">State</span><span class="op">());</span> <span class="op">}</span></span>
-<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a>    <span class="at">@Override</span> <span class="kw">public</span> <span class="dt">void</span> <span class="fu">close</span><span class="op">()</span> <span class="op">{</span> cleanable<span class="op">.</span><span class="fu">clean</span><span class="op">();</span> <span class="op">}</span> <span class="co">// 显式路径:确定性释放</span></span>
-<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">lang</span><span class="op">.</span><span class="im">ref</span><span class="op">.</span><span class="im">Cleaner</span><span class="op">;</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> CleanerDemo <span class="kw">implements</span> AutoCloseable <span class="op">{</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">private</span> <span class="dt">static</span> <span class="dt">final</span> Cleaner CLEANER <span class="op">=</span> Cleaner<span class="op">.</span><span class="fu">create</span><span class="op">();</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 清理动作必须是静态/独立类,绝不能持有外层对象引用,否则对象永不可回收</span></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">class</span> <span class="bu">State</span> <span class="kw">implements</span> <span class="bu">Runnable</span> <span class="op">{</span></span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>        <span class="kw">public</span> <span class="dt">void</span> <span class="fu">run</span><span class="op">()</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;释放本地资源(兜底)&quot;</span><span class="op">);</span> <span class="op">}</span></span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a>    <span class="kw">private</span> <span class="dt">final</span> Cleaner<span class="op">.</span><span class="fu">Cleanable</span> cleanable<span class="op">;</span></span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a>    <span class="fu">CleanerDemo</span><span class="op">()</span> <span class="op">{</span> cleanable <span class="op">=</span> CLEANER<span class="op">.</span><span class="fu">register</span><span class="op">(</span><span class="kw">this</span><span class="op">,</span> <span class="kw">new</span> <span class="bu">State</span><span class="op">());</span> <span class="op">}</span></span>
+<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a>    <span class="at">@Override</span> <span class="kw">public</span> <span class="dt">void</span> <span class="fu">close</span><span class="op">()</span> <span class="op">{</span> cleanable<span class="op">.</span><span class="fu">clean</span><span class="op">();</span> <span class="op">}</span> <span class="co">// 显式路径:确定性释放</span></span>
+<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <h2 id="引用强度强软弱虚">引用强度:强/软/弱/虚</h2>
+<h3 id="怎么用-5">怎么用</h3>
+<p>平时写的 <code>Object o = new Object()</code>
+都是<strong>强引用</strong>——只要它可达,GC
+绝不会碰它。如果你想要”这个对象我还想用,但内存紧张时可以先牺牲它”这种效果,把它包一层
+<code>WeakReference</code>:</p>
+<div class="sourceCode" id="cb15"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">lang</span><span class="op">.</span><span class="im">ref</span><span class="op">.</span><span class="im">WeakReference</span><span class="op">;</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> QuickWeakRef <span class="op">{</span></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Object</span> obj <span class="op">=</span> <span class="kw">new</span> <span class="bu">Object</span><span class="op">();</span></span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">WeakReference</span><span class="op">&lt;</span><span class="bu">Object</span><span class="op">&gt;</span> weak <span class="op">=</span> <span class="kw">new</span> <span class="bu">WeakReference</span><span class="op">&lt;&gt;(</span>obj<span class="op">);</span> <span class="co">// 包一层弱引用</span></span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;get() 之前: &quot;</span> <span class="op">+</span> <span class="op">(</span>weak<span class="op">.</span><span class="fu">get</span><span class="op">()</span> <span class="op">!=</span> <span class="kw">null</span><span class="op">));</span> <span class="co">// true —— 还有强引用 obj</span></span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a>        obj <span class="op">=</span> <span class="kw">null</span><span class="op">;</span>      <span class="co">// 去掉唯一的强引用</span></span>
+<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">gc</span><span class="op">();</span>      <span class="co">// 建议 JVM 做一次垃圾回收(不保证立即执行)</span></span>
+<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;get() 之后: &quot;</span> <span class="op">+</span> weak<span class="op">.</span><span class="fu">get</span><span class="op">());</span> <span class="co">// 很可能是 null</span></span>
+<span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb15-13"><a href="#cb15-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb15-14"><a href="#cb15-14" aria-hidden="true" tabindex="-1"></a><span class="co">// get() 之前: true</span></span>
+<span id="cb15-15"><a href="#cb15-15" aria-hidden="true" tabindex="-1"></a><span class="co">// get() 之后: null</span></span></code></pre></div>
+<p><code>weak.get()</code> 拿到的是被引用的对象,或者
+<code>null</code>(已被回收)。只要 <code>obj</code>
+这个强引用还在,<code>weak.get()</code> 就一直有效;把 <code>obj</code>
+置空、并且再没有别的强引用指着它之后,GC
+就有权回收它,<code>weak.get()</code> 随之变成 <code>null</code>。</p>
+<h3 id="底层与-c-对比-5">底层与 C 对比</h3>
 <p><code>java.lang.ref</code> 提供四种引用强度,决定对象在 GC
 眼中的”生存权”:</p>
 <table>
@@ -528,46 +758,46 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb9-1"><a href="
 </tr>
 </tbody>
 </table>
-<div class="sourceCode" id="cb10"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">lang</span><span class="op">.</span><span class="im">ref</span><span class="op">.*;</span></span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Refs <span class="op">{</span></span>
-<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>        <span class="bu">ReferenceQueue</span><span class="op">&lt;</span><span class="dt">byte</span><span class="op">[]&gt;</span> queue <span class="op">=</span> <span class="kw">new</span> <span class="bu">ReferenceQueue</span><span class="op">&lt;&gt;();</span></span>
-<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>        <span class="dt">byte</span><span class="op">[]</span> data <span class="op">=</span> <span class="kw">new</span> <span class="dt">byte</span><span class="op">[</span><span class="dv">1024</span><span class="op">];</span></span>
-<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>        <span class="co">// 弱引用 + 引用队列:对象被回收后,ref 会被入队,可据此感知回收</span></span>
-<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>        <span class="bu">WeakReference</span><span class="op">&lt;</span><span class="dt">byte</span><span class="op">[]&gt;</span> weak <span class="op">=</span> <span class="kw">new</span> <span class="bu">WeakReference</span><span class="op">&lt;&gt;(</span>data<span class="op">,</span> queue<span class="op">);</span></span>
-<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>        data <span class="op">=</span> <span class="kw">null</span><span class="op">;</span>          <span class="co">// 去掉唯一强引用</span></span>
-<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">gc</span><span class="op">();</span>          <span class="co">// 建议 GC(不保证立即执行)</span></span>
-<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;回收后 get(): &quot;</span> <span class="op">+</span> weak<span class="op">.</span><span class="fu">get</span><span class="op">());</span> <span class="co">// 很可能是 null</span></span>
-<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Reference</span><span class="op">&lt;?&gt;</span> polled <span class="op">=</span> queue<span class="op">.</span><span class="fu">poll</span><span class="op">();</span>                 <span class="co">// 已回收的引用被入队</span></span>
-<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;入队: &quot;</span> <span class="op">+</span> <span class="op">(</span>polled <span class="op">==</span> weak<span class="op">));</span></span>
-<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb10-14"><a href="#cb10-14" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb16"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">lang</span><span class="op">.</span><span class="im">ref</span><span class="op">.*;</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Refs <span class="op">{</span></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>        <span class="bu">ReferenceQueue</span><span class="op">&lt;</span><span class="dt">byte</span><span class="op">[]&gt;</span> queue <span class="op">=</span> <span class="kw">new</span> <span class="bu">ReferenceQueue</span><span class="op">&lt;&gt;();</span></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>        <span class="dt">byte</span><span class="op">[]</span> data <span class="op">=</span> <span class="kw">new</span> <span class="dt">byte</span><span class="op">[</span><span class="dv">1024</span><span class="op">];</span></span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>        <span class="co">// 弱引用 + 引用队列:对象被回收后,ref 会被入队,可据此感知回收</span></span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>        <span class="bu">WeakReference</span><span class="op">&lt;</span><span class="dt">byte</span><span class="op">[]&gt;</span> weak <span class="op">=</span> <span class="kw">new</span> <span class="bu">WeakReference</span><span class="op">&lt;&gt;(</span>data<span class="op">,</span> queue<span class="op">);</span></span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>        data <span class="op">=</span> <span class="kw">null</span><span class="op">;</span>          <span class="co">// 去掉唯一强引用</span></span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">gc</span><span class="op">();</span>          <span class="co">// 建议 GC(不保证立即执行)</span></span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;回收后 get(): &quot;</span> <span class="op">+</span> weak<span class="op">.</span><span class="fu">get</span><span class="op">());</span> <span class="co">// 很可能是 null</span></span>
+<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Reference</span><span class="op">&lt;?&gt;</span> polled <span class="op">=</span> queue<span class="op">.</span><span class="fu">poll</span><span class="op">();</span>                 <span class="co">// 已回收的引用被入队</span></span>
+<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;入队: &quot;</span> <span class="op">+</span> <span class="op">(</span>polled <span class="op">==</span> weak<span class="op">));</span></span>
+<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb16-14"><a href="#cb16-14" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p><strong>ReferenceQueue</strong> 是配套机制:当被引用对象被回收,对应的
 <code>Reference</code> 对象被 JVM 放入队列,你的清理线程
 <code>poll</code> 到后执行善后(Cleaner 内部正是这么实现的)。</p>
 <p>弱引用最常见的落地是 <code>WeakHashMap</code>:key
 只被弱引用持有,一旦外部再无强引用,GC
 后条目自动消失——天然适合做规范化缓存,避免”只加不删”的泄漏:</p>
-<div class="sourceCode" id="cb11"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.*;</span></span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> WeakMap <span class="op">{</span></span>
-<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">seed</span><span class="op">(</span><span class="bu">Map</span><span class="op">&lt;</span><span class="bu">Object</span><span class="op">,</span><span class="bu">String</span><span class="op">&gt;</span> m<span class="op">)</span> <span class="op">{</span>          <span class="co">// key 只存活在这个栈帧里</span></span>
-<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>        m<span class="op">.</span><span class="fu">put</span><span class="op">(</span><span class="kw">new</span> <span class="bu">Object</span><span class="op">(),</span> <span class="st">&quot;v&quot;</span><span class="op">);</span></span>
-<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>        m<span class="op">.</span><span class="fu">put</span><span class="op">(</span><span class="kw">new</span> <span class="bu">Object</span><span class="op">(),</span> <span class="st">&quot;v&quot;</span><span class="op">);</span></span>
-<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="kw">throws</span> <span class="bu">Exception</span> <span class="op">{</span></span>
-<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Map</span><span class="op">&lt;</span><span class="bu">Object</span><span class="op">,</span><span class="bu">String</span><span class="op">&gt;</span> weak <span class="op">=</span> <span class="kw">new</span> <span class="bu">WeakHashMap</span><span class="op">&lt;&gt;();</span></span>
-<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a>        <span class="fu">seed</span><span class="op">(</span>weak<span class="op">);</span></span>
-<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;before GC  weak.size = &quot;</span> <span class="op">+</span> weak<span class="op">.</span><span class="fu">size</span><span class="op">());</span></span>
-<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">gc</span><span class="op">();</span></span>
-<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Thread</span><span class="op">.</span><span class="fu">sleep</span><span class="op">(</span><span class="dv">100</span><span class="op">);</span></span>
-<span id="cb11-13"><a href="#cb11-13" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;after  GC  weak.size = &quot;</span> <span class="op">+</span> weak<span class="op">.</span><span class="fu">size</span><span class="op">());</span></span>
-<span id="cb11-14"><a href="#cb11-14" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb11-15"><a href="#cb11-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb11-16"><a href="#cb11-16" aria-hidden="true" tabindex="-1"></a><span class="co">// before GC  weak.size = 2</span></span>
-<span id="cb11-17"><a href="#cb11-17" aria-hidden="true" tabindex="-1"></a><span class="co">// after  GC  weak.size = 0    &lt;- key 无强引用,GC 回收后条目被清除</span></span>
-<span id="cb11-18"><a href="#cb11-18" aria-hidden="true" tabindex="-1"></a><span class="co">// (注意:若把 key 留在 main 的局部变量里,它会成为 GC Root 而不被回收)</span></span></code></pre></div>
+<div class="sourceCode" id="cb17"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.*;</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> WeakMap <span class="op">{</span></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">seed</span><span class="op">(</span><span class="bu">Map</span><span class="op">&lt;</span><span class="bu">Object</span><span class="op">,</span><span class="bu">String</span><span class="op">&gt;</span> m<span class="op">)</span> <span class="op">{</span>          <span class="co">// key 只存活在这个栈帧里</span></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>        m<span class="op">.</span><span class="fu">put</span><span class="op">(</span><span class="kw">new</span> <span class="bu">Object</span><span class="op">(),</span> <span class="st">&quot;v&quot;</span><span class="op">);</span></span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>        m<span class="op">.</span><span class="fu">put</span><span class="op">(</span><span class="kw">new</span> <span class="bu">Object</span><span class="op">(),</span> <span class="st">&quot;v&quot;</span><span class="op">);</span></span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="kw">throws</span> <span class="bu">Exception</span> <span class="op">{</span></span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Map</span><span class="op">&lt;</span><span class="bu">Object</span><span class="op">,</span><span class="bu">String</span><span class="op">&gt;</span> weak <span class="op">=</span> <span class="kw">new</span> <span class="bu">WeakHashMap</span><span class="op">&lt;&gt;();</span></span>
+<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a>        <span class="fu">seed</span><span class="op">(</span>weak<span class="op">);</span></span>
+<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;before GC  weak.size = &quot;</span> <span class="op">+</span> weak<span class="op">.</span><span class="fu">size</span><span class="op">());</span></span>
+<span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">gc</span><span class="op">();</span></span>
+<span id="cb17-12"><a href="#cb17-12" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Thread</span><span class="op">.</span><span class="fu">sleep</span><span class="op">(</span><span class="dv">100</span><span class="op">);</span></span>
+<span id="cb17-13"><a href="#cb17-13" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;after  GC  weak.size = &quot;</span> <span class="op">+</span> weak<span class="op">.</span><span class="fu">size</span><span class="op">());</span></span>
+<span id="cb17-14"><a href="#cb17-14" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb17-15"><a href="#cb17-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb17-16"><a href="#cb17-16" aria-hidden="true" tabindex="-1"></a><span class="co">// before GC  weak.size = 2</span></span>
+<span id="cb17-17"><a href="#cb17-17" aria-hidden="true" tabindex="-1"></a><span class="co">// after  GC  weak.size = 0    &lt;- key 无强引用,GC 回收后条目被清除</span></span>
+<span id="cb17-18"><a href="#cb17-18" aria-hidden="true" tabindex="-1"></a><span class="co">// (注意:若把 key 留在 main 的局部变量里,它会成为 GC Root 而不被回收)</span></span></code></pre></div>
 <h2 id="java-里内存泄漏长什么样">Java 里内存泄漏长什么样</h2>
 <p>有 GC 不代表没内存泄漏。泄漏 = <strong>对象逻辑上没用了,但仍从 GC
 Roots 可达</strong>,GC 因而不回收。常见形态:</p>
@@ -639,13 +869,32 @@ Roots 可达</strong>,GC 因而不回收。常见形态:</p>
 <code>.hprof</code> → 用 MAT/VisualVM 分析支配树(dominator
 tree)找出谁在撑着大对象不放。</p>
 <hr />
-<p>小结:异常沿调用栈展开,受检异常是编译期契约;try-with-resources
-提供接近 RAII 的确定性资源释放,而内存回收交给 GC;GC
-靠可达性分析(而非引用计数)从 GC Roots
-出发判活,分代管理配合复制/标记算法;收集器进化史就是压缩 STW
-的历史;<code>finalize</code> 已弃、改用 Cleaner + 引用队列;内存泄漏在
-Java 里表现为”可达但无用”。掌握这些,你就能像管理 C++ 内存那样,自信地驾驭
-JVM 的堆。</p>
+<h2 id="小结">小结</h2>
+<ul>
+<li><strong>用法层面</strong>:<code>try/catch</code>
+按类型接住异常,<code>finally</code>
+保证总执行;<code>try-with-resources</code> 让实现了
+<code>AutoCloseable</code> 的资源用完自动
+<code>close()</code>;<code>catch (A | B e)</code>
+一次接住多种类型;受检异常必须在方法签名写 <code>throws</code>
+或就地捕获,非受检异常没有这个约束;GC 自动运行不用你操心,但
+<code>WeakReference</code>/<code>SoftReference</code>/<code>Cleaner</code>
+是你能主动用的几个相关 API,资源释放仍优先用显式
+<code>close()</code>,<code>Cleaner</code> 只当兜底。</li>
+<li><strong>底层层面</strong>:异常靠方法自带的异常表定位处理器,找不到就逐帧栈展开;<code>finally</code>
+靠编译期代码复制实现”必然执行”;try-with-resources 按声明逆序调用
+<code>close()</code>,<code>close()</code> 抛出的异常会作为 suppressed
+挂在主异常上;异常链靠 <code>cause</code> 保留根因。GC
+不用引用计数(处理不了循环引用),靠可达性分析从 GC Roots
+出发判活;堆按弱分代假设分 Eden/Survivor/老年代,Minor/Major/Full GC
+回收范围递增;收集器从 Serial 到 G1/ZGC 的演进史就是压缩 STW
+停顿的历史;<code>finalize</code> 已弃用,<code>Cleaner</code> +
+<code>PhantomReference</code>/<code>ReferenceQueue</code>
+是它的替代机制;内存泄漏在 Java
+里表现为”逻辑上没用但仍可达”。掌握这些,你就能像管理 C++
+内存那样,自信地驾驭 JVM 的堆。</li>
+</ul>
+<hr />
 <p><a href="08-面向对象与类型系统.html">← 上一章:面向对象与类型系统</a>
 · <a href="index.html">返回目录</a> · <a
 href="10-并发模型.html">下一章:并发模型</a> →</p>

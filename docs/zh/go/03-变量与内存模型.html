@@ -2,20 +2,17 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="zh-CN" xml:lang="zh-CN">
 <head>
   <meta charset="utf-8" />
-  <meta name="generator" content="pandoc 3.10" />
+  <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
   <title>变量与内存模型</title>
   <style>
     /* Default styles provided by pandoc.
     ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
     */
+    code{white-space: pre-wrap;}
     span.smallcaps{font-variant: small-caps;}
-    div.columns{display: flex; gap: 1.5em;}
-    div.column{flex: auto;}
-    @media screen {
-    div.columns{gap: min(4vw, 1.5em);}
-    div.column{overflow-x: auto;}
-    }
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
     div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
     /* The extra [class] is a hack that increases specificity enough to
        override a similar rule in reveal.js */
@@ -109,6 +106,9 @@
 <ul>
 <li><a href="#变量与内存模型" id="toc-变量与内存模型">变量与内存模型</a>
 <ul>
+<li><a href="#先会用赋值与传参速览"
+id="toc-先会用赋值与传参速览">先会用:赋值与传参速览</a></li>
+<li><a href="#开始深入" id="toc-开始深入">开始深入</a></li>
 <li><a href="#公理赋值与传参永远是值拷贝"
 id="toc-公理赋值与传参永远是值拷贝">公理:赋值与传参永远是值拷贝</a></li>
 <li><a href="#值类型逐字节复制整块内存"
@@ -125,15 +125,66 @@ id="toc-引用类型的真相含指针的小表头">“引用类型”的真相:
 <li><a href="#ascii-对照图struct-值拷贝-vs-slice-拷贝"
 id="toc-ascii-对照图struct-值拷贝-vs-slice-拷贝">ASCII 对照图:struct
 值拷贝 vs slice 拷贝</a></li>
+<li><a href="#小结" id="toc-小结">小结</a></li>
 </ul></li>
 </ul>
 </nav>
 <h1 id="变量与内存模型">变量与内存模型</h1>
-<p>这是全书最重要的一章。如果你是 C/C++ 出身,读完这一章你会发现:Go
-的内存语义比 C++ 简单得多,但有一个必须先刻进大脑的公理——<strong>Go
-里赋值和传参永远是值拷贝</strong>。没有引用传参,没有拷贝构造函数,没有移动语义。所有”看起来像引用”的东西,拆开来看都是”含指针的小结构体被逐字节拷贝”。</p>
-<p>把这一条吃透,后面 90% 的”为什么改了 a 结果 b
-也变了”就都不再是玄学。</p>
+<p>这是全书最重要的一章。本章先讲清楚<strong>怎么写</strong>——<code>var</code>/<code>:=</code>
+怎么声明和赋值、怎么把变量传给函数——这部分零基础也能看懂;然后进入<strong>底层</strong>——如果你是
+C/C++ 出身,你会发现 Go 的内存语义比 C++
+简单得多,但有一个必须先刻进大脑的公理:<strong>Go
+里赋值和传参永远是值拷贝</strong>。没有引用传参,没有拷贝构造函数,没有移动语义。所有”看起来像引用”的东西,拆开来看都是”含指针的小结构体被逐字节拷贝”。只想会用,读完第一节就够;想搞懂”为什么改了
+a 结果 b 也变了”这类玄学,继续往下读。</p>
+<h2 id="先会用赋值与传参速览">先会用:赋值与传参速览</h2>
+<p><strong>赋值:<code>b := a</code> 把 a 的值复制一份给 b。</strong>
+之后 a、b 是两个独立的变量,改一个不影响另一个:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    a <span class="op">:=</span> <span class="dv">10</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    b <span class="op">:=</span> a <span class="co">// 把 a 的值复制一份给 b</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    b <span class="op">=</span> <span class="dv">99</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>a<span class="op">,</span> b<span class="op">)</span> <span class="co">// 10 99 —— 改 b 不影响 a</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p><strong>把变量传给函数,函数拿到的也是一份复制品</strong>,在函数内部修改它,不会影响外面的变量:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> addOne<span class="op">(</span>x <span class="dt">int</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    x <span class="op">=</span> x <span class="op">+</span> <span class="dv">1</span> <span class="co">// 只改了函数内部的副本</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    n <span class="op">:=</span> <span class="dv">5</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    addOne<span class="op">(</span>n<span class="op">)</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>n<span class="op">)</span> <span class="co">// 5 —— 没变</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p><strong>想让函数真的改到外面的变量,就要用指针</strong>:<code>&amp;n</code>
+取得 n 的地址,<code>*x</code> 通过地址读写它指向的值:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> addOnePtr<span class="op">(</span>x <span class="op">*</span><span class="dt">int</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">*</span>x <span class="op">=</span> <span class="op">*</span>x <span class="op">+</span> <span class="dv">1</span> <span class="co">// 通过地址改到外面的变量</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    n <span class="op">:=</span> <span class="dv">5</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    addOnePtr<span class="op">(&amp;</span>n<span class="op">)</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>n<span class="op">)</span> <span class="co">// 6 —— 变了</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>这三个例子已经把 Go
+变量最核心的行为摆在你面前:<strong>赋值和传参都是复制;想跨函数改东西,就传地址</strong>。下面开始进入底层——把这条规则钉死成公理,并解释它为什么能解释几乎所有”别名”现象。</p>
+<h2 id="开始深入">开始深入</h2>
+<p>如果你是 C/C++ 出身,读完这一章你会发现:Go 的内存语义比 C++
+简单得多,但有一个必须先刻进大脑的公理——<strong>Go
+里赋值和传参永远是值拷贝</strong>。没有引用传参,没有拷贝构造函数,没有移动语义。所有”看起来像引用”的东西,拆开来看都是”含指针的小结构体被逐字节拷贝”。把这一条吃透,后面
+90% 的”为什么改了 a 结果 b 也变了”就都不再是玄学。</p>
 <h2 id="公理赋值与传参永远是值拷贝">公理:赋值与传参永远是值拷贝</h2>
 <p>在 C++ 里,<code>b = a</code> 到底发生什么取决于 <code>a</code>
 的类型和一堆规则:内置类型是逐字节拷贝,类类型会调用拷贝构造/拷贝赋值运算符,右值会触发移动,引用类型只是别名……心智负担很重。</p>
@@ -156,21 +207,21 @@ id="toc-ascii-对照图struct-值拷贝-vs-slice-拷贝">ASCII 对照图:struct
 <h2 id="值类型逐字节复制整块内存">值类型:逐字节复制整块内存</h2>
 <p>先看纯值类型。下面的 <code>Point</code>
 是一个结构体,没有任何指针字段:</p>
-<div class="sourceCode" id="cb1"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="st">&quot;fmt&quot;</span></span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Point <span class="kw">struct</span> <span class="op">{</span></span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    X<span class="op">,</span> Y <span class="dt">int64</span></span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
-<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    a <span class="op">:=</span> Point<span class="op">{</span>X<span class="op">:</span> <span class="dv">1</span><span class="op">,</span> Y<span class="op">:</span> <span class="dv">2</span><span class="op">}</span></span>
-<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    b <span class="op">:=</span> a <span class="co">// 逐字节拷贝 16 字节,b 与 a 从此毫无关系</span></span>
-<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    b<span class="op">.</span>X <span class="op">=</span> <span class="dv">100</span></span>
-<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>a<span class="op">.</span>X<span class="op">,</span> b<span class="op">.</span>X<span class="op">)</span> <span class="co">// 1 100 —— 改 b 不影响 a</span></span>
-<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb4"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Point <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    X<span class="op">,</span> Y <span class="dt">int64</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>    a <span class="op">:=</span> Point<span class="op">{</span>X<span class="op">:</span> <span class="dv">1</span><span class="op">,</span> Y<span class="op">:</span> <span class="dv">2</span><span class="op">}</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>    b <span class="op">:=</span> a <span class="co">// 逐字节拷贝 16 字节,b 与 a 从此毫无关系</span></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>    b<span class="op">.</span>X <span class="op">=</span> <span class="dv">100</span></span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>a<span class="op">.</span>X<span class="op">,</span> b<span class="op">.</span>X<span class="op">)</span> <span class="co">// 1 100 —— 改 b 不影响 a</span></span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p><code>b := a</code> 在底层就是一条”复制 16 字节”的指令(gc 编译器会用
 <code>MOVUPS</code> 之类的指令搬运)。这跟 C 里
 <code>struct Point b = a;</code> 完全一样:整块 POD
@@ -178,46 +229,47 @@ id="toc-ascii-对照图struct-值拷贝-vs-slice-拷贝">ASCII 对照图:struct
 <p>内存图(两块完全独立的内存):</p>
 <pre><code>a: [ X=1 | Y=2 ]        b: [ X=100 | Y=2 ]
    ^独立 16 字节            ^另一块独立 16 字节</code></pre>
-<p>传参同理。下面函数拿到的是副本:</p>
-<div class="sourceCode" id="cb3"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> move<span class="op">(</span>p Point<span class="op">)</span> <span class="op">{</span> <span class="co">// p 是实参的拷贝</span></span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    p<span class="op">.</span>X <span class="op">+=</span> <span class="dv">10</span> <span class="co">// 只改副本</span></span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
-<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    a <span class="op">:=</span> Point<span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">}</span></span>
-<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    move<span class="op">(</span>a<span class="op">)</span></span>
-<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>a<span class="op">.</span>X<span class="op">)</span> <span class="co">// 1 —— 外面的 a 纹丝不动</span></span>
-<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>传参同理。前面 <code>addOne</code> 的例子是 int
+版本,下面看结构体版本,拿到的同样是副本:</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> move<span class="op">(</span>p Point<span class="op">)</span> <span class="op">{</span> <span class="co">// p 是实参的拷贝</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>    p<span class="op">.</span>X <span class="op">+=</span> <span class="dv">10</span> <span class="co">// 只改副本</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>    a <span class="op">:=</span> Point<span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">}</span></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>    move<span class="op">(</span>a<span class="op">)</span></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>a<span class="op">.</span>X<span class="op">)</span> <span class="co">// 1 —— 外面的 a 纹丝不动</span></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>这和 C 里 <code>void move(struct Point p)</code>
 一模一样:值传参,函数内改的是栈上的副本。想改外面的东西,就得传指针——和 C
 一样。把”传值”和”传指针”并排放一起,差别一目了然:</p>
-<div class="sourceCode" id="cb4"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="st">&quot;fmt&quot;</span></span>
-<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Point <span class="kw">struct</span><span class="op">{</span> X<span class="op">,</span> Y <span class="dt">int64</span> <span class="op">}</span></span>
-<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> moveVal<span class="op">(</span>p Point<span class="op">)</span>  <span class="op">{</span> p<span class="op">.</span>X <span class="op">+=</span> <span class="dv">10</span> <span class="op">}</span> <span class="co">// 改的是副本</span></span>
-<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> movePtr<span class="op">(</span>p <span class="op">*</span>Point<span class="op">)</span> <span class="op">{</span> p<span class="op">.</span>X <span class="op">+=</span> <span class="dv">10</span> <span class="op">}</span> <span class="co">// 通过指针改原对象</span></span>
-<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
-<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>    a <span class="op">:=</span> Point<span class="op">{</span>X<span class="op">:</span> <span class="dv">1</span><span class="op">,</span> Y<span class="op">:</span> <span class="dv">2</span><span class="op">}</span></span>
-<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>    moveVal<span class="op">(</span>a<span class="op">)</span></span>
-<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>a<span class="op">.</span>X<span class="op">)</span> <span class="co">// 1  —— 没变,函数拿到的是副本</span></span>
-<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>    movePtr<span class="op">(&amp;</span>a<span class="op">)</span></span>
-<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>a<span class="op">.</span>X<span class="op">)</span> <span class="co">// 11 —— 变了,函数拿到的是地址</span></span>
-<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb7"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> Point <span class="kw">struct</span><span class="op">{</span> X<span class="op">,</span> Y <span class="dt">int64</span> <span class="op">}</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> moveVal<span class="op">(</span>p Point<span class="op">)</span>  <span class="op">{</span> p<span class="op">.</span>X <span class="op">+=</span> <span class="dv">10</span> <span class="op">}</span> <span class="co">// 改的是副本</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> movePtr<span class="op">(</span>p <span class="op">*</span>Point<span class="op">)</span> <span class="op">{</span> p<span class="op">.</span>X <span class="op">+=</span> <span class="dv">10</span> <span class="op">}</span> <span class="co">// 通过指针改原对象</span></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>    a <span class="op">:=</span> Point<span class="op">{</span>X<span class="op">:</span> <span class="dv">1</span><span class="op">,</span> Y<span class="op">:</span> <span class="dv">2</span><span class="op">}</span></span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>    moveVal<span class="op">(</span>a<span class="op">)</span></span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>a<span class="op">.</span>X<span class="op">)</span> <span class="co">// 1  —— 没变,函数拿到的是副本</span></span>
+<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a>    movePtr<span class="op">(&amp;</span>a<span class="op">)</span></span>
+<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>a<span class="op">.</span>X<span class="op">)</span> <span class="co">// 11 —— 变了,函数拿到的是地址</span></span>
+<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>注意 <code>movePtr</code> 里写的是 <code>p.X</code>,而不是
 <code>(*p).X</code>——Go 对指向 struct 的指针会自动解引用,省去 C 里
 <code>p-&gt;X</code> 那种专门的箭头运算符。</p>
 <p>数组也是值类型,而且拷贝整个数组(这一点 C 程序员要特别当心,C
 里数组传参会退化成指针,Go 不会):</p>
-<div class="sourceCode" id="cb5"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>arr <span class="op">:=</span> <span class="op">[</span><span class="dv">3</span><span class="op">]</span><span class="dt">int</span><span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">}</span></span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>cp <span class="op">:=</span> arr <span class="co">// 拷贝全部 3 个元素,24 字节</span></span>
-<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>cp<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="dv">99</span></span>
-<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Println<span class="op">(</span>arr<span class="op">[</span><span class="dv">0</span><span class="op">],</span> cp<span class="op">[</span><span class="dv">0</span><span class="op">])</span> <span class="co">// 1 99</span></span></code></pre></div>
+<div class="sourceCode" id="cb8"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>arr <span class="op">:=</span> <span class="op">[</span><span class="dv">3</span><span class="op">]</span><span class="dt">int</span><span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">}</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>cp <span class="op">:=</span> arr <span class="co">// 拷贝全部 3 个元素,24 字节</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>cp<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="dv">99</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Println<span class="op">(</span>arr<span class="op">[</span><span class="dv">0</span><span class="op">],</span> cp<span class="op">[</span><span class="dv">0</span><span class="op">])</span> <span class="co">// 1 99</span></span></code></pre></div>
 <blockquote>
 <p>C 陷阱对照:C 里 <code>void f(int a[3])</code> 等价于
 <code>void f(int *a)</code>,传的是首元素地址;Go 里
@@ -228,11 +280,11 @@ id="toc-ascii-对照图struct-值拷贝-vs-slice-拷贝">ASCII 对照图:struct
 </blockquote>
 <h2 id="指针有指针无指针算术更安全">指针:有指针,无指针算术,更安全</h2>
 <p>Go 有指针,<code>&amp;</code> 取地址、<code>*</code> 解引用,语法和 C
-一样:</p>
-<div class="sourceCode" id="cb6"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>a <span class="op">:=</span> <span class="dv">42</span></span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>p <span class="op">:=</span> <span class="op">&amp;</span>a  <span class="co">// p 的类型是 *int</span></span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="op">*</span>p <span class="op">=</span> <span class="dv">100</span> <span class="co">// 通过指针改 a</span></span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Println<span class="op">(</span>a<span class="op">)</span> <span class="co">// 100</span></span></code></pre></div>
+一样,第一节的例子已经用过:</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>a <span class="op">:=</span> <span class="dv">42</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>p <span class="op">:=</span> <span class="op">&amp;</span>a  <span class="co">// p 的类型是 *int</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="op">*</span>p <span class="op">=</span> <span class="dv">100</span> <span class="co">// 通过指针改 a</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Println<span class="op">(</span>a<span class="op">)</span> <span class="co">// 100</span></span></code></pre></div>
 <p>底层上,<code>p</code> 就是一个存着 <code>a</code> 地址的机器字(64
 位平台上 8 字节),和 C 指针的表示完全相同。但 Go 的指针有几条纪律:</p>
 <table>
@@ -272,10 +324,11 @@ id="toc-ascii-对照图struct-值拷贝-vs-slice-拷贝">ASCII 对照图:struct
 </tbody>
 </table>
 <p>最后一条对 C 程序员是重大解放:</p>
-<div class="sourceCode" id="cb7"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> newCounter<span class="op">()</span> <span class="op">*</span><span class="dt">int</span> <span class="op">{</span></span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    n <span class="op">:=</span> <span class="dv">0</span>     <span class="co">// 局部变量</span></span>
-<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="op">&amp;</span>n  <span class="co">// 在 C 里这是灾难,在 Go 里完全合法</span></span>
-<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> newCounter<span class="op">()</span> <span class="op">*</span><span class="dt">int</span> <span class="op">{</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>    n <span class="op">:=</span> <span class="dv">0</span>     <span class="co">// 局部变量</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="op">&amp;</span>n  <span class="co">// 在 C 里这是灾难,在 Go 里完全合法</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>在 C 里返回局部变量地址是经典的悬垂指针
 bug,函数返回后栈帧销毁,指针指向垃圾。Go 里编译器发现 <code>n</code>
 的地址逃出了函数作用域,就自动把 <code>n</code> 分配到堆上,由 GC
@@ -295,27 +348,28 @@ analysis)</strong>决定,和你用没用 <code>&amp;</code>、用没用
 </ul>
 <p>用 <code>go build -gcflags='-m'</code>(可加 <code>-m -m</code>
 看更详细的推理)可以让编译器打印它的决策。看这个例子:</p>
-<div class="sourceCode" id="cb8"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> stackAlloc<span class="op">()</span> <span class="dt">int</span> <span class="op">{</span></span>
-<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>    x <span class="op">:=</span> <span class="bu">new</span><span class="op">(</span><span class="dt">int</span><span class="op">)</span> <span class="co">// 别被 new 骗了</span></span>
-<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>    <span class="op">*</span>x <span class="op">=</span> <span class="dv">42</span></span>
-<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="op">*</span>x <span class="co">// 只返回值,x 的地址没跑出去</span></span>
-<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> heapAlloc<span class="op">()</span> <span class="op">*</span><span class="dt">int</span> <span class="op">{</span></span>
-<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>    y <span class="op">:=</span> <span class="dv">0</span></span>
-<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="op">&amp;</span>y <span class="co">// 地址逃逸了</span></span>
-<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb8-13"><a href="#cb8-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-14"><a href="#cb8-14" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
-<span id="cb8-15"><a href="#cb8-15" aria-hidden="true" tabindex="-1"></a>    _ <span class="op">=</span> stackAlloc<span class="op">()</span></span>
-<span id="cb8-16"><a href="#cb8-16" aria-hidden="true" tabindex="-1"></a>    _ <span class="op">=</span> heapAlloc<span class="op">()</span></span>
-<span id="cb8-17"><a href="#cb8-17" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
-<p>编译并观察:</p>
-<pre><code>$ go build -gcflags=&#39;-m&#39; escape.go
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> stackAlloc<span class="op">()</span> <span class="dt">int</span> <span class="op">{</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>    x <span class="op">:=</span> <span class="bu">new</span><span class="op">(</span><span class="dt">int</span><span class="op">)</span> <span class="co">// 别被 new 骗了</span></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>    <span class="op">*</span>x <span class="op">=</span> <span class="dv">42</span></span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="op">*</span>x <span class="co">// 只返回值,x 的地址没跑出去</span></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> heapAlloc<span class="op">()</span> <span class="op">*</span><span class="dt">int</span> <span class="op">{</span></span>
+<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a>    y <span class="op">:=</span> <span class="dv">0</span></span>
+<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="op">&amp;</span>y <span class="co">// 地址逃逸了</span></span>
+<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb11-13"><a href="#cb11-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-14"><a href="#cb11-14" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb11-15"><a href="#cb11-15" aria-hidden="true" tabindex="-1"></a>    _ <span class="op">=</span> stackAlloc<span class="op">()</span></span>
+<span id="cb11-16"><a href="#cb11-16" aria-hidden="true" tabindex="-1"></a>    _ <span class="op">=</span> heapAlloc<span class="op">()</span></span>
+<span id="cb11-17"><a href="#cb11-17" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>编译并观察(不同 Go
+版本、是否内联,打印的行号和措辞会略有差异,但结论一致):</p>
+<pre><code>$ go build -gcflags=&#39;-m -l&#39; escape.go
 ./escape.go:4:10: new(int) does not escape
-./escape.go:11:9: &amp;y escapes to heap
 ./escape.go:10:2: moved to heap: y</code></pre>
 <p>结论颠覆直觉:<strong><code>new(int)</code>
 没有逃逸,反而分配在栈上</strong>;而普普通通的局部变量
@@ -366,9 +420,9 @@ slice/map/结构体字段(而该容器逃逸)、把值装进 <code>interface{}</
 </tr>
 </tbody>
 </table>
-<div class="sourceCode" id="cb10"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>p <span class="op">:=</span> <span class="bu">new</span><span class="op">([]</span><span class="dt">int</span><span class="op">)</span> <span class="co">// p 是 *[]int,指向一个 nil slice 表头,底层还没数组,不能直接用</span></span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>s <span class="op">:=</span> <span class="bu">make</span><span class="op">([]</span><span class="dt">int</span><span class="op">,</span> <span class="dv">3</span><span class="op">)</span> <span class="co">// s 是 []int,长度 3,底层数组已就绪,可用</span></span></code></pre></div>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>p <span class="op">:=</span> <span class="bu">new</span><span class="op">([]</span><span class="dt">int</span><span class="op">)</span> <span class="co">// p 是 *[]int,指向一个 nil slice 表头,底层还没数组,不能直接用</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>s <span class="op">:=</span> <span class="bu">make</span><span class="op">([]</span><span class="dt">int</span><span class="op">,</span> <span class="dv">3</span><span class="op">)</span> <span class="co">// s 是 []int,长度 3,底层数组已就绪,可用</span></span></code></pre></div>
 <p><code>new(T)</code> 相当于 C 里 <code>calloc(1, sizeof(T))</code>
 再取地址——只给你一块清零内存。而 <code>make</code> 是 slice/map/chan
 专用的”构造器”,因为这三者需要初始化内部的表头和底层结构才能工作(map
@@ -408,15 +462,15 @@ class="sourceCode go"><code class="sourceCode go"><span id="cb10-1"><a href="#cb
 </tbody>
 </table>
 <p>零值可用意味着很多类型不写构造函数、直接声明就能用:</p>
-<div class="sourceCode" id="cb11"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> buf bytes<span class="op">.</span>Buffer <span class="co">// 零值就是一个可用的空缓冲,无需初始化</span></span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>buf<span class="op">.</span>WriteString<span class="op">(</span><span class="st">&quot;hi&quot;</span><span class="op">)</span></span>
-<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> mu sync<span class="op">.</span>Mutex <span class="co">// 零值就是未锁状态,直接 Lock</span></span>
-<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>mu<span class="op">.</span>Lock<span class="op">()</span></span>
-<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> s <span class="op">[]</span><span class="dt">int</span>    <span class="co">// nil slice,但 append 能直接用</span></span>
-<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>s <span class="op">=</span> <span class="bu">append</span><span class="op">(</span>s<span class="op">,</span> <span class="dv">1</span><span class="op">)</span> <span class="co">// OK,append 会按需分配底层数组</span></span></code></pre></div>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> buf bytes<span class="op">.</span>Buffer <span class="co">// 零值就是一个可用的空缓冲,无需初始化</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>buf<span class="op">.</span>WriteString<span class="op">(</span><span class="st">&quot;hi&quot;</span><span class="op">)</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> mu sync<span class="op">.</span>Mutex <span class="co">// 零值就是未锁状态,直接 Lock</span></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>mu<span class="op">.</span>Lock<span class="op">()</span></span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> s <span class="op">[]</span><span class="dt">int</span>    <span class="co">// nil slice,但 append 能直接用</span></span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a>s <span class="op">=</span> <span class="bu">append</span><span class="op">(</span>s<span class="op">,</span> <span class="dv">1</span><span class="op">)</span> <span class="co">// OK,append 会按需分配底层数组</span></span></code></pre></div>
 <p>注意一个例外:<strong>nil map
 只能读不能写</strong>。<code>var m map[string]int</code> 读
 <code>m["x"]</code> 返回 0(零值),但 <code>m["x"] = 1</code> 会
@@ -430,19 +484,19 @@ id="引用类型的真相含指针的小表头">“引用类型”的真相:含�
 → 指针被复制 → 两个变量共享同一份底层数据。</p>
 <p>以 slice 为例。它的表头在运行时就是这样一个 3 字长的结构(见运行时
 <code>reflect.SliceHeader</code>):</p>
-<div class="sourceCode" id="cb12"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> sliceHeader <span class="kw">struct</span> <span class="op">{</span></span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>    Data <span class="dt">uintptr</span> <span class="co">// 指向底层数组的指针</span></span>
-<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>    Len  <span class="dt">int</span>     <span class="co">// 长度</span></span>
-<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>    Cap  <span class="dt">int</span>     <span class="co">// 容量</span></span>
-<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb15"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> sliceHeader <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>    Data <span class="dt">uintptr</span> <span class="co">// 指向底层数组的指针</span></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>    Len  <span class="dt">int</span>     <span class="co">// 长度</span></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>    Cap  <span class="dt">int</span>     <span class="co">// 容量</span></span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>24 字节(64 位平台)。当你写 <code>b := a</code>(a 是 slice),复制的是这
 24 字节表头,<code>Data</code> 指针被原样复制。于是:</p>
-<div class="sourceCode" id="cb13"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>a <span class="op">:=</span> <span class="op">[]</span><span class="dt">int</span><span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">}</span></span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>b <span class="op">:=</span> a       <span class="co">// 拷贝表头,b.Data == a.Data,共享同一底层数组</span></span>
-<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>b<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="dv">99</span>    <span class="co">// 通过共享的底层数组改元素</span></span>
-<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Println<span class="op">(</span>a<span class="op">[</span><span class="dv">0</span><span class="op">])</span> <span class="co">// 99 —— a 也变了!这就是&quot;别名&quot;</span></span></code></pre></div>
+<div class="sourceCode" id="cb16"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>a <span class="op">:=</span> <span class="op">[]</span><span class="dt">int</span><span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">}</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>b <span class="op">:=</span> a       <span class="co">// 拷贝表头,b.Data == a.Data,共享同一底层数组</span></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>b<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="dv">99</span>    <span class="co">// 通过共享的底层数组改元素</span></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Println<span class="op">(</span>a<span class="op">[</span><span class="dv">0</span><span class="op">])</span> <span class="co">// 99 —— a 也变了!这就是&quot;别名&quot;</span></span></code></pre></div>
 <p>这正是让 C++ 程序员疑惑的点:明明是值拷贝,怎么改 b 影响
 a?因为拷贝的表头里的指针指向同一块堆内存。这跟 C 里
 <code>struct { int *data; int len; } b = a;</code> 之后
@@ -450,23 +504,23 @@ a?因为拷贝的表头里的指针指向同一块堆内存。这跟 C 里
 是一个道理——拷贝了结构体,但没拷贝它指向的缓冲区。</p>
 <p>但这个”共享”是有条件的——一旦 <code>append</code>
 触发扩容,底层数组被重新分配,共享关系就悄悄断开了。这是新手最常踩的坑:</p>
-<div class="sourceCode" id="cb14"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
-<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="st">&quot;fmt&quot;</span></span>
-<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
-<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>    a <span class="op">:=</span> <span class="op">[]</span><span class="dt">int</span><span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">}</span></span>
-<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>    b <span class="op">:=</span> a <span class="co">// 拷贝 24 字节表头,b 与 a 共享同一底层数组</span></span>
-<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a>    b<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="dv">99</span></span>
-<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>a<span class="op">)</span> <span class="co">// [99 2 3]  —— 共享数组,a 也看到了</span></span>
-<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a>    b <span class="op">=</span> <span class="bu">append</span><span class="op">(</span>b<span class="op">,</span> <span class="dv">4</span><span class="op">)</span> <span class="co">// len==cap==3 已满,append 重新分配:b 换到了自己的新数组</span></span>
-<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a>    b<span class="op">[</span><span class="dv">1</span><span class="op">]</span> <span class="op">=</span> <span class="dv">88</span></span>
-<span id="cb14-14"><a href="#cb14-14" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>a<span class="op">)</span> <span class="co">// [99 2 3]     —— 没变,共享关系已断开</span></span>
-<span id="cb14-15"><a href="#cb14-15" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>b<span class="op">)</span> <span class="co">// [99 88 3 4]</span></span>
-<span id="cb14-16"><a href="#cb14-16" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb17"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a>    a <span class="op">:=</span> <span class="op">[]</span><span class="dt">int</span><span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">}</span></span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a>    b <span class="op">:=</span> a <span class="co">// 拷贝 24 字节表头,b 与 a 共享同一底层数组</span></span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a>    b<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="dv">99</span></span>
+<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>a<span class="op">)</span> <span class="co">// [99 2 3]  —— 共享数组,a 也看到了</span></span>
+<span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-12"><a href="#cb17-12" aria-hidden="true" tabindex="-1"></a>    b <span class="op">=</span> <span class="bu">append</span><span class="op">(</span>b<span class="op">,</span> <span class="dv">4</span><span class="op">)</span> <span class="co">// len==cap==3 已满,append 重新分配:b 换到了自己的新数组</span></span>
+<span id="cb17-13"><a href="#cb17-13" aria-hidden="true" tabindex="-1"></a>    b<span class="op">[</span><span class="dv">1</span><span class="op">]</span> <span class="op">=</span> <span class="dv">88</span></span>
+<span id="cb17-14"><a href="#cb17-14" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>a<span class="op">)</span> <span class="co">// [99 2 3]     —— 没变,共享关系已断开</span></span>
+<span id="cb17-15"><a href="#cb17-15" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>b<span class="op">)</span> <span class="co">// [99 88 3 4]</span></span>
+<span id="cb17-16"><a href="#cb17-16" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p><code>append</code> 之前改 <code>b</code> 会波及
 <code>a</code>,<code>append</code> 之后改 <code>b</code> 却不再波及
 <code>a</code>——同一段代码里两种行为,根源就是那次重新分配。什么时候扩容、扩多少,取决于容量,细节见
@@ -506,6 +560,16 @@ href="07-复合数据结构.html">07-复合数据结构.md</a>
 的字节里有没有指针。没有 → 两份独立数据;有 →
 表头独立、底层共享。</strong> 这条判据能解释 Go
 里几乎所有的别名现象。</p>
+<h2 id="小结">小结</h2>
+<ul>
+<li><strong>用法层面</strong>:<code>var</code>/<code>:=</code>
+声明变量;<code>b := a</code> 把 a 的值复制给
+b;把变量传给函数,函数拿到的是副本;想让函数改到外面的变量,传指针(<code>&amp;</code>/<code>*</code>)。</li>
+<li><strong>底层层面</strong>:赋值与传参永远是值拷贝——值类型拷贝全部数据,“引用类型”(slice/map/chan/指针/interface)拷贝的是含指针的表头,于是产生别名;变量在栈还是堆由逃逸分析决定,和
+<code>new</code>/<code>&amp;</code> 无关;<code>new</code>
+只清零分配,<code>make</code> 专为 slice/map/chan
+初始化内部结构;零值被设计成开箱可用,但 nil map 只读不可写。</li>
+</ul>
 <hr />
 <p><a href="02-基础语法.html">← 上一章:基础语法</a> · <a
 href="index.html">返回目录</a> · <a

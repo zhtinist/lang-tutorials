@@ -2,20 +2,17 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="zh-CN" xml:lang="zh-CN">
 <head>
   <meta charset="utf-8" />
-  <meta name="generator" content="pandoc 3.10" />
+  <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
   <title>面向对象与类型系统</title>
   <style>
     /* Default styles provided by pandoc.
     ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
     */
+    code{white-space: pre-wrap;}
     span.smallcaps{font-variant: small-caps;}
-    div.columns{display: flex; gap: 1.5em;}
-    div.column{flex: auto;}
-    @media screen {
-    div.columns{gap: min(4vw, 1.5em);}
-    div.column{overflow-x: auto;}
-    }
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
     div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
     /* The extra [class] is a hack that increases specificity enough to
        override a similar rule in reveal.js */
@@ -110,6 +107,8 @@
 <li><a href="#面向对象与类型系统"
 id="toc-面向对象与类型系统">面向对象与类型系统</a>
 <ul>
+<li><a href="#先会用定义类与继承速览" id="toc-先会用定义类与继承速览">0.
+先会用:定义类与继承速览</a></li>
 <li><a href="#class-语法与实例的内存布局"
 id="toc-class-语法与实例的内存布局">1. <code>class</code>
 语法与实例的内存布局</a></li>
@@ -141,27 +140,67 @@ id="toc-slots__用固定数组替代-dict">8.
 </ul>
 </nav>
 <h1 id="面向对象与类型系统">面向对象与类型系统</h1>
+<p>本章讲 Python
+的类、继承、方法这套面向对象机制。<strong>先讲怎么定义类、怎么继承、怎么用——不需要任何底层知识就能看懂;再讲对象的内存布局、属性查找顺序(MRO)、方法绑定的描述符协议这些底层原理,和
+C++ 的对象模型逐一对照。</strong>
+只想会写类的话,读每节的「怎么用」就够;想搞懂”为什么能这样写”和性能开销,再往下看「底层与
+C 对比」。</p>
 <blockquote>
 <p>C++ 的对象模型是”编译期定死的内存布局 + vtable”;Python
-的对象模型是”运行时可变的字典 +
-描述符协议”。本章把类、实例、方法、继承、元类逐层拆开,和 C++
-对象内存布局逐一对照。 前置:<a
+的对象模型是”运行时可变的字典 + 描述符协议”。前置:<a
 href="03-变量与内存模型.html">见「变量与内存模型」</a>——一切皆对象、变量即引用。</p>
 </blockquote>
+<hr />
+<h2 id="先会用定义类与继承速览">0. 先会用:定义类与继承速览</h2>
+<p>用 <code>class</code> 定义一个类,<code>__init__</code>
+是构造方法(创建实例时自动调用),<code>self</code> 代表”当前这个实例”:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Dog:</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, name, breed):</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.name <span class="op">=</span> name       <span class="co"># 实例属性</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.breed <span class="op">=</span> breed</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> bark(<span class="va">self</span>):            <span class="co"># 实例方法,第一个参数总是 self</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="ss">f&quot;</span><span class="sc">{</span><span class="va">self</span><span class="sc">.</span>name<span class="sc">}</span><span class="ss"> says Woof!&quot;</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>d <span class="op">=</span> Dog(<span class="st">&quot;Rex&quot;</span>, <span class="st">&quot;Labrador&quot;</span>)</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(d.name, d.breed)         <span class="co"># Rex Labrador</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(d.bark())                 <span class="co"># Rex says Woof!</span></span></code></pre></div>
+<p>继承:子类在括号里写父类,可以覆盖(override)父类的方法:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Animal:</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, name):</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.name <span class="op">=</span> name</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> speak(<span class="va">self</span>):</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="st">&quot;...&quot;</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Cat(Animal):              <span class="co"># Cat 继承 Animal</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> speak(<span class="va">self</span>):            <span class="co"># 覆盖父类的 speak</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="ss">f&quot;</span><span class="sc">{</span><span class="va">self</span><span class="sc">.</span>name<span class="sc">}</span><span class="ss"> says Meow&quot;</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>c <span class="op">=</span> Cat(<span class="st">&quot;Tom&quot;</span>)</span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(c.speak())                <span class="co"># Tom says Meow</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">isinstance</span>(c, Animal))    <span class="co"># True —— Cat 也是一种 Animal</span></span></code></pre></div>
+<p>这就是日常写类最常用的骨架:<code>class</code> + <code>__init__</code>
++ 方法 + 继承。下面逐个特性展开——<strong>先用法,后底层</strong>。</p>
+<hr />
 <h2 id="class-语法与实例的内存布局">1. <code>class</code>
 语法与实例的内存布局</h2>
-<div class="sourceCode" id="cb1"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Point:</span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    count <span class="op">=</span> <span class="dv">0</span>                 <span class="co"># 类属性(所有实例共享)</span></span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, x, y):</span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.x <span class="op">=</span> x            <span class="co"># 实例属性,写进 self.__dict__</span></span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.y <span class="op">=</span> y</span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>        Point.count <span class="op">+=</span> <span class="dv">1</span></span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>p <span class="op">=</span> Point(<span class="dv">3</span>, <span class="dv">4</span>)</span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(p.x, p.__dict__)        <span class="co"># 3 {&#39;x&#39;: 3, &#39;y&#39;: 4}</span></span></code></pre></div>
-<h3 id="实例属性存在-__dict__-里">1.1 实例属性存在 <code>__dict__</code>
-里</h3>
+<h3 id="怎么用">怎么用</h3>
+<p>除了实例属性,类还可以有<strong>类属性</strong>——写在类体里、方法之外,所有实例共享:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Point:</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    count <span class="op">=</span> <span class="dv">0</span>                 <span class="co"># 类属性(所有实例共享)</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, x, y):</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.x <span class="op">=</span> x            <span class="co"># 实例属性,每个实例各自一份</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.y <span class="op">=</span> y</span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>        Point.count <span class="op">+=</span> <span class="dv">1</span>      <span class="co"># 通过类名修改类属性</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>p <span class="op">=</span> Point(<span class="dv">3</span>, <span class="dv">4</span>)</span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(p.x, p.__dict__)        <span class="co"># 3 {&#39;x&#39;: 3, &#39;y&#39;: 4}</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>q <span class="op">=</span> Point(<span class="dv">1</span>, <span class="dv">1</span>)</span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(Point.count)             <span class="co"># 2 —— 两个实例共享同一个 count</span></span></code></pre></div>
+<h3 id="底层与-c-对比">底层与 C 对比</h3>
 <p>C++
 的对象是一块连续内存,字段在<strong>编译期就有固定偏移</strong>:</p>
 <pre><code>C++  struct Point { int x; int y; };
@@ -176,13 +215,13 @@ dict),属性名到对象引用的映射:</p>
 +------------------+</code></pre>
 <p>后果:</p>
 <ul>
-<li>访问 <code>p.x</code>
-是一次<strong>字典查找</strong>,不是常数偏移解引用,更慢。</li>
+<li>访问 <code>p.x</code> 是一次<strong>字典查找</strong>(<a
+href="07-复合数据结构.html">见「复合数据结构」</a>里的哈希表),不是常数偏移解引用,更慢。</li>
 <li>你可以在运行时给任意实例增删属性:<code>p.z = 5</code> 只是往它的
 <code>__dict__</code> 塞一个键。C++
 里对象的字段集合是编译期固定的,做不到。</li>
 <li>每个实例多背一个 dict,内存开销不小。想省掉见后文 <a
-href="#8-slots用固定数组替代-dict"><code>__slots__</code></a>。</li>
+href="#slots__用固定数组替代-dict"><code>__slots__</code></a>。</li>
 </ul>
 <blockquote>
 <p>CPython 有个优化叫 “key-sharing
@@ -192,12 +231,19 @@ dict”:同一个类的多个实例,若属性集合相同,可以共享 key 部�
 <hr />
 <h2 id="类也是对象type-是元类">2. 类也是对象,<code>type</code>
 是元类</h2>
+<h3 id="怎么用-1">怎么用</h3>
+<p><code>type(obj)</code>
+能查一个值属于哪个类,这在调试、写通用代码时很常用:</p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">type</span>(p))         <span class="co"># &lt;class &#39;__main__.Point&#39;&gt;   —— p 的类型是 Point</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">type</span>(<span class="dv">42</span>))        <span class="co"># &lt;class &#39;int&#39;&gt;</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">isinstance</span>(p, Point))   <span class="co"># True</span></span></code></pre></div>
+<h3 id="底层与-c-对比-1">底层与 C 对比</h3>
 <p>在 Python 里,<strong>类本身也是一个对象</strong>,它的类型是
 <code>type</code>:</p>
-<div class="sourceCode" id="cb4"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">type</span>(p))         <span class="co"># &lt;class &#39;__main__.Point&#39;&gt;   —— p 的类型是 Point</span></span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">type</span>(Point))     <span class="co"># &lt;class &#39;type&#39;&gt;              —— Point 的类型是 type</span></span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">type</span>(<span class="bu">type</span>))      <span class="co"># &lt;class &#39;type&#39;&gt;              —— type 的类型是它自己</span></span></code></pre></div>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">type</span>(Point))     <span class="co"># &lt;class &#39;type&#39;&gt;              —— Point 的类型是 type</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">type</span>(<span class="bu">type</span>))      <span class="co"># &lt;class &#39;type&#39;&gt;              —— type 的类型是它自己</span></span></code></pre></div>
 <ul>
 <li><code>Point</code> 是一个存在于堆上的对象,你可以把它赋值、传参、放进
 list。</li>
@@ -205,13 +251,29 @@ list。</li>
 <code>type</code>。<code>class Point: ...</code> 本质上等价于调用
 <code>type(name, bases, namespace)</code> 动态造出一个类对象:</li>
 </ul>
-<div class="sourceCode" id="cb5"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>Point2 <span class="op">=</span> <span class="bu">type</span>(<span class="st">&#39;Point2&#39;</span>, (<span class="bu">object</span>,), {<span class="st">&#39;x&#39;</span>: <span class="dv">0</span>})   <span class="co"># 和 class 语句等价</span></span></code></pre></div>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>Point2 <span class="op">=</span> <span class="bu">type</span>(<span class="st">&#39;Point2&#39;</span>, (<span class="bu">object</span>,), {<span class="st">&#39;x&#39;</span>: <span class="dv">0</span>})   <span class="co"># 和 class 语句等价</span></span></code></pre></div>
 <p>这与 C++ 完全不同:C++ 的类只是编译期概念,运行时不存在”类对象”(RTTI 的
 <code>type_info</code> 只是只读元数据,不能当值来构造新类)。Python
 的类是一等公民,可以在运行时生成、修改。元类是高级特性(ORM、框架用它做注册/校验),日常不用手写。</p>
 <hr />
 <h2 id="属性查找顺序实例-类-mro">3. 属性查找顺序:实例 → 类 → MRO</h2>
+<h3 id="怎么用-2">怎么用</h3>
+<p>正常情况下,访问 <code>obj.attr</code>
+时,如果实例自己有这个属性就用实例的,否则去类(以及父类)里找——这也是”继承”在属性/方法上的体现,平时按直觉写代码即可:</p>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Base:</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>    label <span class="op">=</span> <span class="st">&quot;base&quot;</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Child(Base):</span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">pass</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>obj <span class="op">=</span> Child()</span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(obj.label)     <span class="co"># base —— 实例和 Child 都没有 label,沿着继承链在 Base 里找到</span></span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>obj.label <span class="op">=</span> <span class="st">&quot;child&quot;</span>  <span class="co"># 给实例自己设置一个同名属性</span></span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(obj.label)      <span class="co"># child —— 实例自己的优先</span></span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(Base().label)   <span class="co"># base —— 没影响到 Base 类本身</span></span></code></pre></div>
+<h3 id="底层与-c-对比-2">底层与 C 对比</h3>
 <p>访问 <code>obj.attr</code> 时,解释器按固定顺序查找。这是理解 OOP
 的核心机制:</p>
 <ol type="1">
@@ -228,17 +290,17 @@ class="sourceCode python"><code class="sourceCode python"><span id="cb5-1"><a hr
 </ol>
 <p>(细节顺序:数据描述符 &gt; 实例 dict &gt; 非数据描述符/类属性 &gt;
 <code>__getattr__</code>。)</p>
-<h3 id="mro-与-c3-线性化">3.1 MRO 与 C3 线性化</h3>
+<h3 id="mro-与-c3-线性化">MRO 与 C3 线性化</h3>
 <p>多继承时,“类链”不是简单的深度优先,而是 <strong>C3
 线性化</strong>算法算出的一个确定顺序,保证:子类在父类前、父类相对顺序保持、且唯一确定(否则报错)。</p>
-<div class="sourceCode" id="cb6"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> A: <span class="cf">pass</span></span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> B(A): <span class="cf">pass</span></span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> C(A): <span class="cf">pass</span></span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> D(B, C): <span class="cf">pass</span></span>
-<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>([c.<span class="va">__name__</span> <span class="cf">for</span> c <span class="kw">in</span> D.__mro__])</span>
-<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a><span class="co"># [&#39;D&#39;, &#39;B&#39;, &#39;C&#39;, &#39;A&#39;, &#39;object&#39;]</span></span></code></pre></div>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> A: <span class="cf">pass</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> B(A): <span class="cf">pass</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> C(A): <span class="cf">pass</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> D(B, C): <span class="cf">pass</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>([c.<span class="va">__name__</span> <span class="cf">for</span> c <span class="kw">in</span> D.__mro__])</span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a><span class="co"># [&#39;D&#39;, &#39;B&#39;, &#39;C&#39;, &#39;A&#39;, &#39;object&#39;]</span></span></code></pre></div>
 <p>C3 解决了 C++ 里臭名昭著的菱形继承问题。C++ 要靠 <code>virtual</code>
 继承手工处理重复基类;Python 用 MRO
 自动给出一个线性顺序,<code>super()</code> 就沿这个顺序走(见第 6
@@ -246,17 +308,24 @@ class="sourceCode python"><code class="sourceCode python"><span id="cb6-1"><a hr
 <hr />
 <h2 id="方法-函数-描述符协议绑定方法是怎么来的">4. 方法 = 函数 +
 描述符协议:绑定方法是怎么来的</h2>
+<h3 id="怎么用-3">怎么用</h3>
+<p>方法定义时第一个参数写
+<code>self</code>,调用时<strong>不用</strong>手动传它——Python
+自动把调用方法的那个实例传进去:</p>
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Foo:</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> bar(<span class="va">self</span>, n):</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="ss">f&quot;self is </span><span class="sc">{</span><span class="va">self</span><span class="sc">}</span><span class="ss">, n is </span><span class="sc">{</span>n<span class="sc">}</span><span class="ss">&quot;</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>f <span class="op">=</span> Foo()</span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(f.bar(<span class="dv">10</span>))     <span class="co"># self is &lt;__main__.Foo object at ...&gt;, n is 10</span></span></code></pre></div>
+<h3 id="底层与-c-对比-3">底层与 C 对比</h3>
 <p>一个”方法”其实就是定义在类 <code>__dict__</code>
 里的<strong>普通函数</strong>。神奇之处在于:函数是一个<strong>描述符</strong>(实现了
 <code>__get__</code>)。</p>
-<div class="sourceCode" id="cb7"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Foo:</span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> bar(<span class="va">self</span>):</span>
-<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="va">self</span></span>
-<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>f <span class="op">=</span> Foo()</span>
-<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(Foo.bar)      <span class="co"># &lt;function Foo.bar&gt;       —— 通过类拿到的是纯函数</span></span>
-<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(f.bar)        <span class="co"># &lt;bound method Foo.bar&gt;   —— 通过实例拿到的是&quot;绑定方法&quot;</span></span></code></pre></div>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(Foo.bar)      <span class="co"># &lt;function Foo.bar at ...&gt;       —— 通过类拿到的是纯函数</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(f.bar)        <span class="co"># &lt;bound method Foo.bar of ...&gt;   —— 通过实例拿到的是&quot;绑定方法&quot;</span></span></code></pre></div>
 <p>发生了什么:<code>f.bar</code> 触发属性查找,在类里找到函数对象
 <code>bar</code>,因为函数有 <code>__get__</code>,解释器调用
 <code>bar.__get__(f, Foo)</code>,它返回一个<strong>绑定方法对象</strong>——一个把
@@ -271,27 +340,30 @@ C++:C++ 的 <code>this</code> 是编译器隐式传入的隐藏指针;Python
 <hr />
 <h2 id="property-staticmethod-classmethod">5. <code>@property</code> /
 <code>@staticmethod</code> / <code>@classmethod</code></h2>
-<p>这三个都是”内置描述符”,用来改变属性/方法的绑定行为:</p>
-<div class="sourceCode" id="cb9"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Circle:</span>
-<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, r):</span>
-<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>._r <span class="op">=</span> r</span>
-<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">@property</span>                       <span class="co"># 把方法伪装成只读属性,访问时自动调用</span></span>
-<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> area(<span class="va">self</span>):                 <span class="co"># 数据描述符,优先级高于实例 dict</span></span>
-<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="fl">3.14159</span> <span class="op">*</span> <span class="va">self</span>._r <span class="op">**</span> <span class="dv">2</span></span>
-<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>    <span class="at">@staticmethod</span>                   <span class="co"># 不绑定 self/cls,就是个放在类命名空间的普通函数</span></span>
-<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> unit():</span>
-<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="st">&quot;cm&quot;</span></span>
-<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a>    <span class="at">@classmethod</span>                    <span class="co"># 绑定的是&quot;类&quot;而非实例,第一个参数是 cls</span></span>
-<span id="cb9-14"><a href="#cb9-14" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> from_diameter(cls, d):</span>
-<span id="cb9-15"><a href="#cb9-15" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> cls(d <span class="op">/</span> <span class="dv">2</span>)           <span class="co"># cls 让子类调用时返回子类实例(多态构造)</span></span>
-<span id="cb9-16"><a href="#cb9-16" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb9-17"><a href="#cb9-17" aria-hidden="true" tabindex="-1"></a>c <span class="op">=</span> Circle(<span class="dv">2</span>)</span>
-<span id="cb9-18"><a href="#cb9-18" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(c.area)                       <span class="co"># 6.28...  —— 像字段一样访问,底层调了方法</span></span>
-<span id="cb9-19"><a href="#cb9-19" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(Circle.from_diameter(<span class="dv">10</span>)._r)  <span class="co"># 5.0</span></span></code></pre></div>
+<h3 id="怎么用-4">怎么用</h3>
+<p>这三个装饰器改变方法的”绑定行为”,分别对应”像字段一样访问的方法”“不需要
+self 的方法”“操作类本身的方法”:</p>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Circle:</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, r):</span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>._r <span class="op">=</span> r</span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">@property</span>                       <span class="co"># 把方法伪装成只读属性,访问时自动调用</span></span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> area(<span class="va">self</span>):</span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="fl">3.14159</span> <span class="op">*</span> <span class="va">self</span>._r <span class="op">**</span> <span class="dv">2</span></span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a>    <span class="at">@staticmethod</span>                   <span class="co"># 不绑定 self/cls,就是个放在类命名空间的普通函数</span></span>
+<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> unit():</span>
+<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="st">&quot;cm&quot;</span></span>
+<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a>    <span class="at">@classmethod</span>                    <span class="co"># 绑定的是&quot;类&quot;而非实例,第一个参数是 cls</span></span>
+<span id="cb14-14"><a href="#cb14-14" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> from_diameter(cls, d):</span>
+<span id="cb14-15"><a href="#cb14-15" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> cls(d <span class="op">/</span> <span class="dv">2</span>)           <span class="co"># cls 让子类调用时返回子类实例(多态构造)</span></span>
+<span id="cb14-16"><a href="#cb14-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-17"><a href="#cb14-17" aria-hidden="true" tabindex="-1"></a>c <span class="op">=</span> Circle(<span class="dv">2</span>)</span>
+<span id="cb14-18"><a href="#cb14-18" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(c.area)                       <span class="co"># 12.56636 —— 像字段一样访问,底层调了方法</span></span>
+<span id="cb14-19"><a href="#cb14-19" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(Circle.unit())                <span class="co"># cm</span></span>
+<span id="cb14-20"><a href="#cb14-20" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(Circle.from_diameter(<span class="dv">10</span>)._r)  <span class="co"># 5.0</span></span></code></pre></div>
 <table>
 <thead>
 <tr>
@@ -328,24 +400,35 @@ class="sourceCode python"><code class="sourceCode python"><span id="cb9-1"><a hr
 </tr>
 </tbody>
 </table>
+<h3 id="底层与-c-对比-4">底层与 C 对比</h3>
 <p><code>@property</code> 就是 C++ 里”用 getter/setter
 封装私有字段”的语言级支持——但对调用方<strong>透明</strong>:<code>c.area</code>
-看起来是字段访问,不用改调用代码就能从字段升级成计算属性。</p>
+看起来是字段访问,不用改调用代码就能从字段升级成计算属性。它之所以能拦在实例
+<code>__dict__</code> 前面被优先访问,正是因为 <code>property</code>
+实现了 <code>__set__</code>,是第 3
+节说的”数据描述符”——查找顺序里排在实例 dict 之前。</p>
 <hr />
 <h2 id="继承与-super">6. 继承与 <code>super</code></h2>
-<div class="sourceCode" id="cb10"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Animal:</span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, name):</span>
-<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.name <span class="op">=</span> name</span>
-<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> speak(<span class="va">self</span>):</span>
-<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="st">&quot;...&quot;</span></span>
-<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Dog(Animal):</span>
-<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, name, breed):</span>
-<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>(name)      <span class="co"># 沿 MRO 调用上一个类的实现</span></span>
-<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.breed <span class="op">=</span> breed</span>
-<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> speak(<span class="va">self</span>):</span>
-<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="st">&quot;Woof&quot;</span></span></code></pre></div>
+<h3 id="怎么用-5">怎么用</h3>
+<p>子类的 <code>__init__</code> 里用 <code>super().__init__(...)</code>
+调用父类的构造逻辑,而不用把父类名字硬编码进去:</p>
+<div class="sourceCode" id="cb15"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Animal:</span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, name):</span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.name <span class="op">=</span> name</span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> speak(<span class="va">self</span>):</span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="st">&quot;...&quot;</span></span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Dog(Animal):</span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, name, breed):</span>
+<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>(name)      <span class="co"># 调用父类 Animal 的 __init__</span></span>
+<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.breed <span class="op">=</span> breed</span>
+<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> speak(<span class="va">self</span>):</span>
+<span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="st">&quot;Woof&quot;</span></span>
+<span id="cb15-13"><a href="#cb15-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-14"><a href="#cb15-14" aria-hidden="true" tabindex="-1"></a>d <span class="op">=</span> Dog(<span class="st">&quot;Rex&quot;</span>, <span class="st">&quot;Labrador&quot;</span>)</span>
+<span id="cb15-15"><a href="#cb15-15" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(d.name, d.breed, d.speak())   <span class="co"># Rex Labrador Woof</span></span></code></pre></div>
+<h3 id="底层与-c-对比-5">底层与 C 对比</h3>
 <p><code>super()</code>(3 中的无参形式)不是”调父类”,而是”沿当前实例的
 <strong>MRO</strong>
 找下一个类”。在多继承里这至关重要——它保证协作式多继承时每个基类的方法恰好被调用一次,按
@@ -354,40 +437,48 @@ C3 顺序串起来。这比 C++ 里手写
 <p><strong>协作式多继承实测:菱形结构里 <code>A.__init__</code>
 只被调用一次</strong>,<code>super()</code> 严格沿 MRO
 <code>[D, B, C, A]</code> 前进:</p>
-<div class="sourceCode" id="cb11"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> A:</span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>): <span class="bu">print</span>(<span class="st">&quot;A&quot;</span>)</span>
-<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> B(A):</span>
-<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>): <span class="bu">print</span>(<span class="st">&quot;B&quot;</span>)<span class="op">;</span> <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
-<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> C(A):</span>
-<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>): <span class="bu">print</span>(<span class="st">&quot;C&quot;</span>)<span class="op">;</span> <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
-<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> D(B, C):</span>
-<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>): <span class="bu">print</span>(<span class="st">&quot;D&quot;</span>)<span class="op">;</span> <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
-<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a>D()</span>
-<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a><span class="co"># D</span></span>
-<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a><span class="co"># B</span></span>
-<span id="cb11-13"><a href="#cb11-13" aria-hidden="true" tabindex="-1"></a><span class="co"># C</span></span>
-<span id="cb11-14"><a href="#cb11-14" aria-hidden="true" tabindex="-1"></a><span class="co"># A   &lt;- 只有一次;若把 super() 换成硬编码 A.__init__(self),A 会被调两次</span></span></code></pre></div>
+<div class="sourceCode" id="cb16"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> A:</span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>): <span class="bu">print</span>(<span class="st">&quot;A&quot;</span>)</span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> B(A):</span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>): <span class="bu">print</span>(<span class="st">&quot;B&quot;</span>)<span class="op">;</span> <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> C(A):</span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>): <span class="bu">print</span>(<span class="st">&quot;C&quot;</span>)<span class="op">;</span> <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> D(B, C):</span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>): <span class="bu">print</span>(<span class="st">&quot;D&quot;</span>)<span class="op">;</span> <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a>D()</span>
+<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a><span class="co"># D</span></span>
+<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a><span class="co"># B</span></span>
+<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a><span class="co"># C</span></span>
+<span id="cb16-14"><a href="#cb16-14" aria-hidden="true" tabindex="-1"></a><span class="co"># A   &lt;- 只有一次;若把 super() 换成硬编码 A.__init__(self),A 会被调两次</span></span></code></pre></div>
 <hr />
 <h2 id="鸭子类型-vs-c-虚函数静态类型">7. 鸭子类型 vs C++
 虚函数/静态类型</h2>
+<h3 id="怎么用-6">怎么用</h3>
+<p>写 Python
+函数时,通常不需要声明参数的类型或共同基类——只要传进来的对象有函数用到的那些方法/属性就行:</p>
+<div class="sourceCode" id="cb17"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Duck:</span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> speak(<span class="va">self</span>): <span class="cf">return</span> <span class="st">&quot;Quack&quot;</span></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Person:</span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> speak(<span class="va">self</span>): <span class="cf">return</span> <span class="st">&quot;Hello&quot;</span></span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> make_it_speak(x):        <span class="co"># 不需要任何共同基类或接口声明</span></span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> x.speak()         <span class="co"># 运行时按 x 的实际类型查方法</span></span>
+<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(make_it_speak(Duck()))     <span class="co"># Quack</span></span>
+<span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(make_it_speak(Person()))   <span class="co"># Hello</span></span></code></pre></div>
+<p>“如果它走起来像鸭子、叫起来像鸭子,那就当它是鸭子”——这就是<strong>鸭子类型(duck
+typing)</strong>。</p>
+<h3 id="底层与-c-对比-6">底层与 C 对比</h3>
 <p>C++ 的多态靠<strong>虚函数表(vtable)</strong>:对象头部藏一个 vptr
 指向 vtable,虚调用是”查表 +
 间接跳转”,且类型在编译期检查——只有声明了共同基类才能多态。</p>
-<p>Python 是<strong>鸭子类型(duck typing)</strong>:调用
-<code>x.speak()</code> 时,解释器根本不关心 <code>x</code>
-是什么类型,只在运行时去 <code>x</code> 的类型里查 <code>speak</code>
-属性,查到就调。“如果它走起来像鸭子、叫起来像鸭子,那就当它是鸭子。”</p>
-<div class="sourceCode" id="cb12"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Duck:</span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> speak(<span class="va">self</span>): <span class="cf">return</span> <span class="st">&quot;Quack&quot;</span></span>
-<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Person:</span>
-<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> speak(<span class="va">self</span>): <span class="cf">return</span> <span class="st">&quot;Hello&quot;</span></span>
-<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> make_it_speak(x):        <span class="co"># 不需要任何共同基类或接口声明</span></span>
-<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> x.speak()         <span class="co"># 运行时按 x 的实际类型查方法</span></span></code></pre></div>
+<p>Python 是鸭子类型:调用 <code>x.speak()</code> 时,解释器根本不关心
+<code>x</code> 是什么类型,只在运行时去 <code>x</code> 的类型里查
+<code>speak</code> 属性,查到就调。</p>
 <p>对照:</p>
 <table>
 <thead>
@@ -426,54 +517,63 @@ class="sourceCode python"><code class="sourceCode python"><span id="cb12-1"><a h
 <hr />
 <h2 id="slots__用固定数组替代-dict">8.
 <code>__slots__</code>:用固定数组替代 dict</h2>
+<h3 id="怎么用-7">怎么用</h3>
 <p>默认的实例 <code>__dict__</code>
 灵活但费内存。若一个类要创建海量实例(如百万个 Point),可以用
 <code>__slots__</code> 声明固定字段集合:</p>
-<div class="sourceCode" id="cb13"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Point:</span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>    <span class="va">__slots__</span> <span class="op">=</span> (<span class="st">&#39;x&#39;</span>, <span class="st">&#39;y&#39;</span>)      <span class="co"># 声明后:不再有 __dict__,字段存在固定槽位</span></span>
-<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, x, y):</span>
-<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.x <span class="op">=</span> x</span>
-<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.y <span class="op">=</span> y</span>
-<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>p <span class="op">=</span> Point(<span class="dv">3</span>, <span class="dv">4</span>)</span>
-<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a><span class="co"># p.z = 5          # AttributeError:不能再动态加属性</span></span>
-<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a><span class="co"># p.__dict__       # AttributeError:没有 __dict__ 了</span></span></code></pre></div>
+<div class="sourceCode" id="cb18"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Point:</span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>    <span class="va">__slots__</span> <span class="op">=</span> (<span class="st">&#39;x&#39;</span>, <span class="st">&#39;y&#39;</span>)      <span class="co"># 声明后:不再有 __dict__,字段存在固定槽位</span></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, x, y):</span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.x <span class="op">=</span> x</span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.y <span class="op">=</span> y</span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>p <span class="op">=</span> Point(<span class="dv">3</span>, <span class="dv">4</span>)</span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a><span class="co"># p.z = 5          # AttributeError:不能再动态加属性</span></span>
+<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a><span class="co"># p.__dict__       # AttributeError:没有 __dict__ 了</span></span></code></pre></div>
+<h3 id="底层与-c-对比-7">底层与 C 对比</h3>
 <p>底层变化:CPython 在类型对象上为每个 slot
 分配一个<strong>固定偏移的槽位</strong>(通过描述符实现),实例不再挂
 dict,而是像 C struct 一样把字段值指针连续存在对象体内:</p>
 <pre><code>带 __dict__ 的实例:  [头][__dict__ ptr] -&gt; {&#39;x&#39;:.., &#39;y&#39;:..}   (额外一个 dict)
 带 __slots__ 的实例:  [头][x ptr][y ptr]                        (字段内联,无 dict)</code></pre>
 <p>用 <code>sys.getsizeof</code> 实测两者内存差(CPython 3.14,64 位):</p>
-<div class="sourceCode" id="cb15"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sys</span>
-<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> WithDict:</span>
-<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, x, y): <span class="va">self</span>.x, <span class="va">self</span>.y <span class="op">=</span> x, y</span>
-<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> WithSlots:</span>
-<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>    <span class="va">__slots__</span> <span class="op">=</span> (<span class="st">&#39;x&#39;</span>, <span class="st">&#39;y&#39;</span>)</span>
-<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, x, y): <span class="va">self</span>.x, <span class="va">self</span>.y <span class="op">=</span> x, y</span>
-<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> WithDict(<span class="dv">1</span>, <span class="dv">2</span>)<span class="op">;</span> b <span class="op">=</span> WithSlots(<span class="dv">1</span>, <span class="dv">2</span>)</span>
-<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.getsizeof(a) <span class="op">+</span> sys.getsizeof(a.__dict__))  <span class="co"># 344  = 实例体 48 + __dict__ 296</span></span>
-<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.getsizeof(b))                              <span class="co"># 48   字段内联,无独立 dict</span></span>
-<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">hasattr</span>(b, <span class="st">&quot;__dict__&quot;</span>))                        <span class="co"># False</span></span></code></pre></div>
+<div class="sourceCode" id="cb20"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sys</span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> WithDict:</span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, x, y): <span class="va">self</span>.x, <span class="va">self</span>.y <span class="op">=</span> x, y</span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> WithSlots:</span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>    <span class="va">__slots__</span> <span class="op">=</span> (<span class="st">&#39;x&#39;</span>, <span class="st">&#39;y&#39;</span>)</span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, x, y): <span class="va">self</span>.x, <span class="va">self</span>.y <span class="op">=</span> x, y</span>
+<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> WithDict(<span class="dv">1</span>, <span class="dv">2</span>)<span class="op">;</span> b <span class="op">=</span> WithSlots(<span class="dv">1</span>, <span class="dv">2</span>)</span>
+<span id="cb20-9"><a href="#cb20-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.getsizeof(a) <span class="op">+</span> sys.getsizeof(a.__dict__))  <span class="co"># 344  = 实例体 48 + __dict__ 296</span></span>
+<span id="cb20-10"><a href="#cb20-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.getsizeof(b))                              <span class="co"># 48   字段内联,无独立 dict</span></span>
+<span id="cb20-11"><a href="#cb20-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">hasattr</span>(b, <span class="st">&quot;__dict__&quot;</span>))                        <span class="co"># False</span></span></code></pre></div>
 <p>收益:每个实例省掉一个 dict(几十到上百字节),访问变成固定偏移(接近 C++
 字段访问,快)。代价:失去动态增删属性、失去
 <code>__dict__</code>、多继承时 slots 有限制。这是 Python
 对象模型里最接近 C struct 内存布局的写法。</p>
 <hr />
 <h2 id="魔术方法与运算符重载">9. 魔术方法与运算符重载</h2>
+<h3 id="怎么用-8">怎么用</h3>
 <p>“魔术方法”(dunder
-methods,双下划线)是解释器在特定语法/操作时回调的钩子。它们让你的对象融入语言的运算符、内置函数、协议。</p>
-<div class="sourceCode" id="cb16"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Vec:</span>
-<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, x, y): <span class="va">self</span>.x, <span class="va">self</span>.y <span class="op">=</span> x, y</span>
-<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__repr__</span>(<span class="va">self</span>):  <span class="cf">return</span> <span class="ss">f&quot;Vec(</span><span class="sc">{</span><span class="va">self</span><span class="sc">.</span>x<span class="sc">}</span><span class="ss">, </span><span class="sc">{</span><span class="va">self</span><span class="sc">.</span>y<span class="sc">}</span><span class="ss">)&quot;</span>   <span class="co"># repr()/交互式显示</span></span>
-<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__add__</span>(<span class="va">self</span>, o): <span class="cf">return</span> Vec(<span class="va">self</span>.x<span class="op">+</span>o.x, <span class="va">self</span>.y<span class="op">+</span>o.y) <span class="co"># 支持 v1 + v2</span></span>
-<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__eq__</span>(<span class="va">self</span>, o):  <span class="cf">return</span> (<span class="va">self</span>.x, <span class="va">self</span>.y) <span class="op">==</span> (o.x, o.y)</span>
-<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__len__</span>(<span class="va">self</span>):    <span class="cf">return</span> <span class="dv">2</span>                            <span class="co"># 支持 len(v)</span></span>
-<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__getitem__</span>(<span class="va">self</span>, i): <span class="cf">return</span> (<span class="va">self</span>.x, <span class="va">self</span>.y)[i]     <span class="co"># 支持 v[0]、迭代</span></span>
-<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__hash__</span>(<span class="va">self</span>):   <span class="cf">return</span> <span class="bu">hash</span>((<span class="va">self</span>.x, <span class="va">self</span>.y))      <span class="co"># 可放进 set/dict key</span></span></code></pre></div>
+methods,双下划线)是解释器在特定语法/操作时回调的钩子。定义了它们,你的对象就能用
+<code>+</code>、<code>==</code>、<code>len()</code>、<code>print()</code>
+这些内置语法:</p>
+<div class="sourceCode" id="cb21"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Vec:</span>
+<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, x, y): <span class="va">self</span>.x, <span class="va">self</span>.y <span class="op">=</span> x, y</span>
+<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__repr__</span>(<span class="va">self</span>):  <span class="cf">return</span> <span class="ss">f&quot;Vec(</span><span class="sc">{</span><span class="va">self</span><span class="sc">.</span>x<span class="sc">}</span><span class="ss">, </span><span class="sc">{</span><span class="va">self</span><span class="sc">.</span>y<span class="sc">}</span><span class="ss">)&quot;</span>   <span class="co"># repr()/交互式显示</span></span>
+<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__add__</span>(<span class="va">self</span>, o): <span class="cf">return</span> Vec(<span class="va">self</span>.x<span class="op">+</span>o.x, <span class="va">self</span>.y<span class="op">+</span>o.y) <span class="co"># 支持 v1 + v2</span></span>
+<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__eq__</span>(<span class="va">self</span>, o):  <span class="cf">return</span> (<span class="va">self</span>.x, <span class="va">self</span>.y) <span class="op">==</span> (o.x, o.y)</span>
+<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-7"><a href="#cb21-7" aria-hidden="true" tabindex="-1"></a>v1 <span class="op">=</span> Vec(<span class="dv">1</span>, <span class="dv">2</span>)</span>
+<span id="cb21-8"><a href="#cb21-8" aria-hidden="true" tabindex="-1"></a>v2 <span class="op">=</span> Vec(<span class="dv">3</span>, <span class="dv">4</span>)</span>
+<span id="cb21-9"><a href="#cb21-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(v1 <span class="op">+</span> v2)          <span class="co"># Vec(4, 6)   —— 触发 __add__</span></span>
+<span id="cb21-10"><a href="#cb21-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(v1 <span class="op">==</span> Vec(<span class="dv">1</span>, <span class="dv">2</span>))  <span class="co"># True        —— 触发 __eq__</span></span>
+<span id="cb21-11"><a href="#cb21-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(v1)                <span class="co"># Vec(1, 2)  —— 触发 __repr__</span></span></code></pre></div>
+<h3 id="底层与-c-对比-8">底层与 C 对比</h3>
 <p>常见魔术方法:</p>
 <table>
 <thead>
@@ -532,24 +632,29 @@ class="sourceCode python"><code class="sourceCode python"><span id="cb16-1"><a h
 </tbody>
 </table>
 <p>运算符重载的能力和 C++
-相当,但<strong>全在运行时通过查方法完成</strong>,没有编译期重载决议。</p>
+相当,但<strong>全在运行时通过查方法完成</strong>,没有编译期重载决议:<code>v1 + v2</code>
+本质是解释器发现 <code>+</code> 号,去 <code>type(v1)</code> 里查
+<code>__add__</code> 并调用——和第 4
+节方法调用是同一套查找机制,没有额外魔法。</p>
 <hr />
 <h2 id="抽象基类abc">10. 抽象基类(<code>abc</code>)</h2>
-<p>鸭子类型灵活,但有时你想强制”子类必须实现某些方法”,或想做
-<code>isinstance</code> 归类。<code>abc</code> 模块提供抽象基类:</p>
-<div class="sourceCode" id="cb17"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> abc <span class="im">import</span> ABC, abstractmethod</span>
-<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Shape(ABC):</span>
-<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">@abstractmethod</span></span>
-<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> area(<span class="va">self</span>) <span class="op">-&gt;</span> <span class="bu">float</span>: ...    <span class="co"># 抽象方法,子类必须实现</span></span>
-<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Square(Shape):</span>
-<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, s): <span class="va">self</span>.s <span class="op">=</span> s</span>
-<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> area(<span class="va">self</span>): <span class="cf">return</span> <span class="va">self</span>.s <span class="op">*</span> <span class="va">self</span>.s</span>
-<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a><span class="co"># Shape()      # TypeError:不能实例化含未实现抽象方法的类</span></span>
-<span id="cb17-12"><a href="#cb17-12" aria-hidden="true" tabindex="-1"></a>Square(<span class="dv">3</span>)      <span class="co"># OK</span></span></code></pre></div>
+<h3 id="怎么用-9">怎么用</h3>
+<p>鸭子类型灵活,但有时你想强制”子类必须实现某些方法”。<code>abc</code>
+模块提供抽象基类:</p>
+<div class="sourceCode" id="cb22"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> abc <span class="im">import</span> ABC, abstractmethod</span>
+<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Shape(ABC):</span>
+<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">@abstractmethod</span></span>
+<span id="cb22-5"><a href="#cb22-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> area(<span class="va">self</span>) <span class="op">-&gt;</span> <span class="bu">float</span>: ...    <span class="co"># 抽象方法,子类必须实现</span></span>
+<span id="cb22-6"><a href="#cb22-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-7"><a href="#cb22-7" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Square(Shape):</span>
+<span id="cb22-8"><a href="#cb22-8" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, s): <span class="va">self</span>.s <span class="op">=</span> s</span>
+<span id="cb22-9"><a href="#cb22-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> area(<span class="va">self</span>): <span class="cf">return</span> <span class="va">self</span>.s <span class="op">*</span> <span class="va">self</span>.s</span>
+<span id="cb22-10"><a href="#cb22-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-11"><a href="#cb22-11" aria-hidden="true" tabindex="-1"></a><span class="co"># Shape()      # TypeError:不能实例化含未实现抽象方法的类</span></span>
+<span id="cb22-12"><a href="#cb22-12" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(Square(<span class="dv">3</span>).area())   <span class="co"># 9</span></span></code></pre></div>
+<h3 id="底层与-c-对比-9">底层与 C 对比</h3>
 <ul>
 <li>类似 C++ 的纯虚函数(<code>virtual void area() = 0;</code>)+
 抽象类不可实例化。</li>
@@ -565,14 +670,22 @@ class="sourceCode python"><code class="sourceCode python"><span id="cb17-1"><a h
 <hr />
 <h2 id="小结">小结</h2>
 <ul>
-<li>实例属性默认存 <code>__dict__</code>,访问是字典查找,不是 C++
-的固定偏移;<code>__slots__</code> 可换回接近 struct 的固定槽位。</li>
-<li>类是运行时对象,<code>type</code> 是默认元类。</li>
-<li>属性查找:数据描述符 → 实例 dict → MRO(C3 线性化)。</li>
-<li>方法是函数 + 描述符协议,<code>self</code>/绑定方法由
-<code>__get__</code> 在运行时产生。</li>
-<li>多态靠运行时查方法(鸭子类型),而非编译期 vtable;要接口约束用
-<code>abc</code>/<code>Protocol</code>。</li>
+<li><strong>用法层面</strong>:<code>class</code> + <code>__init__</code>
++ <code>self</code>
+定义类和实例属性;子类括号里写父类即可继承,覆盖同名方法即可多态;<code>super().__init__()</code>
+调父类构造;<code>@property</code>/<code>@staticmethod</code>/<code>@classmethod</code>
+分别做计算属性、无绑定方法、类级构造;定义
+<code>__add__</code>/<code>__eq__</code>/<code>__repr__</code>
+等魔术方法让对象支持内置运算符;<code>abc.abstractmethod</code>
+强制子类实现接口。</li>
+<li><strong>底层层面</strong>:实例属性默认存
+<code>__dict__</code>,访问是字典查找,不是 C++
+的固定偏移;<code>__slots__</code> 可换回接近 struct
+的固定槽位。类是运行时对象,<code>type</code>
+是默认元类。属性查找顺序:数据描述符 → 实例 dict → MRO(C3
+线性化)。方法是函数 + 描述符协议,<code>self</code>/绑定方法由
+<code>__get__</code>
+在运行时产生。多态靠运行时查方法(鸭子类型),而非编译期 vtable。</li>
 </ul>
 <p>下一章我们看异常对象、<code>with</code>/RAII 对照,以及引用计数 + 分代
 GC 的内存管理。</p>
