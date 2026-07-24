@@ -106,6 +106,14 @@ b</title>
 id="toc-variables-and-the-memory-model-what-really-happens-in-a-b">Variables
 and the Memory Model: What Really Happens in <code>a = b</code> ⭐</a>
 <ul>
+<li><a href="#get-it-running-first-how-to-declare-and-assign"
+id="toc-get-it-running-first-how-to-declare-and-assign">Get It Running
+First: How to Declare and Assign</a></li>
+<li><a
+href="#going-deeper-primitives-vs.-referenceswhat-exactly-does-a-b-copy"
+id="toc-going-deeper-primitives-vs.-referenceswhat-exactly-does-a-b-copy">Going
+Deeper: Primitives vs. References—What Exactly Does <code>a = b</code>
+Copy</a></li>
 <li><a href="#the-two-camps" id="toc-the-two-camps">1. The Two
 Camps</a></li>
 <li><a href="#local-variable-table-slots-where-variables-live"
@@ -127,21 +135,69 @@ Fields</a></li>
 href="#escape-analysis-language-semantics-vs.-hotspot-implementation"
 id="toc-escape-analysis-language-semantics-vs.-hotspot-implementation">8.
 Escape Analysis: Language Semantics vs. HotSpot Implementation</a></li>
-<li><a href="#summary-be-sure-to-internalize"
-id="toc-summary-be-sure-to-internalize">Summary (be sure to
-internalize)</a></li>
+<li><a href="#summary-be-sure-to-internalize-this"
+id="toc-summary-be-sure-to-internalize-this">Summary (Be Sure to
+Internalize This)</a></li>
 </ul></li>
 </ul>
 </nav>
 <h1
 id="variables-and-the-memory-model-what-really-happens-in-a-b">Variables
 and the Memory Model: What Really Happens in <code>a = b</code> ⭐</h1>
-<p>This is the most important chapter in the book. If you only read one
-chapter, read this one. When C/C++ programmers switch to Java, almost
-every “weird bug” stems from misunderstanding what actually happens in
-memory during <strong>assignment, comparison, and parameter
-passing</strong>. This chapter makes it completely clear.</p>
-<p>Let’s state the core conclusion up front, then argue it point by
+<p>This is the most important chapter in the book. It starts with the
+basics—how you <strong>declare and assign</strong> a variable in Java,
+which is much like any other language you’ve used and needs no memory
+background at all. Only after that do we get to the chapter’s real core:
+when C/C++ programmers switch to Java, almost every “weird bug” stems
+from misunderstanding what actually happens in memory during
+<strong>assignment, comparison, and parameter passing</strong>—and that
+part requires thoroughly explaining stack frames, the heap, and object
+headers. If you just want to write code, the first section is enough; if
+you want to understand the “spooky action” of “I changed one variable
+and another one changed too,” read the whole chapter.</p>
+<hr />
+<h2 id="get-it-running-first-how-to-declare-and-assign">Get It Running
+First: How to Declare and Assign</h2>
+<p>Declaring a variable in Java is <code>Type name = value;</code>,
+almost identical to C:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> VarDemo <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>        <span class="co">// primitive types: the variable directly holds the value</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span> age <span class="op">=</span> <span class="dv">20</span><span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>        <span class="dt">double</span> price <span class="op">=</span> <span class="fl">9.9</span><span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>        <span class="co">// reference types: the variable holds a &quot;reference to an object&quot;</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>        <span class="bu">String</span> name <span class="op">=</span> <span class="st">&quot;Ada&quot;</span><span class="op">;</span>              <span class="co">// a String object</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span><span class="op">[]</span> nums <span class="op">=</span> <span class="kw">new</span> <span class="dt">int</span><span class="op">[]{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">};</span>  <span class="co">// an array object</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>age<span class="op">);</span>    <span class="co">// 20</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>price<span class="op">);</span>  <span class="co">// 9.9</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>name<span class="op">);</span>   <span class="co">// Ada</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>nums<span class="op">[</span><span class="dv">0</span><span class="op">]);</span><span class="co">// 1</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>        <span class="co">// assignment: copy the value/reference on the right of = into the variable on the left</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span> age2 <span class="op">=</span> age<span class="op">;</span>      <span class="co">// copies the number</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>        age2 <span class="op">=</span> <span class="dv">99</span><span class="op">;</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>age<span class="op">);</span>     <span class="co">// 20, unaffected</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span><span class="op">[]</span> nums2 <span class="op">=</span> nums<span class="op">;</span>  <span class="co">// copies the &quot;reference&quot;</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>        nums2<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="dv">100</span><span class="op">;</span></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>nums<span class="op">[</span><span class="dv">0</span><span class="op">]);</span> <span class="co">// 100! both variables point to the same array</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Notice the difference between the last two assignments: changing
+<code>age2</code> does not affect <code>age</code>, but changing
+<code>nums2[0]</code> also changes <code>nums[0]</code>. This is not a
+coincidence, and not a bug—it is exactly the core mechanism the rest of
+this chapter is about to explain thoroughly.</p>
+<hr />
+<h2
+id="going-deeper-primitives-vs.-referenceswhat-exactly-does-a-b-copy">Going
+Deeper: Primitives vs. References—What Exactly Does <code>a = b</code>
+Copy</h2>
+<p>From here on, we stop being satisfied with “it works” and dig into
+“why.” Let’s state the core conclusion up front, then argue it point by
 point:</p>
 <blockquote>
 <p>Java variables fall into <strong>two camps</strong>: a
@@ -224,11 +280,11 @@ end of the chapter).</p>
 Core</h2>
 <h3 id="primitive-types-copy-the-value">3.1 Primitive Types: Copy the
 Value</h3>
-<div class="sourceCode" id="cb1"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> b <span class="op">=</span> <span class="dv">100</span><span class="op">;</span></span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> a <span class="op">=</span> b<span class="op">;</span>   <span class="co">// copy b&#39;s bits (100) into a&#39;s slot</span></span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> <span class="dv">200</span><span class="op">;</span>     <span class="co">// changes only a&#39;s own slot, no effect on b</span></span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="co">// at this moment a=200, b=100</span></span></code></pre></div>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> b <span class="op">=</span> <span class="dv">100</span><span class="op">;</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> a <span class="op">=</span> b<span class="op">;</span>   <span class="co">// copy b&#39;s bits (100) into a&#39;s slot</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> <span class="dv">200</span><span class="op">;</span>     <span class="co">// changes only a&#39;s own slot, no effect on b</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="co">// at this moment a=200, b=100</span></span></code></pre></div>
 <p>Memory diagram (stack-frame local variable table):</p>
 <pre><code> before assignment    after a = b          after a = 200
 ┌──────────┐       ┌──────────┐        ┌──────────┐
@@ -242,11 +298,11 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb1-1"><a href="
 id="reference-types-copy-the-reference-copying-the-pointer-not-the-object">3.2
 Reference Types: Copy the Reference (copying the pointer, not the
 object!)</h3>
-<div class="sourceCode" id="cb3"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span><span class="op">[]</span> b <span class="op">=</span> <span class="kw">new</span> <span class="dt">int</span><span class="op">[]{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">};</span>  <span class="co">// create the array object on the heap, b holds the reference to it</span></span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span><span class="op">[]</span> a <span class="op">=</span> b<span class="op">;</span>                    <span class="co">// copy the &quot;reference value&quot;! a and b point to the same array</span></span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>a<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="dv">99</span><span class="op">;</span>                      <span class="co">// modify the heap object through a</span></span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>b<span class="op">[</span><span class="dv">0</span><span class="op">]);</span>       <span class="co">// prints 99! because b points to the same object</span></span></code></pre></div>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span><span class="op">[]</span> b <span class="op">=</span> <span class="kw">new</span> <span class="dt">int</span><span class="op">[]{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">};</span>  <span class="co">// create the array object on the heap, b holds the reference to it</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span><span class="op">[]</span> a <span class="op">=</span> b<span class="op">;</span>                    <span class="co">// copy the &quot;reference value&quot;! a and b point to the same array</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>a<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="dv">99</span><span class="op">;</span>                      <span class="co">// modify the heap object through a</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>b<span class="op">[</span><span class="dv">0</span><span class="op">]);</span>       <span class="co">// prints 99! because b points to the same object</span></span></code></pre></div>
 <p><strong>This is the intuition a C programmer most needs to
 build</strong>: <code>int[] a = b;</code> does not copy the array, it
 copies the pointer. It is equivalent to C’s <code>int* a = b;</code> (a
@@ -278,28 +334,28 @@ Copy</h3>
 <p>Java does not deep-copy automatically (there is no C++ copy
 constructor triggered on assignment). To get an independent copy you
 must do it explicitly:</p>
-<div class="sourceCode" id="cb6"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span><span class="op">[]</span> a <span class="op">=</span> b<span class="op">.</span><span class="fu">clone</span><span class="op">();</span>               <span class="co">// array shallow copy, yields a new object</span></span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span><span class="op">[]</span> a2 <span class="op">=</span> <span class="bu">Arrays</span><span class="op">.</span><span class="fu">copyOf</span><span class="op">(</span>b<span class="op">,</span> b<span class="op">.</span><span class="fu">length</span><span class="op">);</span></span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="bu">List</span><span class="op">&lt;</span>T<span class="op">&gt;</span> copy <span class="op">=</span> <span class="kw">new</span> <span class="bu">ArrayList</span><span class="op">&lt;&gt;(</span>src<span class="op">);</span>  <span class="co">// a collection&#39;s copy constructor</span></span></code></pre></div>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span><span class="op">[]</span> a <span class="op">=</span> b<span class="op">.</span><span class="fu">clone</span><span class="op">();</span>               <span class="co">// array shallow copy, yields a new object</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span><span class="op">[]</span> a2 <span class="op">=</span> <span class="bu">Arrays</span><span class="op">.</span><span class="fu">copyOf</span><span class="op">(</span>b<span class="op">,</span> b<span class="op">.</span><span class="fu">length</span><span class="op">);</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="bu">List</span><span class="op">&lt;</span>T<span class="op">&gt;</span> copy <span class="op">=</span> <span class="kw">new</span> <span class="bu">ArrayList</span><span class="op">&lt;&gt;(</span>src<span class="op">);</span>  <span class="co">// a collection&#39;s copy constructor</span></span></code></pre></div>
 <p>Note that these are mostly <strong>shallow copies</strong>: the
 container/array itself is new, but if it holds references, the element
 references still share the same set of objects. A deep copy requires you
 to duplicate layer by layer.</p>
 <p>Testing that word “shallow”—a 2D array’s <code>clone()</code> copies
 only the outer references, while the inner arrays stay shared:</p>
-<div class="sourceCode" id="cb7"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span><span class="op">[][]</span> grid <span class="op">=</span> <span class="op">{{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">},</span> <span class="op">{</span><span class="dv">3</span><span class="op">,</span> <span class="dv">4</span><span class="op">}};</span></span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span><span class="op">[][]</span> copy <span class="op">=</span> grid<span class="op">.</span><span class="fu">clone</span><span class="op">();</span>   <span class="co">// clone() is SHALLOW: copies the outer refs only</span></span>
-<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>copy<span class="op">[</span><span class="dv">0</span><span class="op">][</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="dv">99</span><span class="op">;</span>               <span class="co">// reaches through the shared inner array</span></span>
-<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>grid<span class="op">[</span><span class="dv">0</span><span class="op">][</span><span class="dv">0</span><span class="op">]);</span>          <span class="co">// 99  &lt;- original changed too!</span></span>
-<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>copy<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">==</span> grid<span class="op">[</span><span class="dv">0</span><span class="op">]);</span>  <span class="co">// true -- same inner array object</span></span>
-<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a><span class="co">// a real deep copy must duplicate each inner array</span></span>
-<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span><span class="op">[][]</span> deep <span class="op">=</span> <span class="kw">new</span> <span class="dt">int</span><span class="op">[</span>grid<span class="op">.</span><span class="fu">length</span><span class="op">][];</span></span>
-<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> grid<span class="op">.</span><span class="fu">length</span><span class="op">;</span> i<span class="op">++)</span> deep<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> grid<span class="op">[</span>i<span class="op">].</span><span class="fu">clone</span><span class="op">();</span></span>
-<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>deep<span class="op">[</span><span class="dv">1</span><span class="op">][</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="op">-</span><span class="dv">1</span><span class="op">;</span></span>
-<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>grid<span class="op">[</span><span class="dv">1</span><span class="op">][</span><span class="dv">0</span><span class="op">]);</span>          <span class="co">// 3   &lt;- original safe now</span></span></code></pre></div>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span><span class="op">[][]</span> grid <span class="op">=</span> <span class="op">{{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">},</span> <span class="op">{</span><span class="dv">3</span><span class="op">,</span> <span class="dv">4</span><span class="op">}};</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span><span class="op">[][]</span> copy <span class="op">=</span> grid<span class="op">.</span><span class="fu">clone</span><span class="op">();</span>   <span class="co">// clone() is SHALLOW: copies the outer refs only</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>copy<span class="op">[</span><span class="dv">0</span><span class="op">][</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="dv">99</span><span class="op">;</span>               <span class="co">// reaches through the shared inner array</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>grid<span class="op">[</span><span class="dv">0</span><span class="op">][</span><span class="dv">0</span><span class="op">]);</span>          <span class="co">// 99  &lt;- original changed too!</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>copy<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">==</span> grid<span class="op">[</span><span class="dv">0</span><span class="op">]);</span>  <span class="co">// true -- same inner array object</span></span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a><span class="co">// a real deep copy must duplicate each inner array</span></span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span><span class="op">[][]</span> deep <span class="op">=</span> <span class="kw">new</span> <span class="dt">int</span><span class="op">[</span>grid<span class="op">.</span><span class="fu">length</span><span class="op">][];</span></span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> grid<span class="op">.</span><span class="fu">length</span><span class="op">;</span> i<span class="op">++)</span> deep<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> grid<span class="op">[</span>i<span class="op">].</span><span class="fu">clone</span><span class="op">();</span></span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>deep<span class="op">[</span><span class="dv">1</span><span class="op">][</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="op">-</span><span class="dv">1</span><span class="op">;</span></span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>grid<span class="op">[</span><span class="dv">1</span><span class="op">][</span><span class="dv">0</span><span class="op">]);</span>          <span class="co">// 3   &lt;- original safe now</span></span></code></pre></div>
 <h2 id="vs-equals">4. <code>==</code> vs <code>equals</code></h2>
 <p>Once you understand the two camps, this classic trap follows
 naturally.</p>
@@ -312,11 +368,11 @@ naturally.</p>
 the same heap object” (whether the address is the same),
 <strong>regardless of content</strong>.</li>
 </ul>
-<div class="sourceCode" id="cb8"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> x <span class="op">=</span> <span class="kw">new</span> <span class="bu">String</span><span class="op">(</span><span class="st">&quot;hi&quot;</span><span class="op">);</span></span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> y <span class="op">=</span> <span class="kw">new</span> <span class="bu">String</span><span class="op">(</span><span class="st">&quot;hi&quot;</span><span class="op">);</span></span>
-<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>x <span class="op">==</span> y<span class="op">);</span>        <span class="co">// false! two different heap objects, two different pointers</span></span>
-<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>x<span class="op">.</span><span class="fu">equals</span><span class="op">(</span>y<span class="op">));</span>   <span class="co">// true! compares content</span></span></code></pre></div>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> x <span class="op">=</span> <span class="kw">new</span> <span class="bu">String</span><span class="op">(</span><span class="st">&quot;hi&quot;</span><span class="op">);</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> y <span class="op">=</span> <span class="kw">new</span> <span class="bu">String</span><span class="op">(</span><span class="st">&quot;hi&quot;</span><span class="op">);</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>x <span class="op">==</span> y<span class="op">);</span>        <span class="co">// false! two different heap objects, two different pointers</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>x<span class="op">.</span><span class="fu">equals</span><span class="op">(</span>y<span class="op">));</span>   <span class="co">// true! compares content</span></span></code></pre></div>
 <p>Memory diagram:</p>
 <pre><code> ┌───────┐        Heap
  │ x │●──┼──▶[ String &quot;hi&quot; object① ]
@@ -339,14 +395,14 @@ literal reuses one pooled object, whereas <code>new String(...)</code>
 forces a fresh object. This throws the difference between
 <code>==</code> (compares references) and <code>equals</code> (compares
 content) into sharp relief:</p>
-<div class="sourceCode" id="cb10"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> p <span class="op">=</span> <span class="st">&quot;hi&quot;</span><span class="op">;</span></span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> q <span class="op">=</span> <span class="st">&quot;hi&quot;</span><span class="op">;</span>              <span class="co">// same literal -&gt; same pooled object</span></span>
-<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> n <span class="op">=</span> <span class="kw">new</span> <span class="bu">String</span><span class="op">(</span><span class="st">&quot;hi&quot;</span><span class="op">);</span>  <span class="co">// new FORCES a fresh heap object</span></span>
-<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>p <span class="op">==</span> q<span class="op">);</span>         <span class="co">// true  -- both point to the pooled object</span></span>
-<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>p <span class="op">==</span> n<span class="op">);</span>         <span class="co">// false -- n is a distinct object</span></span>
-<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>p <span class="op">==</span> n<span class="op">.</span><span class="fu">intern</span><span class="op">());</span><span class="co">// true  -- intern() returns the pooled one</span></span>
-<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>p<span class="op">.</span><span class="fu">equals</span><span class="op">(</span>n<span class="op">));</span>    <span class="co">// true  -- content is equal regardless</span></span></code></pre></div>
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> p <span class="op">=</span> <span class="st">&quot;hi&quot;</span><span class="op">;</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> q <span class="op">=</span> <span class="st">&quot;hi&quot;</span><span class="op">;</span>              <span class="co">// same literal -&gt; same pooled object</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> n <span class="op">=</span> <span class="kw">new</span> <span class="bu">String</span><span class="op">(</span><span class="st">&quot;hi&quot;</span><span class="op">);</span>  <span class="co">// new FORCES a fresh heap object</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>p <span class="op">==</span> q<span class="op">);</span>         <span class="co">// true  -- both point to the pooled object</span></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>p <span class="op">==</span> n<span class="op">);</span>         <span class="co">// false -- n is a distinct object</span></span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>p <span class="op">==</span> n<span class="op">.</span><span class="fu">intern</span><span class="op">());</span><span class="co">// true  -- intern() returns the pooled one</span></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>p<span class="op">.</span><span class="fu">equals</span><span class="op">(</span>n<span class="op">));</span>    <span class="co">// true  -- content is equal regardless</span></span></code></pre></div>
 <blockquote>
 <p>Paired with <code>equals</code> there is also <code>hashCode</code>:
 the contract is “if equals is true, hashCode must be equal,” otherwise
@@ -357,11 +413,11 @@ In C++ you provide <code>operator==</code> and <code>hash</code> for
 </blockquote>
 <h3 id="a-counterintuitive-pitfall-the-wrapper-class-cache">A
 Counterintuitive Pitfall: the Wrapper-Class Cache</h3>
-<div class="sourceCode" id="cb11"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="bu">Integer</span> a <span class="op">=</span> <span class="dv">100</span><span class="op">,</span> b <span class="op">=</span> <span class="dv">100</span><span class="op">;</span></span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>a <span class="op">==</span> b<span class="op">);</span>   <span class="co">// true  —— 100 is in the cache range</span></span>
-<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="bu">Integer</span> c <span class="op">=</span> <span class="dv">200</span><span class="op">,</span> d <span class="op">=</span> <span class="dv">200</span><span class="op">;</span></span>
-<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>c <span class="op">==</span> d<span class="op">);</span>   <span class="co">// false —— 200 is beyond the cache, they are two objects</span></span></code></pre></div>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="bu">Integer</span> a <span class="op">=</span> <span class="dv">100</span><span class="op">,</span> b <span class="op">=</span> <span class="dv">100</span><span class="op">;</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>a <span class="op">==</span> b<span class="op">);</span>   <span class="co">// true  —— 100 is in the cache range</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="bu">Integer</span> c <span class="op">=</span> <span class="dv">200</span><span class="op">,</span> d <span class="op">=</span> <span class="dv">200</span><span class="op">;</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>c <span class="op">==</span> d<span class="op">);</span>   <span class="co">// false —— 200 is beyond the cache, they are two objects</span></span></code></pre></div>
 <p><code>Integer</code> caches objects for <code>[-128, 127]</code>,
 reusing the same object on boxing, so <code>==</code> happens to be
 true; beyond that range a new object is created, and <code>==</code> is
@@ -373,9 +429,9 @@ href="04-数据类型.html">Data Types</a>.</p>
 <p><code>null</code> is the “null reference” of reference types,
 equivalent to C’s null pointer <code>nullptr</code>—the variable points
 to no object.</p>
-<div class="sourceCode" id="cb12"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> s <span class="op">=</span> <span class="kw">null</span><span class="op">;</span>         <span class="co">// s&#39;s slot holds the &quot;null reference&quot; value</span></span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>s<span class="op">.</span><span class="fu">length</span><span class="op">();</span>              <span class="co">// NullPointerException! &quot;dereferencing&quot; a null reference</span></span></code></pre></div>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> s <span class="op">=</span> <span class="kw">null</span><span class="op">;</span>         <span class="co">// s&#39;s slot holds the &quot;null reference&quot; value</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>s<span class="op">.</span><span class="fu">length</span><span class="op">();</span>              <span class="co">// NullPointerException! &quot;dereferencing&quot; a null reference</span></span></code></pre></div>
 <p>The difference from C: dereferencing a null pointer in C is undefined
 behavior (most likely a segfault); in Java it <strong>deterministically
 throws a <code>NullPointerException</code> (NPE)</strong>, which can be
@@ -393,13 +449,13 @@ Semantics</h2>
 <strong><code>final</code> constrains whether the variable’s slot can be
 reassigned, not whether the object it points to can be
 modified.</strong></p>
-<div class="sourceCode" id="cb13"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="dt">final</span> <span class="dt">int</span> x <span class="op">=</span> <span class="dv">10</span><span class="op">;</span></span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="co">// x = 20;                 // compile error: cannot reassign</span></span>
-<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a><span class="dt">final</span> <span class="dt">int</span><span class="op">[]</span> arr <span class="op">=</span> <span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">};</span></span>
-<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>arr<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="dv">99</span><span class="op">;</span>               <span class="co">// legal! modifies the heap object&#39;s content, not the arr reference</span></span>
-<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a><span class="co">// arr = new int[5];       // compile error: cannot make arr point to a different object</span></span></code></pre></div>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="dt">final</span> <span class="dt">int</span> x <span class="op">=</span> <span class="dv">10</span><span class="op">;</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="co">// x = 20;                 // compile error: cannot reassign</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a><span class="dt">final</span> <span class="dt">int</span><span class="op">[]</span> arr <span class="op">=</span> <span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">};</span></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>arr<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="dv">99</span><span class="op">;</span>               <span class="co">// legal! modifies the heap object&#39;s content, not the arr reference</span></span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a><span class="co">// arr = new int[5];       // compile error: cannot make arr point to a different object</span></span></code></pre></div>
 <p>Understanding via the memory diagram: <code>final</code> locks the
 slot on the left (cannot change what it points to), but cannot lock the
 object’s content on the heap on the right.</p>
@@ -427,11 +483,11 @@ Fields</h2>
 <p>The above covers local variables (in stack-frame slots). <strong>An
 object’s fields</strong> follow the same two-camp rules, only their
 storage location is <strong>inside the object on the heap</strong>:</p>
-<div class="sourceCode" id="cb15"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> <span class="bu">Node</span> <span class="op">{</span></span>
-<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> value<span class="op">;</span>      <span class="co">// primitive field: the value is inlined directly in the Node object&#39;s memory</span></span>
-<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>    <span class="bu">Node</span> next<span class="op">;</span>      <span class="co">// reference field: holds a reference to another Node on the heap (or null)</span></span>
-<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb16"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> <span class="bu">Node</span> <span class="op">{</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> value<span class="op">;</span>      <span class="co">// primitive field: the value is inlined directly in the Node object&#39;s memory</span></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>    <span class="bu">Node</span> next<span class="op">;</span>      <span class="co">// reference field: holds a reference to another Node on the heap (or null)</span></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>Memory diagram (a <code>Node</code> object on the heap):</p>
 <pre><code>The Node object on the heap
 ┌─────────────────────────┐
@@ -455,12 +511,12 @@ Escape Analysis: Language Semantics vs. HotSpot Implementation</h2>
 the object into a few primitive values placed directly in stack-frame
 slots or even registers, <strong>never entering the heap and needing no
 GC</strong>.</p>
-<div class="sourceCode" id="cb17"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> <span class="fu">distance</span><span class="op">()</span> <span class="op">{</span></span>
-<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">var</span> p <span class="op">=</span> <span class="kw">new</span> <span class="bu">Point</span><span class="op">(</span><span class="dv">3</span><span class="op">,</span> <span class="dv">4</span><span class="op">);</span>   <span class="co">// p does not escape this method</span></span>
-<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> p<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> p<span class="op">.</span><span class="fu">x</span> <span class="op">+</span> p<span class="op">.</span><span class="fu">y</span> <span class="op">*</span> p<span class="op">.</span><span class="fu">y</span><span class="op">;</span></span>
-<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">// after HotSpot optimization: there may be no new at all, x and y become two stack local variables</span></span>
-<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb18"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> <span class="fu">distance</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">var</span> p <span class="op">=</span> <span class="kw">new</span> <span class="bu">Point</span><span class="op">(</span><span class="dv">3</span><span class="op">,</span> <span class="dv">4</span><span class="op">);</span>   <span class="co">// p does not escape this method</span></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> p<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> p<span class="op">.</span><span class="fu">x</span> <span class="op">+</span> p<span class="op">.</span><span class="fu">y</span> <span class="op">*</span> p<span class="op">.</span><span class="fu">y</span><span class="op">;</span></span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">// after HotSpot optimization: there may be no new at all, x and y become two stack local variables</span></span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>So the precise statement is: - <strong>At the semantic
 level</strong>: a reference-type object logically lives on the heap,
 assignment copies the reference, and aliasing holds. - <strong>At the
@@ -472,8 +528,16 @@ this is <strong>semantically transparent</strong> to the code you write;
 you need not, and cannot, directly control it.</p>
 <p>This explains why creating lots of short-lived small objects in Java
 is often not as slow as you’d imagine.</p>
-<h2 id="summary-be-sure-to-internalize">Summary (be sure to
-internalize)</h2>
+<h2 id="summary-be-sure-to-internalize-this">Summary (Be Sure to
+Internalize This)</h2>
+<ul>
+<li><strong>At the usage level</strong>: declare a variable with
+<code>Type name = value;</code>; assignment <code>a = b</code> is just
+this syntax copied over—but always remember the comparison experiment in
+“Get It Running First”: changing a copy of a primitive doesn’t affect
+the original variable, while changing the content of the object a
+reference copy points to, the original variable sees the change.</li>
+<li><strong>At the implementation level</strong>:
 <ol type="1">
 <li>The two camps of variables: <strong>primitives hold values,
 reference types hold pointers (reference values)</strong>.</li>
@@ -499,7 +563,8 @@ the references are managed and reclaimed by GC.</li>
 replacement</strong> on non-escaping objects (breaking them into scalars
 placed in stack-frame slots/registers, rather than whole-object stack
 allocation), but this is semantically transparent.</li>
-</ol>
+</ol></li>
+</ul>
 <p>Take this model into <a href="04-数据类型.html">the next chapter’s
 object memory layout</a>, and into <a
 href="06-函数与调用栈.html">Chapter 6’s “Java is pass-by-value
@@ -508,7 +573,7 @@ only”</a>—which is really just a direct corollary of this chapter’s
 <hr />
 <p><a href="02-基础语法.html">← Prev: Basic Syntax</a> · <a
 href="index.html">Index</a> · <a href="04-数据类型.html">Next: Data
-Types</a> →</p>
+Types</a> → </content> </invoke></p>
 </div>
 </body>
 </html>

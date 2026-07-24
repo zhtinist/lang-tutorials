@@ -124,6 +124,7 @@ API</a></li>
 Utilities</a></li>
 <li><a href="#complexity-cheat-sheet"
 id="toc-complexity-cheat-sheet">Complexity Cheat Sheet</a></li>
+<li><a href="#summary" id="toc-summary">Summary</a></li>
 </ul></li>
 </ul>
 </nav>
@@ -133,9 +134,16 @@ id="toc-complexity-cheat-sheet">Complexity Cheat Sheet</a></li>
 <code>priority_queue</code> (heap) live in the STL. Java’s counterparts
 are <code>java.util.Collections</code>, <code>Arrays</code>,
 <code>PriorityQueue</code>, and <code>TreeMap</code>, plus the
-functional Stream API. This chapter covers the <strong>underlying
-implementations</strong> of these tools and the reasons for the choices,
-rather than listing APIs.</p>
+functional Stream API.</p>
+<p><strong>Every section in this chapter starts with a snippet of code
+you can copy, run, and tweak right away, to get “how to use it” out of
+the way first — then it moves on to “why it’s designed this way, and how
+it works underneath.” You don’t need to understand the JVM’s internals
+or bytecode up front; just copy the code at the top of each section and
+you can start using these tools. If you want to dig into questions like
+“why does <code>Arrays.sort</code> use different algorithms for
+<code>int[]</code> and <code>Integer[]</code>,” keep reading into the
+sections on the underlying mechanics that follow.</strong></p>
 <h2 id="the-collections-utility-class">The Collections Utility
 Class</h2>
 <p><code>java.util.Collections</code> is a batch of static methods
@@ -245,6 +253,14 @@ only one. Analogous to C++’s <code>operator&lt;</code>.</li>
 strategy</strong>, and you can define arbitrarily many; analogous to a
 functor passed to <code>std::sort</code>.</li>
 </ul>
+<p>The example below uses two bits of syntax you may not have seen
+before: <code>record</code> is a Java 16+ shorthand for declaring, in
+one line, an immutable class that just holds data (think of a C++
+<code>struct</code> with only fields, plus an auto-generated constructor
+and getters); <code>Person::name</code> is a <strong>method
+reference</strong>, shorthand for <code>p -&gt; p.name()</code> — you
+can just read it as “a lambda that grabs the <code>name</code>
+field.”</p>
 <div class="sourceCode" id="cb3"><pre
 class="sourceCode java"><code class="sourceCode java"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">record</span> <span class="fu">Person</span><span class="op">(</span><span class="bu">String</span> name<span class="op">,</span> <span class="dt">int</span> age<span class="op">)</span> <span class="kw">implements</span> <span class="bu">Comparable</span><span class="op">&lt;</span>Person<span class="op">&gt;</span> <span class="op">{</span></span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="at">@Override</span> <span class="kw">public</span> <span class="dt">int</span> <span class="fu">compareTo</span><span class="op">(</span>Person o<span class="op">)</span> <span class="op">{</span>   <span class="co">// natural order: by age</span></span>
@@ -408,20 +424,34 @@ adjustment O(log n).</p>
 </tbody>
 </table>
 <h2 id="the-stream-api">The Stream API</h2>
+<p>The simplest use case: filter a <code>List</code>, then count what’s
+left:</p>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="bu">List</span><span class="op">&lt;</span><span class="bu">String</span><span class="op">&gt;</span> names <span class="op">=</span> <span class="bu">List</span><span class="op">.</span><span class="fu">of</span><span class="op">(</span><span class="st">&quot;Ann&quot;</span><span class="op">,</span> <span class="st">&quot;Bob&quot;</span><span class="op">,</span> <span class="st">&quot;Al&quot;</span><span class="op">,</span> <span class="st">&quot;Ben&quot;</span><span class="op">);</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="dt">long</span> count <span class="op">=</span> names<span class="op">.</span><span class="fu">stream</span><span class="op">()</span>               <span class="co">// 1. open a &quot;pipeline&quot; from the collection</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span><span class="fu">filter</span><span class="op">(</span>s <span class="op">-&gt;</span> s<span class="op">.</span><span class="fu">startsWith</span><span class="op">(</span><span class="st">&quot;A&quot;</span><span class="op">))</span>        <span class="co">// 2. keep only the elements that match</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span><span class="fu">count</span><span class="op">();</span>                              <span class="co">// 3. count what&#39;s left</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>count<span class="op">);</span>                 <span class="co">// 2</span></span></code></pre></div>
+<p><code>collection.stream()</code> opens a pipeline; in the middle you
+can chain any number of “processing steps” (here, <code>filter</code>),
+and finish the chain with one “get the result” operation (here,
+<code>count</code>). Keep this three-part shape in mind — source →
+intermediate operations → terminal operation — everything below builds
+on this same skeleton.</p>
 <p>A Stream is a <strong>declarative, lazy, parallelizable</strong>
 data-processing pipeline, analogous to C++20 ranges/views. It is not a
 container, does not store data, and is “a description of operations on a
 data source.”</p>
 <h3 id="laziness-and-operation-categories">Laziness and Operation
 Categories</h3>
-<div class="sourceCode" id="cb9"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="bu">List</span><span class="op">&lt;</span><span class="bu">String</span><span class="op">&gt;</span> words <span class="op">=</span> <span class="bu">List</span><span class="op">.</span><span class="fu">of</span><span class="op">(</span><span class="st">&quot;apple&quot;</span><span class="op">,</span> <span class="st">&quot;banana&quot;</span><span class="op">,</span> <span class="st">&quot;cherry&quot;</span><span class="op">,</span> <span class="st">&quot;avocado&quot;</span><span class="op">);</span></span>
-<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="dt">long</span> count <span class="op">=</span> words<span class="op">.</span><span class="fu">stream</span><span class="op">()</span>          <span class="co">// source</span></span>
-<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span><span class="fu">filter</span><span class="op">(</span>s <span class="op">-&gt;</span> s<span class="op">.</span><span class="fu">startsWith</span><span class="op">(</span><span class="st">&quot;a&quot;</span><span class="op">))</span>  <span class="co">// intermediate operation: lazy, returns a new Stream</span></span>
-<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span><span class="fu">map</span><span class="op">(</span><span class="bu">String</span><span class="op">::</span>toUpperCase<span class="op">)</span>        <span class="co">// intermediate operation</span></span>
-<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span><span class="fu">peek</span><span class="op">(</span><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">::</span>println<span class="op">)</span>       <span class="co">// intermediate operation (for debugging)</span></span>
-<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span><span class="fu">count</span><span class="op">();</span>                        <span class="co">// terminal operation: triggers actual execution</span></span></code></pre></div>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="bu">List</span><span class="op">&lt;</span><span class="bu">String</span><span class="op">&gt;</span> words <span class="op">=</span> <span class="bu">List</span><span class="op">.</span><span class="fu">of</span><span class="op">(</span><span class="st">&quot;apple&quot;</span><span class="op">,</span> <span class="st">&quot;banana&quot;</span><span class="op">,</span> <span class="st">&quot;cherry&quot;</span><span class="op">,</span> <span class="st">&quot;avocado&quot;</span><span class="op">);</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a><span class="dt">long</span> count <span class="op">=</span> words<span class="op">.</span><span class="fu">stream</span><span class="op">()</span>          <span class="co">// source</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span><span class="fu">filter</span><span class="op">(</span>s <span class="op">-&gt;</span> s<span class="op">.</span><span class="fu">startsWith</span><span class="op">(</span><span class="st">&quot;a&quot;</span><span class="op">))</span>  <span class="co">// intermediate operation: lazy, returns a new Stream</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span><span class="fu">map</span><span class="op">(</span><span class="bu">String</span><span class="op">::</span>toUpperCase<span class="op">)</span>        <span class="co">// intermediate operation</span></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span><span class="fu">peek</span><span class="op">(</span><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">::</span>println<span class="op">)</span>       <span class="co">// intermediate operation (for debugging)</span></span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span><span class="fu">count</span><span class="op">();</span>                        <span class="co">// terminal operation: triggers actual execution</span></span></code></pre></div>
 <ul>
 <li><strong>Intermediate operations</strong>
 (<code>filter</code>/<code>map</code>/<code>sorted</code>/<code>distinct</code>/<code>limit</code>):
@@ -437,67 +467,67 @@ before the next is taken (rather than generating a full intermediate
 collection at each step), saving memory;
 <code>limit</code>/<code>findFirst</code> can
 <strong>short-circuit</strong> to finish early.</p>
-<div class="sourceCode" id="cb10"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Short-circuit: stop at the first match, without processing the whole stream</span></span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>Optional<span class="op">&lt;</span><span class="bu">Integer</span><span class="op">&gt;</span> first <span class="op">=</span> Stream<span class="op">.</span><span class="fu">iterate</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> n <span class="op">-&gt;</span> n <span class="op">+</span> <span class="dv">1</span><span class="op">)</span>  <span class="co">// infinite stream</span></span>
-<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span><span class="fu">filter</span><span class="op">(</span>n <span class="op">-&gt;</span> n <span class="op">%</span> <span class="dv">7</span> <span class="op">==</span> <span class="dv">0</span><span class="op">)</span></span>
-<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span><span class="fu">findFirst</span><span class="op">();</span>   <span class="co">// Optional[7]</span></span></code></pre></div>
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Short-circuit: stop at the first match, without processing the whole stream</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>Optional<span class="op">&lt;</span><span class="bu">Integer</span><span class="op">&gt;</span> first <span class="op">=</span> Stream<span class="op">.</span><span class="fu">iterate</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> n <span class="op">-&gt;</span> n <span class="op">+</span> <span class="dv">1</span><span class="op">)</span>  <span class="co">// infinite stream</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span><span class="fu">filter</span><span class="op">(</span>n <span class="op">-&gt;</span> n <span class="op">%</span> <span class="dv">7</span> <span class="op">==</span> <span class="dv">0</span><span class="op">)</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span><span class="fu">findFirst</span><span class="op">();</span>   <span class="co">// Optional[7]</span></span></code></pre></div>
 <h3 id="collectors">Collectors</h3>
 <p>The terminal operation <code>collect</code> gathers a stream into a
 result:</p>
-<div class="sourceCode" id="cb11"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="kw">static</span><span class="im"> java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">stream</span><span class="op">.</span><span class="im">Collectors</span><span class="op">.*;</span></span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="bu">List</span><span class="op">&lt;</span><span class="bu">String</span><span class="op">&gt;</span> list  <span class="op">=</span> words<span class="op">.</span><span class="fu">stream</span><span class="op">().</span><span class="fu">collect</span><span class="op">(</span><span class="fu">toList</span><span class="op">());</span></span>
-<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a><span class="bu">Set</span><span class="op">&lt;</span><span class="bu">String</span><span class="op">&gt;</span> set    <span class="op">=</span> words<span class="op">.</span><span class="fu">stream</span><span class="op">().</span><span class="fu">collect</span><span class="op">(</span><span class="fu">toSet</span><span class="op">());</span></span>
-<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a><span class="bu">Map</span><span class="op">&lt;</span><span class="bu">Character</span><span class="op">,</span> <span class="bu">List</span><span class="op">&lt;</span><span class="bu">String</span><span class="op">&gt;&gt;</span> byFirst <span class="op">=</span></span>
-<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>    words<span class="op">.</span><span class="fu">stream</span><span class="op">().</span><span class="fu">collect</span><span class="op">(</span><span class="fu">groupingBy</span><span class="op">(</span>s <span class="op">-&gt;</span> s<span class="op">.</span><span class="fu">charAt</span><span class="op">(</span><span class="dv">0</span><span class="op">)));</span>   <span class="co">// grouping, like SQL GROUP BY</span></span>
-<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a><span class="bu">Map</span><span class="op">&lt;</span><span class="bu">Boolean</span><span class="op">,</span> <span class="bu">List</span><span class="op">&lt;</span><span class="bu">String</span><span class="op">&gt;&gt;</span> parts <span class="op">=</span></span>
-<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>    words<span class="op">.</span><span class="fu">stream</span><span class="op">().</span><span class="fu">collect</span><span class="op">(</span><span class="fu">partitioningBy</span><span class="op">(</span>s <span class="op">-&gt;</span> s<span class="op">.</span><span class="fu">length</span><span class="op">()</span> <span class="op">&gt;</span> <span class="dv">5</span><span class="op">));</span></span>
-<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> joined <span class="op">=</span> words<span class="op">.</span><span class="fu">stream</span><span class="op">().</span><span class="fu">collect</span><span class="op">(</span><span class="fu">joining</span><span class="op">(</span><span class="st">&quot;, &quot;</span><span class="op">,</span> <span class="st">&quot;[&quot;</span><span class="op">,</span> <span class="st">&quot;]&quot;</span><span class="op">));</span></span>
-<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a><span class="bu">Double</span> avg <span class="op">=</span> words<span class="op">.</span><span class="fu">stream</span><span class="op">().</span><span class="fu">collect</span><span class="op">(</span><span class="fu">averagingInt</span><span class="op">(</span><span class="bu">String</span><span class="op">::</span>length<span class="op">));</span></span></code></pre></div>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="kw">static</span><span class="im"> java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">stream</span><span class="op">.</span><span class="im">Collectors</span><span class="op">.*;</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="bu">List</span><span class="op">&lt;</span><span class="bu">String</span><span class="op">&gt;</span> list  <span class="op">=</span> words<span class="op">.</span><span class="fu">stream</span><span class="op">().</span><span class="fu">collect</span><span class="op">(</span><span class="fu">toList</span><span class="op">());</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a><span class="bu">Set</span><span class="op">&lt;</span><span class="bu">String</span><span class="op">&gt;</span> set    <span class="op">=</span> words<span class="op">.</span><span class="fu">stream</span><span class="op">().</span><span class="fu">collect</span><span class="op">(</span><span class="fu">toSet</span><span class="op">());</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a><span class="bu">Map</span><span class="op">&lt;</span><span class="bu">Character</span><span class="op">,</span> <span class="bu">List</span><span class="op">&lt;</span><span class="bu">String</span><span class="op">&gt;&gt;</span> byFirst <span class="op">=</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>    words<span class="op">.</span><span class="fu">stream</span><span class="op">().</span><span class="fu">collect</span><span class="op">(</span><span class="fu">groupingBy</span><span class="op">(</span>s <span class="op">-&gt;</span> s<span class="op">.</span><span class="fu">charAt</span><span class="op">(</span><span class="dv">0</span><span class="op">)));</span>   <span class="co">// grouping, like SQL GROUP BY</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a><span class="bu">Map</span><span class="op">&lt;</span><span class="bu">Boolean</span><span class="op">,</span> <span class="bu">List</span><span class="op">&lt;</span><span class="bu">String</span><span class="op">&gt;&gt;</span> parts <span class="op">=</span></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>    words<span class="op">.</span><span class="fu">stream</span><span class="op">().</span><span class="fu">collect</span><span class="op">(</span><span class="fu">partitioningBy</span><span class="op">(</span>s <span class="op">-&gt;</span> s<span class="op">.</span><span class="fu">length</span><span class="op">()</span> <span class="op">&gt;</span> <span class="dv">5</span><span class="op">));</span></span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> joined <span class="op">=</span> words<span class="op">.</span><span class="fu">stream</span><span class="op">().</span><span class="fu">collect</span><span class="op">(</span><span class="fu">joining</span><span class="op">(</span><span class="st">&quot;, &quot;</span><span class="op">,</span> <span class="st">&quot;[&quot;</span><span class="op">,</span> <span class="st">&quot;]&quot;</span><span class="op">));</span></span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a><span class="bu">Double</span> avg <span class="op">=</span> words<span class="op">.</span><span class="fu">stream</span><span class="op">().</span><span class="fu">collect</span><span class="op">(</span><span class="fu">averagingInt</span><span class="op">(</span><span class="bu">String</span><span class="op">::</span>length<span class="op">));</span></span></code></pre></div>
 <p>Runnable: <code>peek</code> reveals laziness—<code>findFirst</code>
 short-circuits, stopping at the first match without traversing the whole
 stream; <code>groupingBy</code> buckets words by first letter:</p>
-<div class="sourceCode" id="cb12"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.*;</span></span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">stream</span><span class="op">.*;</span></span>
-<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="kw">static</span><span class="im"> java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">stream</span><span class="op">.</span><span class="im">Collectors</span><span class="op">.*;</span></span>
-<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> StreamDemo <span class="op">{</span></span>
-<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>        <span class="bu">List</span><span class="op">&lt;</span><span class="bu">String</span><span class="op">&gt;</span> words <span class="op">=</span> <span class="bu">List</span><span class="op">.</span><span class="fu">of</span><span class="op">(</span><span class="st">&quot;apple&quot;</span><span class="op">,</span> <span class="st">&quot;banana&quot;</span><span class="op">,</span> <span class="st">&quot;cherry&quot;</span><span class="op">,</span> <span class="st">&quot;avocado&quot;</span><span class="op">,</span> <span class="st">&quot;blueberry&quot;</span><span class="op">);</span></span>
-<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>        <span class="co">// laziness + short-circuit: peek prints only the elements actually pulled</span></span>
-<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;--- lazy pipeline (findFirst short-circuits) ---&quot;</span><span class="op">);</span></span>
-<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>        Optional<span class="op">&lt;</span><span class="bu">String</span><span class="op">&gt;</span> first <span class="op">=</span> words<span class="op">.</span><span class="fu">stream</span><span class="op">()</span></span>
-<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a>            <span class="op">.</span><span class="fu">peek</span><span class="op">(</span>w <span class="op">-&gt;</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;seen: &quot;</span> <span class="op">+</span> w<span class="op">))</span>   <span class="co">// side-effect to observe traversal</span></span>
-<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a>            <span class="op">.</span><span class="fu">filter</span><span class="op">(</span>w <span class="op">-&gt;</span> w<span class="op">.</span><span class="fu">startsWith</span><span class="op">(</span><span class="st">&quot;b&quot;</span><span class="op">))</span></span>
-<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a>            <span class="op">.</span><span class="fu">findFirst</span><span class="op">();</span></span>
-<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;first b-word = &quot;</span> <span class="op">+</span> first<span class="op">.</span><span class="fu">get</span><span class="op">());</span></span>
-<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a>        <span class="co">// groupingBy: bucket by first letter, into a TreeMap for stable ordered output</span></span>
-<span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Map</span><span class="op">&lt;</span><span class="bu">Character</span><span class="op">,</span> <span class="bu">List</span><span class="op">&lt;</span><span class="bu">String</span><span class="op">&gt;&gt;</span> byFirst <span class="op">=</span> words<span class="op">.</span><span class="fu">stream</span><span class="op">()</span></span>
-<span id="cb12-19"><a href="#cb12-19" aria-hidden="true" tabindex="-1"></a>            <span class="op">.</span><span class="fu">collect</span><span class="op">(</span><span class="fu">groupingBy</span><span class="op">(</span>w <span class="op">-&gt;</span> w<span class="op">.</span><span class="fu">charAt</span><span class="op">(</span><span class="dv">0</span><span class="op">),</span> <span class="bu">TreeMap</span><span class="op">::</span><span class="kw">new</span><span class="op">,</span> <span class="fu">toList</span><span class="op">()));</span></span>
-<span id="cb12-20"><a href="#cb12-20" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;--- groupingBy ---&quot;</span><span class="op">);</span></span>
-<span id="cb12-21"><a href="#cb12-21" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>byFirst<span class="op">);</span></span>
-<span id="cb12-22"><a href="#cb12-22" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb12-23"><a href="#cb12-23" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb12-24"><a href="#cb12-24" aria-hidden="true" tabindex="-1"></a><span class="co">// --- lazy pipeline (findFirst short-circuits) ---</span></span>
-<span id="cb12-25"><a href="#cb12-25" aria-hidden="true" tabindex="-1"></a><span class="co">// seen: apple</span></span>
-<span id="cb12-26"><a href="#cb12-26" aria-hidden="true" tabindex="-1"></a><span class="co">// seen: banana</span></span>
-<span id="cb12-27"><a href="#cb12-27" aria-hidden="true" tabindex="-1"></a><span class="co">// first b-word = banana</span></span>
-<span id="cb12-28"><a href="#cb12-28" aria-hidden="true" tabindex="-1"></a><span class="co">// --- groupingBy ---</span></span>
-<span id="cb12-29"><a href="#cb12-29" aria-hidden="true" tabindex="-1"></a><span class="co">// {a=[apple, avocado], b=[banana, blueberry], c=[cherry]}</span></span></code></pre></div>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.*;</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">stream</span><span class="op">.*;</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="kw">static</span><span class="im"> java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">stream</span><span class="op">.</span><span class="im">Collectors</span><span class="op">.*;</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> StreamDemo <span class="op">{</span></span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>        <span class="bu">List</span><span class="op">&lt;</span><span class="bu">String</span><span class="op">&gt;</span> words <span class="op">=</span> <span class="bu">List</span><span class="op">.</span><span class="fu">of</span><span class="op">(</span><span class="st">&quot;apple&quot;</span><span class="op">,</span> <span class="st">&quot;banana&quot;</span><span class="op">,</span> <span class="st">&quot;cherry&quot;</span><span class="op">,</span> <span class="st">&quot;avocado&quot;</span><span class="op">,</span> <span class="st">&quot;blueberry&quot;</span><span class="op">);</span></span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>        <span class="co">// laziness + short-circuit: peek prints only the elements actually pulled</span></span>
+<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;--- lazy pipeline (findFirst short-circuits) ---&quot;</span><span class="op">);</span></span>
+<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a>        Optional<span class="op">&lt;</span><span class="bu">String</span><span class="op">&gt;</span> first <span class="op">=</span> words<span class="op">.</span><span class="fu">stream</span><span class="op">()</span></span>
+<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a>            <span class="op">.</span><span class="fu">peek</span><span class="op">(</span>w <span class="op">-&gt;</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;seen: &quot;</span> <span class="op">+</span> w<span class="op">))</span>   <span class="co">// side-effect to observe traversal</span></span>
+<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a>            <span class="op">.</span><span class="fu">filter</span><span class="op">(</span>w <span class="op">-&gt;</span> w<span class="op">.</span><span class="fu">startsWith</span><span class="op">(</span><span class="st">&quot;b&quot;</span><span class="op">))</span></span>
+<span id="cb13-14"><a href="#cb13-14" aria-hidden="true" tabindex="-1"></a>            <span class="op">.</span><span class="fu">findFirst</span><span class="op">();</span></span>
+<span id="cb13-15"><a href="#cb13-15" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;first b-word = &quot;</span> <span class="op">+</span> first<span class="op">.</span><span class="fu">get</span><span class="op">());</span></span>
+<span id="cb13-16"><a href="#cb13-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-17"><a href="#cb13-17" aria-hidden="true" tabindex="-1"></a>        <span class="co">// groupingBy: bucket by first letter, into a TreeMap for stable ordered output</span></span>
+<span id="cb13-18"><a href="#cb13-18" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Map</span><span class="op">&lt;</span><span class="bu">Character</span><span class="op">,</span> <span class="bu">List</span><span class="op">&lt;</span><span class="bu">String</span><span class="op">&gt;&gt;</span> byFirst <span class="op">=</span> words<span class="op">.</span><span class="fu">stream</span><span class="op">()</span></span>
+<span id="cb13-19"><a href="#cb13-19" aria-hidden="true" tabindex="-1"></a>            <span class="op">.</span><span class="fu">collect</span><span class="op">(</span><span class="fu">groupingBy</span><span class="op">(</span>w <span class="op">-&gt;</span> w<span class="op">.</span><span class="fu">charAt</span><span class="op">(</span><span class="dv">0</span><span class="op">),</span> <span class="bu">TreeMap</span><span class="op">::</span><span class="kw">new</span><span class="op">,</span> <span class="fu">toList</span><span class="op">()));</span></span>
+<span id="cb13-20"><a href="#cb13-20" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;--- groupingBy ---&quot;</span><span class="op">);</span></span>
+<span id="cb13-21"><a href="#cb13-21" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>byFirst<span class="op">);</span></span>
+<span id="cb13-22"><a href="#cb13-22" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb13-23"><a href="#cb13-23" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb13-24"><a href="#cb13-24" aria-hidden="true" tabindex="-1"></a><span class="co">// --- lazy pipeline (findFirst short-circuits) ---</span></span>
+<span id="cb13-25"><a href="#cb13-25" aria-hidden="true" tabindex="-1"></a><span class="co">// seen: apple</span></span>
+<span id="cb13-26"><a href="#cb13-26" aria-hidden="true" tabindex="-1"></a><span class="co">// seen: banana</span></span>
+<span id="cb13-27"><a href="#cb13-27" aria-hidden="true" tabindex="-1"></a><span class="co">// first b-word = banana</span></span>
+<span id="cb13-28"><a href="#cb13-28" aria-hidden="true" tabindex="-1"></a><span class="co">// --- groupingBy ---</span></span>
+<span id="cb13-29"><a href="#cb13-29" aria-hidden="true" tabindex="-1"></a><span class="co">// {a=[apple, avocado], b=[banana, blueberry], c=[cherry]}</span></span></code></pre></div>
 <h3 id="parallel-streams">Parallel Streams</h3>
 <p><code>parallelStream()</code> or <code>.parallel()</code> splits the
 stream and processes it divide-and-conquer using the <strong>common
 ForkJoinPool</strong> (<code>ForkJoinPool.commonPool()</code>, default
 thread count = CPU cores - 1).</p>
-<div class="sourceCode" id="cb13"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="dt">long</span> sum <span class="op">=</span> LongStream<span class="op">.</span><span class="fu">rangeClosed</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">1_000_000</span><span class="op">)</span></span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span><span class="fu">parallel</span><span class="op">()</span></span>
-<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span><span class="fu">sum</span><span class="op">();</span></span></code></pre></div>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="dt">long</span> sum <span class="op">=</span> LongStream<span class="op">.</span><span class="fu">rangeClosed</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">1_000_000</span><span class="op">)</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span><span class="fu">parallel</span><span class="op">()</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span><span class="fu">sum</span><span class="op">();</span></span></code></pre></div>
 <p>Considerations: - The data source should be <strong>easy to
 split</strong> (arrays and <code>ArrayList</code> are good;
 <code>LinkedList</code> is bad). - Operations must be <strong>stateless
@@ -512,34 +542,52 @@ work.</p>
 replacing a bare <code>null</code> and forcing the caller to handle the
 absence, reducing NPEs. Analogous to C++17’s <code>std::optional</code>
 (but Java’s is an object, with heap allocation overhead).</p>
-<div class="sourceCode" id="cb14"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>Optional<span class="op">&lt;</span><span class="bu">String</span><span class="op">&gt;</span> opt <span class="op">=</span> Optional<span class="op">.</span><span class="fu">ofNullable</span><span class="op">(</span><span class="fu">getName</span><span class="op">());</span></span>
-<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> s <span class="op">=</span> opt<span class="op">.</span><span class="fu">orElse</span><span class="op">(</span><span class="st">&quot;default&quot;</span><span class="op">);</span>             <span class="co">// give a default if empty</span></span>
-<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> t <span class="op">=</span> opt<span class="op">.</span><span class="fu">orElseGet</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="fu">compute</span><span class="op">());</span>    <span class="co">// lazy default (computed only if empty)</span></span>
-<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>opt<span class="op">.</span><span class="fu">ifPresent</span><span class="op">(</span><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">::</span>println<span class="op">);</span></span>
-<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> u <span class="op">=</span> opt<span class="op">.</span><span class="fu">map</span><span class="op">(</span><span class="bu">String</span><span class="op">::</span>trim<span class="op">).</span><span class="fu">filter</span><span class="op">(</span>x <span class="op">-&gt;</span> <span class="op">!</span>x<span class="op">.</span><span class="fu">isEmpty</span><span class="op">()).</span><span class="fu">orElse</span><span class="op">(</span><span class="st">&quot;-&quot;</span><span class="op">);</span></span>
-<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>opt<span class="op">.</span><span class="fu">orElseThrow</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="kw">new</span> <span class="bu">IllegalStateException</span><span class="op">(</span><span class="st">&quot;missing&quot;</span><span class="op">));</span></span></code></pre></div>
+<p>The most basic usage: <code>Optional.of</code> wraps a value known to
+exist, <code>Optional.empty()</code> represents a definite absence of
+value, and <code>isPresent()</code> tells you which case you’re in:</p>
+<div class="sourceCode" id="cb15"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>Optional<span class="op">&lt;</span><span class="bu">String</span><span class="op">&gt;</span> opt1 <span class="op">=</span> Optional<span class="op">.</span><span class="fu">of</span><span class="op">(</span><span class="st">&quot;hello&quot;</span><span class="op">);</span>   <span class="co">// definitely has a value</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>Optional<span class="op">&lt;</span><span class="bu">String</span><span class="op">&gt;</span> opt2 <span class="op">=</span> Optional<span class="op">.</span><span class="fu">empty</span><span class="op">();</span>       <span class="co">// definitely has no value</span></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>opt1<span class="op">.</span><span class="fu">isPresent</span><span class="op">());</span>           <span class="co">// true</span></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>opt2<span class="op">.</span><span class="fu">isPresent</span><span class="op">());</span>           <span class="co">// false</span></span></code></pre></div>
+<p>In real code it’s more common to use <code>Optional.ofNullable</code>
+to wrap a “value that might be null” (say, the return of a method that
+might not find a result), and then handle the “present” or “absent” case
+with the methods below, instead of writing an explicit
+<code>if (x != null)</code>:</p>
+<div class="sourceCode" id="cb16"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>Optional<span class="op">&lt;</span><span class="bu">String</span><span class="op">&gt;</span> opt <span class="op">=</span> Optional<span class="op">.</span><span class="fu">ofNullable</span><span class="op">(</span><span class="fu">getName</span><span class="op">());</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> s <span class="op">=</span> opt<span class="op">.</span><span class="fu">orElse</span><span class="op">(</span><span class="st">&quot;default&quot;</span><span class="op">);</span>             <span class="co">// give a default if empty</span></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> t <span class="op">=</span> opt<span class="op">.</span><span class="fu">orElseGet</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="fu">compute</span><span class="op">());</span>    <span class="co">// lazy default (computed only if empty)</span></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>opt<span class="op">.</span><span class="fu">ifPresent</span><span class="op">(</span><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">::</span>println<span class="op">);</span></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> u <span class="op">=</span> opt<span class="op">.</span><span class="fu">map</span><span class="op">(</span><span class="bu">String</span><span class="op">::</span>trim<span class="op">).</span><span class="fu">filter</span><span class="op">(</span>x <span class="op">-&gt;</span> <span class="op">!</span>x<span class="op">.</span><span class="fu">isEmpty</span><span class="op">()).</span><span class="fu">orElse</span><span class="op">(</span><span class="st">&quot;-&quot;</span><span class="op">);</span></span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>opt<span class="op">.</span><span class="fu">orElseThrow</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="kw">new</span> <span class="bu">IllegalStateException</span><span class="op">(</span><span class="st">&quot;missing&quot;</span><span class="op">));</span></span></code></pre></div>
 <p>Usage convention: use it mainly as a <strong>method return
 value</strong> to express “there may be no result”; <strong>do
 not</strong> use it for fields, method parameters, or collection
 elements (needless overhead).</p>
 <h2 id="numeric-utilities">Numeric Utilities</h2>
-<div class="sourceCode" id="cb15"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="bu">Math</span><span class="op">.</span><span class="fu">max</span><span class="op">(</span>a<span class="op">,</span> b<span class="op">);</span> <span class="bu">Math</span><span class="op">.</span><span class="fu">floorMod</span><span class="op">(-</span><span class="dv">1</span><span class="op">,</span> <span class="dv">3</span><span class="op">);</span> <span class="co">// 1 (unlike %, the result&#39;s sign follows the divisor)</span></span>
-<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="bu">Math</span><span class="op">.</span><span class="fu">addExact</span><span class="op">(</span>a<span class="op">,</span> b<span class="op">);</span>                  <span class="co">// throws ArithmeticException on overflow, rather than silently wrapping</span></span>
-<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a><span class="co">// BigInteger: arbitrary-precision integers (immutable), like a bignum you&#39;d implement yourself; operations return new objects</span></span>
-<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a><span class="bu">BigInteger</span> big <span class="op">=</span> <span class="bu">BigInteger</span><span class="op">.</span><span class="fu">valueOf</span><span class="op">(</span><span class="dv">2</span><span class="op">).</span><span class="fu">pow</span><span class="op">(</span><span class="dv">1000</span><span class="op">);</span></span>
-<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a><span class="bu">BigInteger</span> f <span class="op">=</span> big<span class="op">.</span><span class="fu">multiply</span><span class="op">(</span><span class="bu">BigInteger</span><span class="op">.</span><span class="fu">TEN</span><span class="op">).</span><span class="fu">mod</span><span class="op">(</span><span class="bu">BigInteger</span><span class="op">.</span><span class="fu">valueOf</span><span class="op">(</span><span class="dv">7</span><span class="op">));</span></span>
-<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a><span class="co">// BigDecimal: exact decimals, a must for finance (double cannot represent 0.1 exactly)</span></span>
-<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a><span class="bu">BigDecimal</span> price <span class="op">=</span> <span class="kw">new</span> <span class="bu">BigDecimal</span><span class="op">(</span><span class="st">&quot;0.10&quot;</span><span class="op">);</span>    <span class="co">// must construct from a String; new BigDecimal(0.1) carries binary error</span></span>
-<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a><span class="bu">BigDecimal</span> total <span class="op">=</span> price<span class="op">.</span><span class="fu">multiply</span><span class="op">(</span><span class="kw">new</span> <span class="bu">BigDecimal</span><span class="op">(</span><span class="st">&quot;3&quot;</span><span class="op">));</span>  <span class="co">// exact 0.30</span></span>
-<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="kw">new</span> <span class="bu">BigDecimal</span><span class="op">(</span><span class="st">&quot;0.1&quot;</span><span class="op">).</span><span class="fu">add</span><span class="op">(</span><span class="kw">new</span> <span class="bu">BigDecimal</span><span class="op">(</span><span class="st">&quot;0.2&quot;</span><span class="op">)));</span> <span class="co">// 0.3 (double would be 0.30000000000000004)</span></span>
-<span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a>total <span class="op">=</span> total<span class="op">.</span><span class="fu">setScale</span><span class="op">(</span><span class="dv">2</span><span class="op">,</span> <span class="bu">RoundingMode</span><span class="op">.</span><span class="fu">HALF_UP</span><span class="op">);</span>         <span class="co">// explicitly specify rounding</span></span>
-<span id="cb15-13"><a href="#cb15-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-14"><a href="#cb15-14" aria-hidden="true" tabindex="-1"></a><span class="co">// Random: linear congruential pseudo-random; for concurrency use ThreadLocalRandom; for security use SecureRandom</span></span>
-<span id="cb15-15"><a href="#cb15-15" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> r <span class="op">=</span> ThreadLocalRandom<span class="op">.</span><span class="fu">current</span><span class="op">().</span><span class="fu">nextInt</span><span class="op">(</span><span class="dv">0</span><span class="op">,</span> <span class="dv">100</span><span class="op">);</span></span></code></pre></div>
+<p>Day to day, use <code>Math</code>’s static methods for basic
+arithmetic; when <code>int</code>/<code>long</code>/<code>double</code>
+precision or range isn’t enough (say you need integers wider than 64
+bits, or a financial calculation that can’t tolerate floating-point
+error), reach for <code>BigInteger</code>/<code>BigDecimal</code>.</p>
+<div class="sourceCode" id="cb17"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="bu">Math</span><span class="op">.</span><span class="fu">max</span><span class="op">(</span>a<span class="op">,</span> b<span class="op">);</span> <span class="bu">Math</span><span class="op">.</span><span class="fu">floorMod</span><span class="op">(-</span><span class="dv">1</span><span class="op">,</span> <span class="dv">3</span><span class="op">);</span> <span class="co">// 2 (unlike %, the sign of the result follows the divisor — always non-negative here)</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="bu">Math</span><span class="op">.</span><span class="fu">addExact</span><span class="op">(</span>a<span class="op">,</span> b<span class="op">);</span>                  <span class="co">// throws ArithmeticException on overflow, rather than silently wrapping</span></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a><span class="co">// BigInteger: arbitrary-precision integers (immutable), like a bignum you&#39;d implement yourself; operations return new objects</span></span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a><span class="bu">BigInteger</span> big <span class="op">=</span> <span class="bu">BigInteger</span><span class="op">.</span><span class="fu">valueOf</span><span class="op">(</span><span class="dv">2</span><span class="op">).</span><span class="fu">pow</span><span class="op">(</span><span class="dv">1000</span><span class="op">);</span></span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a><span class="bu">BigInteger</span> f <span class="op">=</span> big<span class="op">.</span><span class="fu">multiply</span><span class="op">(</span><span class="bu">BigInteger</span><span class="op">.</span><span class="fu">TEN</span><span class="op">).</span><span class="fu">mod</span><span class="op">(</span><span class="bu">BigInteger</span><span class="op">.</span><span class="fu">valueOf</span><span class="op">(</span><span class="dv">7</span><span class="op">));</span></span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a><span class="co">// BigDecimal: exact decimals, a must for finance (double cannot represent 0.1 exactly)</span></span>
+<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a><span class="bu">BigDecimal</span> price <span class="op">=</span> <span class="kw">new</span> <span class="bu">BigDecimal</span><span class="op">(</span><span class="st">&quot;0.10&quot;</span><span class="op">);</span>    <span class="co">// must construct from a String; new BigDecimal(0.1) carries binary error</span></span>
+<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a><span class="bu">BigDecimal</span> total <span class="op">=</span> price<span class="op">.</span><span class="fu">multiply</span><span class="op">(</span><span class="kw">new</span> <span class="bu">BigDecimal</span><span class="op">(</span><span class="st">&quot;3&quot;</span><span class="op">));</span>  <span class="co">// exact 0.30</span></span>
+<span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="kw">new</span> <span class="bu">BigDecimal</span><span class="op">(</span><span class="st">&quot;0.1&quot;</span><span class="op">).</span><span class="fu">add</span><span class="op">(</span><span class="kw">new</span> <span class="bu">BigDecimal</span><span class="op">(</span><span class="st">&quot;0.2&quot;</span><span class="op">)));</span> <span class="co">// 0.3 (double would be 0.30000000000000004)</span></span>
+<span id="cb17-12"><a href="#cb17-12" aria-hidden="true" tabindex="-1"></a>total <span class="op">=</span> total<span class="op">.</span><span class="fu">setScale</span><span class="op">(</span><span class="dv">2</span><span class="op">,</span> <span class="bu">RoundingMode</span><span class="op">.</span><span class="fu">HALF_UP</span><span class="op">);</span>         <span class="co">// explicitly specify rounding</span></span>
+<span id="cb17-13"><a href="#cb17-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-14"><a href="#cb17-14" aria-hidden="true" tabindex="-1"></a><span class="co">// Random: linear congruential pseudo-random; for concurrency use ThreadLocalRandom; for security use SecureRandom</span></span>
+<span id="cb17-15"><a href="#cb17-15" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> r <span class="op">=</span> ThreadLocalRandom<span class="op">.</span><span class="fu">current</span><span class="op">().</span><span class="fu">nextInt</span><span class="op">(</span><span class="dv">0</span><span class="op">,</span> <span class="dv">100</span><span class="op">);</span></span></code></pre></div>
 <blockquote>
 <p><code>BigInteger</code>/<code>BigDecimal</code> are immutable, so
 frequent operations produce many temporary objects; watch out for GC
@@ -671,6 +719,80 @@ pressure in loops. Compare them with <code>compareTo</code>;
 <a href="07-复合数据结构.html">07-Composite Data Structures</a>; for the
 ForkJoinPool that parallel streams rely on, see <a
 href="10-并发模型.html">10-Concurrency Model</a>.</p>
+<h2 id="summary">Summary</h2>
+<ul>
+<li><strong>At the usage level</strong>:
+<ul>
+<li><code>Collections</code> is a bag of static methods for operating on
+<code>List</code>/<code>Collection</code>:
+<code>sort</code>/<code>binarySearch</code>/<code>reverse</code>/<code>shuffle</code>/<code>max</code>;
+for an immutable view, use <code>unmodifiableXxx</code> (a wrapper
+around the original collection) or <code>List.of</code> (a truly
+immutable copy).</li>
+<li><code>Arrays.sort</code> is called the same way for primitive arrays
+and object arrays — it picks the algorithm internally.</li>
+<li>To sort objects: either have the class implement
+<code>Comparable</code> itself (only one natural order), or pass in an
+external <code>Comparator</code> (as many as you like); JDK 8+ lets you
+compose them declaratively with
+<code>Comparator.comparing().thenComparing().reversed()</code>.</li>
+<li><code>PriorityQueue</code> is just a heap — a min-heap by default —
+with <code>offer</code>/<code>peek</code>/<code>poll</code> for adding,
+peeking at, and removing the top.</li>
+<li><code>TreeMap</code>/<code>TreeSet</code> are naturally ordered by
+key, adding navigation methods <code>HashMap</code> lacks:
+<code>firstKey</code>/<code>floorKey</code>/<code>ceilingKey</code>/<code>headMap</code>/<code>subMap</code>.</li>
+<li>A Stream’s skeleton is “source <code>.stream()</code> → some
+intermediate operations
+(<code>filter</code>/<code>map</code>/<code>sorted</code>) → one
+terminal operation
+(<code>collect</code>/<code>count</code>/<code>forEach</code>)”;
+<code>collect</code> paired with <code>Collectors</code> handles
+grouping, partitioning, joining, and statistics.</li>
+<li><code>Optional&lt;T&gt;</code> expresses “there may be no value”;
+use it mainly as a method return value, handled via
+<code>orElse</code>/<code>map</code>/<code>ifPresent</code>, and avoid
+it for fields or parameters.</li>
+<li>Beyond <code>long</code>’s range, use <code>BigInteger</code>; when
+you need exact decimals (finance), use <code>BigDecimal</code> — it must
+be constructed from a <code>String</code>, and comparing for numeric
+equality means <code>compareTo == 0</code>, not
+<code>equals</code>.</li>
+</ul></li>
+<li><strong>At the underlying level</strong>:
+<ul>
+<li><code>Arrays.sort</code>: primitives use <strong>dual-pivot
+quicksort</strong> (equal values are indistinguishable anyway, so
+stability is meaningless; it’s in-place and cache-friendly); objects use
+<strong>TimSort</strong> (a merge/insertion hybrid that identifies
+existing sorted runs, guarantees stability, worst case O(n log n), O(n)
+on already-sorted data, and needs O(n) auxiliary space).</li>
+<li>The <code>Comparator</code>/<code>Comparable</code> contract
+requires reflexivity, transitivity, and antisymmetry; violating
+transitivity makes TimSort throw <code>IllegalArgumentException</code>
+outright.</li>
+<li><code>PriorityQueue</code> is backed by an <strong>array-represented
+binary heap</strong> (node <code>i</code>’s children are
+<code>2i+1</code>/<code>2i+2</code>); <code>offer</code> sifts up and
+<code>poll</code> sifts down, both O(log n), and it’s not
+thread-safe.</li>
+<li><code>TreeMap</code> is backed by a <strong>red-black tree</strong>,
+kept approximately balanced by properties like “the root is black, a red
+node’s children must be black, every path has the same black height,”
+with all operations O(log n).</li>
+<li>A Stream’s intermediate operations are all <strong>lazy</strong> and
+don’t actually run until the terminal operation fires; the payoff is
+that operations can be fused (saving memory) and can
+<strong>short-circuit</strong>
+(<code>limit</code>/<code>findFirst</code> finish early); parallel
+streams divide-and-conquer via the common <code>ForkJoinPool</code>,
+which requires an easily-splittable data source and stateless,
+side-effect-free operations.</li>
+<li><code>BigInteger</code>/<code>BigDecimal</code> are both
+<strong>immutable</strong> — every operation produces a new object, so
+watch for GC pressure when using them heavily inside loops.</li>
+</ul></li>
+</ul>
 <hr />
 <p><a href="10-并发模型.html">← Prev: Concurrency Model</a> · <a
 href="index.html">Index</a> · <a href="12-常用第三方库.html">Next:

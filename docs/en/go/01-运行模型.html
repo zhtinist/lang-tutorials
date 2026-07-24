@@ -105,33 +105,117 @@
 id="toc-runtime-model-compilation-linking-runtime">Runtime Model:
 Compilation, Linking, Runtime</a>
 <ul>
+<li><a href="#just-using-it-write-a-go-program-run-it"
+id="toc-just-using-it-write-a-go-program-run-it">1. Just Using It: Write
+a Go Program, Run It</a></li>
+<li><a href="#going-deeper-what-exactly-is-sealed-inside-the-binary"
+id="toc-going-deeper-what-exactly-is-sealed-inside-the-binary">2. Going
+Deeper: What Exactly Is Sealed Inside the Binary</a></li>
 <li><a
 href="#overview-a-go-binary-your-code-runtime-standard-library-statically-packaged"
-id="toc-overview-a-go-binary-your-code-runtime-standard-library-statically-packaged">1.
+id="toc-overview-a-go-binary-your-code-runtime-standard-library-statically-packaged">3.
 Overview: A Go Binary = Your Code + Runtime + Standard Library,
 Statically Packaged</a></li>
-<li><a href="#go-build-a-native-binary-in-one-step"
-id="toc-go-build-a-native-binary-in-one-step">2. <code>go build</code>:
-A Native Binary in One Step</a></li>
-<li><a href="#what-exactly-is-inside-the-runtime"
-id="toc-what-exactly-is-inside-the-runtime">3. What Exactly Is Inside
-the Runtime</a></li>
+<li><a href="#go-build-the-truth-about-static-linking"
+id="toc-go-build-the-truth-about-static-linking">4.
+<code>go build</code>: The Truth About Static Linking</a></li>
+<li><a href="#whats-actually-inside-the-runtime"
+id="toc-whats-actually-inside-the-runtime">5. What’s Actually Inside the
+Runtime</a></li>
 <li><a href="#why-go-compiles-so-fast"
-id="toc-why-go-compiles-so-fast">4. Why Go Compiles So Fast</a></li>
+id="toc-why-go-compiles-so-fast">6. Why Go Compiles So Fast</a></li>
 <li><a href="#common-commands-go-run-build-mod"
-id="toc-common-commands-go-run-build-mod">5. Common Commands:
+id="toc-common-commands-go-run-build-mod">7. Common Commands:
 <code>go run</code> / <code>build</code> / <code>mod</code></a></li>
 <li><a href="#cross-compilation-just-change-two-environment-variables"
-id="toc-cross-compilation-just-change-two-environment-variables">6.
+id="toc-cross-compilation-just-change-two-environment-variables">8.
 Cross-Compilation: Just Change Two Environment Variables</a></li>
 <li><a href="#the-final-contrast-with-c-a-single-self-contained-binary"
-id="toc-the-final-contrast-with-c-a-single-self-contained-binary">7. The
+id="toc-the-final-contrast-with-c-a-single-self-contained-binary">9. The
 Final Contrast with C: A Single Self-Contained Binary</a></li>
+<li><a href="#summary" id="toc-summary">Summary</a></li>
 </ul></li>
 </ul>
 </nav>
 <h1 id="runtime-model-compilation-linking-runtime">Runtime Model:
 Compilation, Linking, Runtime</h1>
+<p>This chapter starts by getting a Go program <strong>written and
+running</strong>—no background knowledge required, just follow along and
+it works. Once it runs, we’ll come back and ask the question every C/C++
+programmer naturally asks: <strong>what exactly does this binary turn
+into, and what’s inside it while it’s running?</strong> If you only care
+about using it, read the first section and jump to the next chapter; if
+you want to understand “what’s happening under the hood” and how it
+differs from C’s compile-link-run model, keep reading.</p>
+<h2 id="just-using-it-write-a-go-program-run-it">1. Just Using It: Write
+a Go Program, Run It</h2>
+<p>You don’t need to know any underlying principles to write and run a
+Go program with the steps below.</p>
+<p><strong>Step one: write the code.</strong> Create a file
+<code>hello.go</code>:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;hello, world&quot;</span><span class="op">)</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>The three lines: <code>package main</code> declares this is an
+executable program (as opposed to a library meant to be imported by
+others); <code>import "fmt"</code> pulls in the standard-library package
+for formatted output; <code>func main()</code> is the program’s entry
+point, equivalent to C’s <code>int main(void)</code>, except Go’s
+<code>main</code> takes no arguments and returns nothing. The syntax
+details come chapter by chapter starting next chapter—for now just copy
+it and get it running.</p>
+<p><strong>Step two: run it directly.</strong> The easiest way is
+<code>go run</code>, which runs it like a script:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="ex">$</span> go run hello.go</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="ex">hello,</span> world</span></code></pre></div>
+<p><strong>Step three: compile a real executable</strong>, similar to
+C’s <code>gcc -o hello hello.c</code>:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="ex">$</span> go build <span class="at">-o</span> hello hello.go</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="ex">$</span> ./hello</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="ex">hello,</span> world</span></code></pre></div>
+<p><strong>Step four: try out “concurrency.”</strong> Put a
+<code>go</code> keyword before a function call and that call gets thrown
+into the background to run asynchronously—this is the syntactic entry
+point to Go’s concurrency support (just look at the syntax for now; the
+behavioral details come in the second half of this chapter):</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="op">(</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;time&quot;</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="op">)</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> sayHi<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;hi, from another goroutine&quot;</span><span class="op">)</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>    <span class="cf">go</span> sayHi<span class="op">()</span>                        <span class="co">// launch a goroutine, don&#39;t wait for it to finish before moving on</span></span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>    time<span class="op">.</span>Sleep<span class="op">(</span>time<span class="op">.</span>Millisecond <span class="op">*</span> <span class="dv">10</span><span class="op">)</span> <span class="co">// crudely wait a bit so it gets a chance to run</span></span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;main done&quot;</span><span class="op">)</span></span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Output:</p>
+<pre><code>hi, from another goroutine
+main done</code></pre>
+<p><strong>Step five: when the project grows, declare a module with
+<code>go.mod</code></strong> (single-file
+<code>go run</code>/<code>go build</code> doesn’t need this step, but
+bringing in dependencies or organizing a multi-file project does):</p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="ex">$</span> go mod init example.com/hello</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="ex">go:</span> creating new go.mod: module example.com/hello</span></code></pre></div>
+<p>These few steps are already enough to start writing and running code.
+Now let’s go under the hood—the same plain <code>hello.go</code>, and
+exactly what gets packed into the compiled binary beyond what a C
+version would have.</p>
+<h2 id="going-deeper-what-exactly-is-sealed-inside-the-binary">2. Going
+Deeper: What Exactly Is Sealed Inside the Binary</h2>
 <p>As a C/C++ programmer, you have a very clear mental model of “how a
 program becomes something runnable”: preprocess → compile to
 <code>.o</code> → link (static or dynamic) → produce an ELF/Mach-O
@@ -142,10 +226,10 @@ native machine-code executable—no virtual machine, no bytecode
 interpreter</strong>. What’s different: this binary additionally
 statically links in a <strong>runtime</strong>, which has already
 started running before your <code>main</code>.</p>
-<p>The goal of this chapter: make the “compile → link → run” chain of Go
-clear, contrasting it with C’s model at every step.</p>
+<p>From here on, this chapter peels this binary apart layer by layer,
+contrasting it with C’s model at every step.</p>
 <h2
-id="overview-a-go-binary-your-code-runtime-standard-library-statically-packaged">1.
+id="overview-a-go-binary-your-code-runtime-standard-library-statically-packaged">3.
 Overview: A Go Binary = Your Code + Runtime + Standard Library,
 Statically Packaged</h2>
 <p>First the conclusion, in a comparison table:</p>
@@ -229,18 +313,15 @@ functions and code segments</strong>.</p>
  │  one/more thread   │         │  many goroutine    │  ← ~2KB each to start, growable
  │  stacks            │         │  stacks            │
  └────────────────────┘         └────────────────────┘</code></pre>
-<h2 id="go-build-a-native-binary-in-one-step">2. <code>go build</code>:
-A Native Binary in One Step</h2>
-<div class="sourceCode" id="cb2"><pre
-class="sourceCode bash"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> build <span class="at">-o</span> hello ./...   <span class="co"># produces an executable named hello</span></span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="fu">file</span> hello                <span class="co"># Mach-O 64-bit executable / ELF 64-bit</span></span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="ex">./hello</span>                   <span class="co"># runs directly, no external dependencies needed</span></span></code></pre></div>
-<p>The most immediately striking thing for a C programmer is
-<strong>static linking by default</strong> (more precisely, this mainly
-refers to the <strong>Linux + <code>CGO_ENABLED=0</code></strong> case).
-Write a pure-Go <code>hello</code> and on Linux, <code>ldd hello</code>
-will tell you <code>not a dynamic executable</code>—it hasn’t linked
-libc, it doesn’t even need <code>libc.so.6</code>. (<strong>macOS is an
+<h2 id="go-build-the-truth-about-static-linking">4.
+<code>go build</code>: The Truth About Static Linking</h2>
+<p>The first section already used <code>go build</code>. What’s more
+worth digging into for a C programmer is that it <strong>statically
+links by default</strong> (more precisely, this mainly refers to the
+<strong>Linux + <code>CGO_ENABLED=0</code></strong> case). Write a
+pure-Go <code>hello</code> and on Linux, <code>ldd hello</code> will
+tell you <code>not a dynamic executable</code>—it hasn’t linked libc, it
+doesn’t even need <code>libc.so.6</code>. (<strong>macOS is an
 exception</strong>: Apple does not support statically linking libSystem,
 so a Go binary on macOS will always dynamically link
 <code>/usr/lib/libSystem.B.dylib</code>, visible with
@@ -260,17 +341,20 @@ system).</li>
 <h3 id="when-does-go-link-dynamically">When Does Go Link
 Dynamically?</h3>
 <p>It’s not absolutely static. Two common situations introduce dynamic
-linking: 1. <strong>cgo</strong>: once you use <code>import "C"</code>
-to call a C library (such as certain resolution paths in
-<code>net</code> or <code>os/user</code>, or a third-party C
-dependency), libc gets linked and produces a dynamic dependency. You can
-force cgo off with <code>CGO_ENABLED=0</code> to return to fully static.
-2. Explicit <code>-linkmode=external</code> or linking against system
-libraries.</p>
-<div class="sourceCode" id="cb3"><pre
-class="sourceCode bash"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="va">CGO_ENABLED</span><span class="op">=</span>0 <span class="ex">go</span> build <span class="at">-o</span> hello   <span class="co"># force fully static, commonly used when building Docker images</span></span></code></pre></div>
-<h2 id="what-exactly-is-inside-the-runtime">3. What Exactly Is Inside
-the Runtime</h2>
+linking:</p>
+<ol type="1">
+<li><strong>cgo</strong>: once you use <code>import "C"</code> to call a
+C library (such as certain resolution paths in <code>net</code> or
+<code>os/user</code>, or a third-party C dependency), libc gets linked
+and produces a dynamic dependency. You can force cgo off with
+<code>CGO_ENABLED=0</code> to return to fully static.</li>
+<li>Explicit <code>-linkmode=external</code> or linking against system
+libraries.</li>
+</ol>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="va">CGO_ENABLED</span><span class="op">=</span>0 <span class="ex">go</span> build <span class="at">-o</span> hello   <span class="co"># force fully static, commonly used when building Docker images</span></span></code></pre></div>
+<h2 id="whats-actually-inside-the-runtime">5. What’s Actually Inside the
+Runtime</h2>
 <p>C’s “runtime” is so thin it’s almost only crt0’s bootstrap plus the
 library functions provided by libc; control is handed to your
 <code>main</code> very quickly, and after that there’s no “background
@@ -301,33 +385,39 @@ contrast, spinning up a thread in C costs several MB of stack plus
 kernel scheduling overhead, so a few thousand is already a strain;
 running hundreds of thousands of goroutines in Go is entirely
 routine.</p>
-<p>You can observe this directly with the <code>runtime</code> package:
-pin the number of Ps to 2, then spawn 1000 goroutines—all of them
-multiplexed onto those 2 logical processors:</p>
-<div class="sourceCode" id="cb5"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="op">(</span></span>
-<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;fmt&quot;</span></span>
-<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;runtime&quot;</span></span>
-<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a><span class="op">)</span></span>
-<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
-<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>    runtime<span class="op">.</span>GOMAXPROCS<span class="op">(</span><span class="dv">2</span><span class="op">)</span>              <span class="co">// pin logical processors P to 2 (deterministic)</span></span>
-<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>runtime<span class="op">.</span>GOMAXPROCS<span class="op">(</span><span class="dv">0</span><span class="op">))</span> <span class="co">// 2   (passing 0 = query only, don&#39;t change)</span></span>
-<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>runtime<span class="op">.</span>NumGoroutine<span class="op">())</span> <span class="co">// 1   (only the main goroutine so far)</span></span>
-<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>    ch <span class="op">:=</span> <span class="bu">make</span><span class="op">(</span><span class="kw">chan</span> <span class="kw">struct</span><span class="op">{})</span></span>
-<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> i <span class="op">:=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">1000</span><span class="op">;</span> i<span class="op">++</span> <span class="op">{</span></span>
-<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>        <span class="cf">go</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span> <span class="op">&lt;-</span>ch <span class="op">}()</span> <span class="co">// 1000 goroutines, all parked waiting on ch</span></span>
-<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> runtime<span class="op">.</span>NumGoroutine<span class="op">()</span> <span class="op">&lt;</span> <span class="dv">1001</span> <span class="op">{</span> <span class="co">// wait until all have been created</span></span>
-<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>        runtime<span class="op">.</span>Gosched<span class="op">()</span></span>
-<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>runtime<span class="op">.</span>NumGoroutine<span class="op">())</span> <span class="co">// 1001 (main + 1000) on just 2 OS threads</span></span>
-<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a>    <span class="bu">close</span><span class="op">(</span>ch<span class="op">)</span> <span class="co">// release them all at once</span></span>
-<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>The <code>go sayHi()</code> in the first section was just syntax; you
+can see the scheduler’s existence more directly with the
+<code>runtime</code> package. Pin the number of Ps to 2, then spawn 1000
+goroutines—all of them multiplexed onto those 2 logical processors:</p>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="op">(</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;runtime&quot;</span></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a><span class="op">)</span></span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>    runtime<span class="op">.</span>GOMAXPROCS<span class="op">(</span><span class="dv">2</span><span class="op">)</span>              <span class="co">// pin logical processors P to 2 (deterministic)</span></span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>runtime<span class="op">.</span>GOMAXPROCS<span class="op">(</span><span class="dv">0</span><span class="op">))</span> <span class="co">// 2   (passing 0 = query only, don&#39;t change)</span></span>
+<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>runtime<span class="op">.</span>NumGoroutine<span class="op">())</span> <span class="co">// 1   (only the main goroutine so far)</span></span>
+<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-14"><a href="#cb10-14" aria-hidden="true" tabindex="-1"></a>    ch <span class="op">:=</span> <span class="bu">make</span><span class="op">(</span><span class="kw">chan</span> <span class="kw">struct</span><span class="op">{})</span></span>
+<span id="cb10-15"><a href="#cb10-15" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> i <span class="op">:=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">1000</span><span class="op">;</span> i<span class="op">++</span> <span class="op">{</span></span>
+<span id="cb10-16"><a href="#cb10-16" aria-hidden="true" tabindex="-1"></a>        <span class="cf">go</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span> <span class="op">&lt;-</span>ch <span class="op">}()</span> <span class="co">// 1000 goroutines, all parked waiting on ch</span></span>
+<span id="cb10-17"><a href="#cb10-17" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb10-18"><a href="#cb10-18" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> runtime<span class="op">.</span>NumGoroutine<span class="op">()</span> <span class="op">&lt;</span> <span class="dv">1001</span> <span class="op">{</span> <span class="co">// wait until all have been created</span></span>
+<span id="cb10-19"><a href="#cb10-19" aria-hidden="true" tabindex="-1"></a>        runtime<span class="op">.</span>Gosched<span class="op">()</span></span>
+<span id="cb10-20"><a href="#cb10-20" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb10-21"><a href="#cb10-21" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>runtime<span class="op">.</span>NumGoroutine<span class="op">())</span> <span class="co">// 1001 (main + 1000), running on just 2 OS threads</span></span>
+<span id="cb10-22"><a href="#cb10-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-23"><a href="#cb10-23" aria-hidden="true" tabindex="-1"></a>    <span class="bu">close</span><span class="op">(</span>ch<span class="op">)</span> <span class="co">// release them all at once</span></span>
+<span id="cb10-24"><a href="#cb10-24" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Output:</p>
+<pre><code>2
+1
+1001</code></pre>
 <p>1001 goroutines coexist happily on 2 Ps—with C’s 1:1 threads, 1000
 threads would need several GB of stack alone. This is the M:N scheduling
 model made concrete.</p>
@@ -358,7 +448,7 @@ classes</strong>; small objects are taken directly from the P-local
 Go’s allocation performance is good under high concurrency. Compared
 with C’s <code>malloc</code> (typically a global lock or arena lock),
 Go’s per-P cache is naturally multicore-friendly.</p>
-<h2 id="why-go-compiles-so-fast">4. Why Go Compiles So Fast</h2>
+<h2 id="why-go-compiles-so-fast">6. Why Go Compiles So Fast</h2>
 <p>A large C++ project can compile slowly enough that you go get a
 coffee, and you know the reasons well: header files textually included
 over and over, templates instantiated in every compilation unit, huge
@@ -389,14 +479,17 @@ compiled in parallel.</li>
 <p>The cost: fast compilation is bought with “a thicker runtime + a
 larger binary + GC overhead,” plus trade-offs in language expressiveness
 (no generics early on, etc.).</p>
-<h2 id="common-commands-go-run-build-mod">5. Common Commands:
+<h2 id="common-commands-go-run-build-mod">7. Common Commands:
 <code>go run</code> / <code>build</code> / <code>mod</code></h2>
-<div class="sourceCode" id="cb7"><pre
-class="sourceCode bash"><code class="sourceCode bash"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> run main.go        <span class="co"># compile to a temp directory and run immediately (leaves no binary), for quick experiments</span></span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> build ./...        <span class="co"># compile all packages in the current module, produce an executable (when there&#39;s a main package)</span></span>
-<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> install ./cmd/foo  <span class="co"># compile and install the binary into $GOBIN (default ~/go/bin)</span></span>
-<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> test ./...         <span class="co"># compile and run tests</span></span>
-<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> vet ./...          <span class="co"># static analysis for suspicious code</span></span></code></pre></div>
+<p>The first section already used <code>go run</code>,
+<code>go build</code>, and <code>go mod init</code>. The full set of
+common commands:</p>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> run main.go        <span class="co"># compile to a temp directory and run immediately (leaves no binary), for quick experiments</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> build ./...        <span class="co"># compile all packages in the current module, produce an executable (when there&#39;s a main package)</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> install ./cmd/foo  <span class="co"># compile and install the binary into $GOBIN (default ~/go/bin)</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> test ./...         <span class="co"># compile and run tests</span></span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> vet ./...          <span class="co"># static analysis for suspicious code</span></span></code></pre></div>
 <p>Note that <code>go run</code> is <strong>not interpreted
 execution</strong>—it really does compile to native code first and then
 run, it just puts the binary in a temp directory and deletes it when
@@ -406,10 +499,10 @@ model.”</p>
 Management</h3>
 <p>Go uses <strong>modules</strong> to manage dependencies (replacing
 the old GOPATH mode):</p>
-<div class="sourceCode" id="cb8"><pre
-class="sourceCode bash"><code class="sourceCode bash"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> mod init example.com/myapp   <span class="co"># generate go.mod, declaring the module path</span></span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> get github.com/foo/bar@v1.2.3 <span class="co"># add/upgrade a dependency, writing go.mod and go.sum</span></span>
-<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> mod tidy                      <span class="co"># add/remove dependencies to match the source imports</span></span></code></pre></div>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> mod init example.com/myapp   <span class="co"># generate go.mod, declaring the module path</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> get github.com/foo/bar@v1.2.3 <span class="co"># add/upgrade a dependency, writing go.mod and go.sum</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> mod tidy                      <span class="co"># add/remove dependencies to match the source imports</span></span></code></pre></div>
 <ul>
 <li><code>go.mod</code>: declares the module path, Go version,
 dependencies and their versions.</li>
@@ -420,7 +513,7 @@ guaranteeing reproducible builds (like a lock file).</li>
 (<code>$GOPATH/pkg/mod</code>) and statically compiled into your binary
 at build time. <strong>There’s no C-style “go find the .so at runtime”
 problem</strong>—dependencies are frozen in at compile time.</p>
-<h2 id="cross-compilation-just-change-two-environment-variables">6.
+<h2 id="cross-compilation-just-change-two-environment-variables">8.
 Cross-Compilation: Just Change Two Environment Variables</h2>
 <p>Cross-compilation in C is notoriously painful: you need a
 cross-toolchain for the target platform (a cross gcc), the target
@@ -428,17 +521,17 @@ platform’s libc, a sysroot, and so on. Because Go by default doesn’t
 depend on libc, and the toolchain ships with the runtime for every
 target platform, cross-compilation is just setting two environment
 variables:</p>
-<div class="sourceCode" id="cb9"><pre
-class="sourceCode bash"><code class="sourceCode bash"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="co"># On macOS/arm64, build for Linux/amd64:</span></span>
-<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="va">GOOS</span><span class="op">=</span>linux <span class="va">GOARCH</span><span class="op">=</span>amd64 <span class="ex">go</span> build <span class="at">-o</span> hello-linux-amd64</span>
-<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Build for Windows:</span></span>
-<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a><span class="va">GOOS</span><span class="op">=</span>windows <span class="va">GOARCH</span><span class="op">=</span>amd64 <span class="ex">go</span> build <span class="at">-o</span> hello.exe</span>
-<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Build for a Raspberry Pi (Linux/arm64):</span></span>
-<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a><span class="va">GOOS</span><span class="op">=</span>linux <span class="va">GOARCH</span><span class="op">=</span>arm64 <span class="ex">go</span> build <span class="at">-o</span> hello-pi</span>
-<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> tool dist list   <span class="co"># list all supported GOOS/GOARCH combinations</span></span></code></pre></div>
+<div class="sourceCode" id="cb15"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="co"># On macOS/arm64, build for Linux/amd64:</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="va">GOOS</span><span class="op">=</span>linux <span class="va">GOARCH</span><span class="op">=</span>amd64 <span class="ex">go</span> build <span class="at">-o</span> hello-linux-amd64</span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Build for Windows:</span></span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a><span class="va">GOOS</span><span class="op">=</span>windows <span class="va">GOARCH</span><span class="op">=</span>amd64 <span class="ex">go</span> build <span class="at">-o</span> hello.exe</span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Build for a Raspberry Pi (Linux/arm64):</span></span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a><span class="va">GOOS</span><span class="op">=</span>linux <span class="va">GOARCH</span><span class="op">=</span>arm64 <span class="ex">go</span> build <span class="at">-o</span> hello-pi</span>
+<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> tool dist list   <span class="co"># list all supported GOOS/GOARCH combinations</span></span></code></pre></div>
 <ul>
 <li><code>GOOS</code>: target operating system
 (<code>linux</code>/<code>darwin</code>/<code>windows</code>/<code>freebsd</code>…).</li>
@@ -449,7 +542,7 @@ class="sourceCode bash"><code class="sourceCode bash"><span id="cb9-1"><a href="
 (<code>CGO_ENABLED=0</code>).</strong> Once you use cgo,
 cross-compilation degenerates back into the painful C-world mode of
 “needing a C cross-toolchain for the target platform.”</p>
-<h2 id="the-final-contrast-with-c-a-single-self-contained-binary">7. The
+<h2 id="the-final-contrast-with-c-a-single-self-contained-binary">9. The
 Final Contrast with C: A Single Self-Contained Binary</h2>
 <p>To sum up this chapter in one sentence: <strong>Go aims for “compile
 once, get a self-contained native binary that can be copied across
@@ -470,6 +563,25 @@ stacks), why some variables end up on the heap (escape analysis + GC),
 why you don’t have to free slices/maps. In the next chapter we come back
 down to earth and go through Go’s basic syntax point by point against
 C.</p>
+<h2 id="summary">Summary</h2>
+<ul>
+<li><strong>At the usage level</strong>: <code>go run file.go</code>
+compiles and runs immediately; <code>go build -o out file.go</code>
+produces an executable; putting the <code>go</code> keyword before a
+function call launches a goroutine that runs in the background; for
+multi-file projects with dependencies, declare a module with
+<code>go mod init</code>; <code>GOOS=xxx GOARCH=xxx go build</code>
+cross-compiles.</li>
+<li><strong>At the underlying level</strong>: a Go binary = your code +
+runtime (scheduler + GC + allocator) + the standard-library packages you
+use, statically packaged into a single native machine-code file; it
+doesn’t depend on libc by default (except with cgo); the GMP model lets
+massive numbers of goroutines multiplex onto a small number of OS
+threads; a concurrent tricolor mark-and-sweep GC runs in the background;
+the allocator uses a mcache/mcentral/mheap multi-level cache; no header
+files or template instantiation makes compilation far faster than
+C++.</li>
+</ul>
 <hr />
 <p><a href="index.html">← Index</a> · <a href="index.html">Index</a> ·
 <a href="02-基础语法.html">Next: Basic Syntax</a> →</p>

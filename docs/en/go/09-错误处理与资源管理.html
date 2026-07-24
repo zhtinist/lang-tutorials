@@ -105,20 +105,27 @@
 id="toc-error-handling-and-garbage-collection">Error Handling and
 Garbage Collection</a>
 <ul>
-<li><a href="#error-is-an-ordinary-interface-value"
-id="toc-error-is-an-ordinary-interface-value">1. error is an ordinary
+<li><a
+href="#first-the-basics-a-quick-tour-of-error-defer-and-panicrecover"
+id="toc-first-the-basics-a-quick-tour-of-error-defer-and-panicrecover">First,
+the basics: a quick tour of error, defer, and panic/recover</a></li>
+<li><a href="#now-lets-go-deeper-what-an-error-really-is"
+id="toc-now-lets-go-deeper-what-an-error-really-is">Now let’s go deeper:
+what an error really is</a></li>
+<li><a href="#i.-error-is-an-ordinary-interface-value"
+id="toc-i.-error-is-an-ordinary-interface-value">I. error is an ordinary
 interface value</a></li>
-<li><a href="#sentinel-errors-custom-errors-isas"
-id="toc-sentinel-errors-custom-errors-isas">2. Sentinel errors, custom
-errors, Is/As</a></li>
-<li><a href="#panic-recover-not-exceptions"
-id="toc-panic-recover-not-exceptions">3. panic / recover: not
-exceptions</a></li>
-<li><a href="#resource-management-defer-instead-of-raii"
-id="toc-resource-management-defer-instead-of-raii">4. Resource
+<li><a href="#ii.-sentinel-errors-custom-errors-isas"
+id="toc-ii.-sentinel-errors-custom-errors-isas">II. Sentinel errors,
+custom errors, Is/As</a></li>
+<li><a href="#iii.-panic-recover-not-an-exception"
+id="toc-iii.-panic-recover-not-an-exception">III. panic / recover: not
+an exception</a></li>
+<li><a href="#iv.-resource-management-defer-instead-of-raii"
+id="toc-iv.-resource-management-defer-instead-of-raii">IV. Resource
 management: defer instead of RAII</a></li>
-<li><a href="#garbage-collection-gc" id="toc-garbage-collection-gc">5.
-Garbage collection (GC)</a></li>
+<li><a href="#v.-garbage-collection-gc"
+id="toc-v.-garbage-collection-gc">V. Garbage collection (GC)</a></li>
 <li><a href="#summary" id="toc-summary">Summary</a></li>
 </ul></li>
 </ul>
@@ -128,16 +135,95 @@ Garbage Collection</h1>
 <p>Go has no exceptions, no <code>try/catch</code>, and no destructors
 doing RAII. It treats errors as <strong>ordinary return values</strong>,
 hands resource cleanup to <code>defer</code>, and hands memory
-reclamation to a <strong>concurrent garbage collector</strong>. For C++
-programmers, these are three places where you need to rebuild muscle
-memory.</p>
-<h2 id="error-is-an-ordinary-interface-value">1. error is an ordinary
-interface value</h2>
-<p><code>error</code> is not a keyword; it is just a perfectly ordinary
-interface in the standard library:</p>
-<div class="sourceCode" id="cb1"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> <span class="dt">error</span> <span class="kw">interface</span> <span class="op">{</span></span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    Error<span class="op">()</span> <span class="dt">string</span></span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+reclamation to a <strong>concurrent garbage collector</strong>.
+<strong>This chapter first covers how to write and use these three
+things — understanding ordinary Go code is enough for that — and then
+moves on to “underlying implementation vs C”: what an error interface
+value actually is, what really happens when a panic unwinds, and how the
+GC marks concurrently without long pauses.</strong> For C++ programmers,
+these are three places where you need to rebuild muscle memory.</p>
+<h2
+id="first-the-basics-a-quick-tour-of-error-defer-and-panicrecover">First,
+the basics: a quick tour of error, defer, and panic/recover</h2>
+<p>No underlying mechanics yet — just how to write these things:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="op">(</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;errors&quot;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="op">)</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> divide<span class="op">(</span>a<span class="op">,</span> b <span class="dt">int</span><span class="op">)</span> <span class="op">(</span><span class="dt">int</span><span class="op">,</span> <span class="dt">error</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> b <span class="op">==</span> <span class="dv">0</span> <span class="op">{</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="dv">0</span><span class="op">,</span> errors<span class="op">.</span>New<span class="op">(</span><span class="st">&quot;division by zero&quot;</span><span class="op">)</span> <span class="co">// construct an error</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> a <span class="op">/</span> b<span class="op">,</span> <span class="ot">nil</span> <span class="co">// a nil second return value means &quot;no error&quot;</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    result<span class="op">,</span> err <span class="op">:=</span> divide<span class="op">(</span><span class="dv">10</span><span class="op">,</span> <span class="dv">2</span><span class="op">)</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> err <span class="op">!=</span> <span class="ot">nil</span> <span class="op">{</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>        fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;error:&quot;</span><span class="op">,</span> err<span class="op">)</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span> <span class="cf">else</span> <span class="op">{</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>        fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;result:&quot;</span><span class="op">,</span> result<span class="op">)</span> <span class="co">// result: 5</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>    _<span class="op">,</span> err <span class="op">=</span> divide<span class="op">(</span><span class="dv">10</span><span class="op">,</span> <span class="dv">0</span><span class="op">)</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> err <span class="op">!=</span> <span class="ot">nil</span> <span class="op">{</span></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>        fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;error:&quot;</span><span class="op">,</span> err<span class="op">)</span> <span class="co">// error: division by zero</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>    <span class="co">// defer: registers a call that is guaranteed to run before the function returns</span></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>    <span class="cf">defer</span> fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;printed just before main ends&quot;</span><span class="op">)</span></span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;main running normally&quot;</span><span class="op">)</span></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>A quick summary:</p>
+<ul>
+<li>Go functions often return two values: <code>(result, error)</code>.
+The caller <strong>must check it itself</strong> with
+<code>if err != nil</code> — an error does not automatically bubble up
+the way an exception would.</li>
+<li><code>errors.New("...")</code> builds the simplest possible error;
+<code>err == nil</code> means nothing went wrong.</li>
+<li>A <code>defer</code> statement registers a call that runs
+<strong>just before the function returns</strong>, whether the function
+returns normally or via an error — commonly used for “opened it, so must
+close it” cleanup (closing a file, unlocking a mutex, and so on).</li>
+</ul>
+<p>Now for <code>panic</code>/<code>recover</code> — used for genuinely
+unexpected situations (an out-of-bounds index, an explicitly triggered
+fatal error), not as an everyday error-handling tool:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> mayPanic<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="bu">panic</span><span class="op">(</span><span class="st">&quot;something went wrong&quot;</span><span class="op">)</span> <span class="co">// deliberately trigger a panic</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> safe<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">defer</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> r <span class="op">:=</span> <span class="bu">recover</span><span class="op">();</span> r <span class="op">!=</span> <span class="ot">nil</span> <span class="op">{</span> <span class="co">// recover only works inside a defer</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>            fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;recovered:&quot;</span><span class="op">,</span> r<span class="op">)</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}()</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    mayPanic<span class="op">()</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;this line never runs&quot;</span><span class="op">)</span> <span class="co">// once panic fires, the rest of the function stops running</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    safe<span class="op">()</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;program keeps running&quot;</span><span class="op">)</span> <span class="co">// after recover, main carries on normally</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>That much is enough to write structurally complete Go code. Now let’s
+go deeper — what an error really is in memory, the full mechanics of
+panic unwinding, and how the GC works concurrently.</p>
+<h2 id="now-lets-go-deeper-what-an-error-really-is">Now let’s go deeper:
+what an error really is</h2>
+<p>From here on we talk about the underlying mechanics. To understand
+the cost and behavior of error/panic/GC, start with this:
+<strong><code>error</code> is not a keyword — it is just a perfectly
+ordinary interface in the standard library</strong>, no different from
+any interface you’d define yourself.</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> <span class="dt">error</span> <span class="kw">interface</span> <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    Error<span class="op">()</span> <span class="dt">string</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>Any type that implements <code>Error() string</code> is an error. In
 memory it is <a href="08-面向对象与类型系统.html">the two-word interface
 <code>iface</code> covered in Chapter 08</a> —
@@ -145,64 +231,67 @@ memory it is <a href="08-面向对象与类型系统.html">the two-word interfac
 unwinding and no zero-cost exception tables; it just pushes a 16-byte
 interface value into the return stack slot, as cheap as returning any
 other value.</p>
-<h3 id="idiom-multiple-return-values-if-err-nil">Idiom: multiple return
-values + if err != nil</h3>
-<div class="sourceCode" id="cb2"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>f<span class="op">,</span> err <span class="op">:=</span> os<span class="op">.</span>Open<span class="op">(</span><span class="st">&quot;data.txt&quot;</span><span class="op">)</span></span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> err <span class="op">!=</span> <span class="ot">nil</span> <span class="op">{</span></span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> fmt<span class="op">.</span>Errorf<span class="op">(</span><span class="st">&quot;failed to open config: %w&quot;</span><span class="op">,</span> err<span class="op">)</span> <span class="co">// handle or wrap, then propagate</span></span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="cf">defer</span> f<span class="op">.</span>Close<span class="op">()</span></span>
-<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="co">// happy path</span></span></code></pre></div>
-<p>In C++, errors are “implicit control flow” (exceptions bubble up
-automatically); in Go, errors are “explicit data flow” — every layer
-must visibly check and pass them along. The verbosity is what it gets
-criticized for, but in exchange you get <strong>fully visible control
-flow, no hidden jumps, and no stack-unwinding overhead</strong>.</p>
-<h3 id="creating-errors">Creating errors</h3>
-<div class="sourceCode" id="cb3"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>errors<span class="op">.</span>New<span class="op">(</span><span class="st">&quot;something failed&quot;</span><span class="op">)</span>           <span class="co">// simplest, returns *errorString</span></span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Errorf<span class="op">(</span><span class="st">&quot;port %d in use&quot;</span><span class="op">,</span> port<span class="op">)</span>        <span class="co">// with formatting</span></span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Errorf<span class="op">(</span><span class="st">&quot;read config: %w&quot;</span><span class="op">,</span> err<span class="op">)</span>        <span class="co">// %w wraps the underlying error (keeps the chain)</span></span></code></pre></div>
+<h2 id="i.-error-is-an-ordinary-interface-value">I. error is an ordinary
+interface value</h2>
+<h3 id="how-to-use-it">How to use it</h3>
+<p>The idiom is “multiple return values + if err != nil”:</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>f<span class="op">,</span> err <span class="op">:=</span> os<span class="op">.</span>Open<span class="op">(</span><span class="st">&quot;data.txt&quot;</span><span class="op">)</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> err <span class="op">!=</span> <span class="ot">nil</span> <span class="op">{</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> fmt<span class="op">.</span>Errorf<span class="op">(</span><span class="st">&quot;failed to open config: %w&quot;</span><span class="op">,</span> err<span class="op">)</span> <span class="co">// handle or wrap, then propagate</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="cf">defer</span> f<span class="op">.</span>Close<span class="op">()</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="co">// happy path</span></span></code></pre></div>
+<p>A few ways to create errors:</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>errors<span class="op">.</span>New<span class="op">(</span><span class="st">&quot;something failed&quot;</span><span class="op">)</span>           <span class="co">// simplest, returns *errorString</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Errorf<span class="op">(</span><span class="st">&quot;port %d in use&quot;</span><span class="op">,</span> port<span class="op">)</span>        <span class="co">// with formatting</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Errorf<span class="op">(</span><span class="st">&quot;read config: %w&quot;</span><span class="op">,</span> err<span class="op">)</span>        <span class="co">// %w wraps the underlying error (keeps the chain)</span></span></code></pre></div>
 <p><code>%w</code> (wrap) is the key: it embeds <code>err</code> as the
 “wrapped cause” inside the new error, forming an error chain that
 <code>errors.Is</code>/<code>errors.As</code> can later unwrap layer by
 layer. Using <code>%v</code> just splices the text in, and the chain
 breaks.</p>
-<h2 id="sentinel-errors-custom-errors-isas">2. Sentinel errors, custom
-errors, Is/As</h2>
-<h3 id="sentinel-errors">Sentinel errors</h3>
-<p>Predefined error values that can be compared with <code>==</code> or
-<code>errors.Is</code>:</p>
-<div class="sourceCode" id="cb4"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> ErrNotFound <span class="op">=</span> errors<span class="op">.</span>New<span class="op">(</span><span class="st">&quot;not found&quot;</span><span class="op">)</span></span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> Lookup<span class="op">(</span>k <span class="dt">string</span><span class="op">)</span> <span class="op">(</span><span class="dt">string</span><span class="op">,</span> <span class="dt">error</span><span class="op">)</span> <span class="op">{</span></span>
-<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">// ...</span></span>
-<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="st">&quot;&quot;</span><span class="op">,</span> ErrNotFound</span>
-<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> errors<span class="op">.</span>Is<span class="op">(</span>err<span class="op">,</span> ErrNotFound<span class="op">)</span> <span class="op">{</span> <span class="co">/* special-case it */</span> <span class="op">}</span></span></code></pre></div>
+<h3 id="comparison-with-c">Comparison with C</h3>
+<p>In C++, errors are “implicit control flow” (exceptions bubble up
+automatically); in Go, errors are “explicit data flow” — every layer
+must visibly check and pass them along. The verbosity is what it gets
+criticized for, but in exchange you get <strong>fully visible control
+flow, no hidden jumps, and no stack-unwinding overhead</strong>.</p>
+<h2 id="ii.-sentinel-errors-custom-errors-isas">II. Sentinel errors,
+custom errors, Is/As</h2>
+<h3 id="how-to-use-it-1">How to use it</h3>
+<p><strong>Sentinel errors</strong>: predefined error values that can be
+compared with <code>==</code> or <code>errors.Is</code>:</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> ErrNotFound <span class="op">=</span> errors<span class="op">.</span>New<span class="op">(</span><span class="st">&quot;not found&quot;</span><span class="op">)</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> Lookup<span class="op">(</span>k <span class="dt">string</span><span class="op">)</span> <span class="op">(</span><span class="dt">string</span><span class="op">,</span> <span class="dt">error</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">// ...</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="st">&quot;&quot;</span><span class="op">,</span> ErrNotFound</span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> errors<span class="op">.</span>Is<span class="op">(</span>err<span class="op">,</span> ErrNotFound<span class="op">)</span> <span class="op">{</span> <span class="co">/* special-case it */</span> <span class="op">}</span></span></code></pre></div>
 <p><strong>Why use <code>errors.Is</code> rather than
 <code>err == ErrNotFound</code>?</strong> Because <code>err</code> may
 have been wrapped several layers deep with <code>%w</code>;
 <code>==</code> only compares the outermost layer, whereas
 <code>errors.Is</code> walks the <code>%w</code> chain, calling
 <code>Unwrap</code> and comparing at each level.</p>
-<h3 id="custom-error-types">Custom error types</h3>
-<p>If you want to carry structured information, define a type:</p>
-<div class="sourceCode" id="cb5"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> PathError <span class="kw">struct</span> <span class="op">{</span></span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    Op   <span class="dt">string</span></span>
-<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    Path <span class="dt">string</span></span>
-<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    Err  <span class="dt">error</span></span>
-<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>e <span class="op">*</span>PathError<span class="op">)</span> Error<span class="op">()</span> <span class="dt">string</span> <span class="op">{</span></span>
-<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> e<span class="op">.</span>Op <span class="op">+</span> <span class="st">&quot; &quot;</span> <span class="op">+</span> e<span class="op">.</span>Path <span class="op">+</span> <span class="st">&quot;: &quot;</span> <span class="op">+</span> e<span class="op">.</span>Err<span class="op">.</span>Error<span class="op">()</span></span>
-<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>e <span class="op">*</span>PathError<span class="op">)</span> Unwrap<span class="op">()</span> <span class="dt">error</span> <span class="op">{</span> <span class="cf">return</span> e<span class="op">.</span>Err <span class="op">}</span> <span class="co">// lets Is/As see through it</span></span></code></pre></div>
+<p><strong>Custom error types</strong>: if you want to carry structured
+information, define a type:</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> PathError <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    Op   <span class="dt">string</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    Path <span class="dt">string</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    Err  <span class="dt">error</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>e <span class="op">*</span>PathError<span class="op">)</span> Error<span class="op">()</span> <span class="dt">string</span> <span class="op">{</span></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> e<span class="op">.</span>Op <span class="op">+</span> <span class="st">&quot; &quot;</span> <span class="op">+</span> e<span class="op">.</span>Path <span class="op">+</span> <span class="st">&quot;: &quot;</span> <span class="op">+</span> e<span class="op">.</span>Err<span class="op">.</span>Error<span class="op">()</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>e <span class="op">*</span>PathError<span class="op">)</span> Unwrap<span class="op">()</span> <span class="dt">error</span> <span class="op">{</span> <span class="cf">return</span> e<span class="op">.</span>Err <span class="op">}</span> <span class="co">// lets Is/As see through it</span></span></code></pre></div>
 <p><code>errors.As</code> pulls out the first error in the chain that
 matches the target type:</p>
-<div class="sourceCode" id="cb6"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> pe <span class="op">*</span>PathError</span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> errors<span class="op">.</span>As<span class="op">(</span>err<span class="op">,</span> <span class="op">&amp;</span>pe<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;failing path:&quot;</span><span class="op">,</span> pe<span class="op">.</span>Path<span class="op">)</span> <span class="co">// access the structured field</span></span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb8"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> pe <span class="op">*</span>PathError</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> errors<span class="op">.</span>As<span class="op">(</span>err<span class="op">,</span> <span class="op">&amp;</span>pe<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;failing path:&quot;</span><span class="op">,</span> pe<span class="op">.</span>Path<span class="op">)</span> <span class="co">// access the structured field</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <table>
 <colgroup>
 <col style="width: 33%" />
@@ -235,43 +324,74 @@ matches the target type:</p>
 </tr>
 </tbody>
 </table>
+<h3 id="comparison-with-c-1">Comparison with C</h3>
+<p><code>errors.Is</code>/<code>errors.As</code> are both just a loop
+that repeatedly walks down via the <code>Unwrap() error</code> method —
+not compiler magic: at each layer, if it doesn’t match, it calls that
+layer’s <code>Unwrap()</code> to get the next one, until the chain ends
+(<code>Unwrap</code> returns nil). <code>errors.Is</code> compares with
+<code>==</code> by default, but prefers a type’s own
+<code>Is(error) bool</code> if it defines one; <code>errors.As</code>
+uses reflection to check whether each layer’s dynamic type in the chain
+is assignable to the type the target pointer points to. This chain is
+fundamentally just a series of “nodes” holding onto each other through
+interface values — no different in essence from walking a linked
+list.</p>
 <h3 id="runnable-w-wrapping-is-as">Runnable: %w wrapping + Is + As</h3>
-<div class="sourceCode" id="cb7"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="op">(</span></span>
-<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;errors&quot;</span></span>
-<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;fmt&quot;</span></span>
-<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a><span class="op">)</span></span>
-<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> ErrNotFound <span class="op">=</span> errors<span class="op">.</span>New<span class="op">(</span><span class="st">&quot;not found&quot;</span><span class="op">)</span></span>
-<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> QueryError <span class="kw">struct</span> <span class="op">{</span></span>
-<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>    Query <span class="dt">string</span></span>
-<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>    Err   <span class="dt">error</span></span>
-<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>e <span class="op">*</span>QueryError<span class="op">)</span> Error<span class="op">()</span> <span class="dt">string</span> <span class="op">{</span> <span class="cf">return</span> e<span class="op">.</span>Query <span class="op">+</span> <span class="st">&quot;: &quot;</span> <span class="op">+</span> e<span class="op">.</span>Err<span class="op">.</span>Error<span class="op">()</span> <span class="op">}</span></span>
-<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>e <span class="op">*</span>QueryError<span class="op">)</span> Unwrap<span class="op">()</span> <span class="dt">error</span> <span class="op">{</span> <span class="cf">return</span> e<span class="op">.</span>Err <span class="op">}</span></span>
-<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> find<span class="op">()</span> <span class="dt">error</span> <span class="op">{</span></span>
-<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a>    qe <span class="op">:=</span> <span class="op">&amp;</span>QueryError<span class="op">{</span>Query<span class="op">:</span> <span class="st">&quot;SELECT&quot;</span><span class="op">,</span> Err<span class="op">:</span> ErrNotFound<span class="op">}</span> <span class="co">// wraps the sentinel</span></span>
-<span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> fmt<span class="op">.</span>Errorf<span class="op">(</span><span class="st">&quot;db call: %w&quot;</span><span class="op">,</span> qe<span class="op">)</span>                 <span class="co">// wraps again with %w</span></span>
-<span id="cb7-21"><a href="#cb7-21" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb7-22"><a href="#cb7-22" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-23"><a href="#cb7-23" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
-<span id="cb7-24"><a href="#cb7-24" aria-hidden="true" tabindex="-1"></a>    err <span class="op">:=</span> find<span class="op">()</span></span>
-<span id="cb7-25"><a href="#cb7-25" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>err<span class="op">)</span>                         <span class="co">// db call: SELECT: not found</span></span>
-<span id="cb7-26"><a href="#cb7-26" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>errors<span class="op">.</span>Is<span class="op">(</span>err<span class="op">,</span> ErrNotFound<span class="op">))</span> <span class="co">// true   ← walks the whole %w/Unwrap chain</span></span>
-<span id="cb7-27"><a href="#cb7-27" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-28"><a href="#cb7-28" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> qe <span class="op">*</span>QueryError</span>
-<span id="cb7-29"><a href="#cb7-29" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>errors<span class="op">.</span>As<span class="op">(</span>err<span class="op">,</span> <span class="op">&amp;</span>qe<span class="op">),</span> qe<span class="op">.</span>Query<span class="op">)</span> <span class="co">// true SELECT   ← pulls the typed error out</span></span>
-<span id="cb7-30"><a href="#cb7-30" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
-<h2 id="panic-recover-not-exceptions">3. panic / recover: not
-exceptions</h2>
+<div class="sourceCode" id="cb9"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="op">(</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;errors&quot;</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a><span class="op">)</span></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> ErrNotFound <span class="op">=</span> errors<span class="op">.</span>New<span class="op">(</span><span class="st">&quot;not found&quot;</span><span class="op">)</span></span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a><span class="kw">type</span> QueryError <span class="kw">struct</span> <span class="op">{</span></span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a>    Query <span class="dt">string</span></span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a>    Err   <span class="dt">error</span></span>
+<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb9-14"><a href="#cb9-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-15"><a href="#cb9-15" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>e <span class="op">*</span>QueryError<span class="op">)</span> Error<span class="op">()</span> <span class="dt">string</span> <span class="op">{</span> <span class="cf">return</span> e<span class="op">.</span>Query <span class="op">+</span> <span class="st">&quot;: &quot;</span> <span class="op">+</span> e<span class="op">.</span>Err<span class="op">.</span>Error<span class="op">()</span> <span class="op">}</span></span>
+<span id="cb9-16"><a href="#cb9-16" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>e <span class="op">*</span>QueryError<span class="op">)</span> Unwrap<span class="op">()</span> <span class="dt">error</span> <span class="op">{</span> <span class="cf">return</span> e<span class="op">.</span>Err <span class="op">}</span></span>
+<span id="cb9-17"><a href="#cb9-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-18"><a href="#cb9-18" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> find<span class="op">()</span> <span class="dt">error</span> <span class="op">{</span></span>
+<span id="cb9-19"><a href="#cb9-19" aria-hidden="true" tabindex="-1"></a>    qe <span class="op">:=</span> <span class="op">&amp;</span>QueryError<span class="op">{</span>Query<span class="op">:</span> <span class="st">&quot;SELECT&quot;</span><span class="op">,</span> Err<span class="op">:</span> ErrNotFound<span class="op">}</span> <span class="co">// wraps the sentinel</span></span>
+<span id="cb9-20"><a href="#cb9-20" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> fmt<span class="op">.</span>Errorf<span class="op">(</span><span class="st">&quot;db call: %w&quot;</span><span class="op">,</span> qe<span class="op">)</span>                 <span class="co">// wraps again with %w</span></span>
+<span id="cb9-21"><a href="#cb9-21" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb9-22"><a href="#cb9-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-23"><a href="#cb9-23" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb9-24"><a href="#cb9-24" aria-hidden="true" tabindex="-1"></a>    err <span class="op">:=</span> find<span class="op">()</span></span>
+<span id="cb9-25"><a href="#cb9-25" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>err<span class="op">)</span>                         <span class="co">// db call: SELECT: not found</span></span>
+<span id="cb9-26"><a href="#cb9-26" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>errors<span class="op">.</span>Is<span class="op">(</span>err<span class="op">,</span> ErrNotFound<span class="op">))</span> <span class="co">// true   ← walks the whole %w/Unwrap chain</span></span>
+<span id="cb9-27"><a href="#cb9-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-28"><a href="#cb9-28" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> qe <span class="op">*</span>QueryError</span>
+<span id="cb9-29"><a href="#cb9-29" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>errors<span class="op">.</span>As<span class="op">(</span>err<span class="op">,</span> <span class="op">&amp;</span>qe<span class="op">),</span> qe<span class="op">.</span>Query<span class="op">)</span> <span class="co">// true SELECT   ← pulls the typed error out</span></span>
+<span id="cb9-30"><a href="#cb9-30" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="iii.-panic-recover-not-an-exception">III. panic / recover: not
+an exception</h2>
+<h3 id="how-to-use-it-2">How to use it</h3>
 <p><code>panic</code> is for <strong>genuine programming errors that
 should never happen</strong> (array out of bounds, dereferencing nil, a
-broken invariant), not for routine error handling.</p>
-<h3 id="the-mechanics-of-panic">The mechanics of panic</h3>
+broken invariant), not for routine error handling. <code>recover</code>
+is effective only when called inside a <code>defer</code>; it “catches”
+the panic and lets the program resume normal execution:</p>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> safeRun<span class="op">()</span> <span class="op">(</span>err <span class="dt">error</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">defer</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> r <span class="op">:=</span> <span class="bu">recover</span><span class="op">();</span> r <span class="op">!=</span> <span class="ot">nil</span> <span class="op">{</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>            err <span class="op">=</span> fmt<span class="op">.</span>Errorf<span class="op">(</span><span class="st">&quot;recovered: %v&quot;</span><span class="op">,</span> r<span class="op">)</span> <span class="co">// turn the panic into a returned error</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">}()</span></span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>    riskyOperation<span class="op">()</span></span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="ot">nil</span></span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Typical use: wrap each request handler of a web server in a recover,
+so a single request’s panic does not bring down the whole process.
+<strong>But do not use panic/recover to simulate try/catch for routine
+flow control</strong> — that is an anti-pattern, slow and against Go
+convention.</p>
+<h3 id="comparison-with-c-2">Comparison with C</h3>
 <p><code>panic(x)</code> will: immediately stop the current function’s
 normal execution → <strong>unwind up the call stack layer by
 layer</strong>, running each layer’s registered <code>defer</code>s → if
@@ -286,49 +406,34 @@ main → A() → B() → panic!
 <p>This unwinding process runs <code>defer</code>s, but there is
 <strong>no C++-style type-based catch matching</strong> — recover
 catches “any panic” without distinguishing types.</p>
-<h3 id="recover-only-inside-a-defer">recover: only inside a defer</h3>
 <p><code>recover()</code> is effective only when called directly inside
 a <code>defer</code>red function. It <strong>stops the
 unwinding</strong>, returns the value passed to panic, and lets the
-program resume normally at the current stack frame:</p>
-<div class="sourceCode" id="cb9"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> safeRun<span class="op">()</span> <span class="op">(</span>err <span class="dt">error</span><span class="op">)</span> <span class="op">{</span></span>
-<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">defer</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span></span>
-<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> r <span class="op">:=</span> <span class="bu">recover</span><span class="op">();</span> r <span class="op">!=</span> <span class="ot">nil</span> <span class="op">{</span></span>
-<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>            err <span class="op">=</span> fmt<span class="op">.</span>Errorf<span class="op">(</span><span class="st">&quot;recovered: %v&quot;</span><span class="op">,</span> r<span class="op">)</span> <span class="co">// turn the panic into a returned error</span></span>
-<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
-<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">}()</span></span>
-<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>    riskyOperation<span class="op">()</span></span>
-<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="ot">nil</span></span>
-<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
-<p>Typical use: wrap each request handler of a web server in a recover,
-so a single request’s panic does not bring down the whole process.
-<strong>But do not use panic/recover to simulate try/catch for routine
-flow control</strong> — that is an anti-pattern, slow and against Go
-convention.</p>
+program resume normally at the current stack frame.</p>
 <p>Runnable: turning a runtime panic into an error:</p>
-<div class="sourceCode" id="cb10"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="st">&quot;fmt&quot;</span></span>
-<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> safeDiv<span class="op">(</span>a<span class="op">,</span> b <span class="dt">int</span><span class="op">)</span> <span class="op">(</span>result <span class="dt">int</span><span class="op">,</span> err <span class="dt">error</span><span class="op">)</span> <span class="op">{</span></span>
-<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">defer</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span></span>
-<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> r <span class="op">:=</span> <span class="bu">recover</span><span class="op">();</span> r <span class="op">!=</span> <span class="ot">nil</span> <span class="op">{</span></span>
-<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>            err <span class="op">=</span> fmt<span class="op">.</span>Errorf<span class="op">(</span><span class="st">&quot;recovered: %v&quot;</span><span class="op">,</span> r<span class="op">)</span> <span class="co">// turn the panic into a returned error</span></span>
-<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
-<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}()</span></span>
-<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> a <span class="op">/</span> b<span class="op">,</span> <span class="ot">nil</span> <span class="co">// b==0 raises a runtime panic before the return completes</span></span>
-<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-14"><a href="#cb10-14" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
-<span id="cb10-15"><a href="#cb10-15" aria-hidden="true" tabindex="-1"></a>    r<span class="op">,</span> err <span class="op">:=</span> safeDiv<span class="op">(</span><span class="dv">10</span><span class="op">,</span> <span class="dv">2</span><span class="op">)</span></span>
-<span id="cb10-16"><a href="#cb10-16" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>r<span class="op">,</span> err<span class="op">)</span> <span class="co">// 5 &lt;nil&gt;</span></span>
-<span id="cb10-17"><a href="#cb10-17" aria-hidden="true" tabindex="-1"></a>    r<span class="op">,</span> err <span class="op">=</span> safeDiv<span class="op">(</span><span class="dv">10</span><span class="op">,</span> <span class="dv">0</span><span class="op">)</span></span>
-<span id="cb10-18"><a href="#cb10-18" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>r<span class="op">,</span> err<span class="op">)</span> <span class="co">// 0 recovered: runtime error: integer divide by zero</span></span>
-<span id="cb10-19"><a href="#cb10-19" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> safeDiv<span class="op">(</span>a<span class="op">,</span> b <span class="dt">int</span><span class="op">)</span> <span class="op">(</span>result <span class="dt">int</span><span class="op">,</span> err <span class="dt">error</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">defer</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> r <span class="op">:=</span> <span class="bu">recover</span><span class="op">();</span> r <span class="op">!=</span> <span class="ot">nil</span> <span class="op">{</span></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>            err <span class="op">=</span> fmt<span class="op">.</span>Errorf<span class="op">(</span><span class="st">&quot;recovered: %v&quot;</span><span class="op">,</span> r<span class="op">)</span> <span class="co">// turn the panic into a returned error</span></span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}()</span></span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> a <span class="op">/</span> b<span class="op">,</span> <span class="ot">nil</span> <span class="co">// b==0 raises a runtime panic before the return completes</span></span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a>    r<span class="op">,</span> err <span class="op">:=</span> safeDiv<span class="op">(</span><span class="dv">10</span><span class="op">,</span> <span class="dv">2</span><span class="op">)</span></span>
+<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>r<span class="op">,</span> err<span class="op">)</span> <span class="co">// 5 &lt;nil&gt;</span></span>
+<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a>    r<span class="op">,</span> err <span class="op">=</span> safeDiv<span class="op">(</span><span class="dv">10</span><span class="op">,</span> <span class="dv">0</span><span class="op">)</span></span>
+<span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>r<span class="op">,</span> err<span class="op">)</span> <span class="co">// 0 recovered: runtime error: integer divide by zero</span></span>
+<span id="cb12-19"><a href="#cb12-19" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>Note <code>result</code> stays 0 in the panic case: the panic fires
 while evaluating <code>a / b</code>, so the return value is never
-assigned—only the named <code>err</code> is set inside the deferred
+assigned — only the named <code>err</code> is set inside the deferred
 <code>recover</code>.</p>
 <p>For comparison:</p>
 <table>
@@ -377,20 +482,29 @@ assigned—only the named <code>err</code> is set inside the deferred
 </tr>
 </tbody>
 </table>
-<h2 id="resource-management-defer-instead-of-raii">4. Resource
+<h2 id="iv.-resource-management-defer-instead-of-raii">IV. Resource
 management: defer instead of RAII</h2>
-<p>Go has no destructors. Resource cleanup relies on <a
-href="05-控制流.html"><code>defer</code> (see the mechanics in Chapter
-05)</a>: registered calls run before the function returns (including
-during panic unwinding), in <strong>last-in-first-out</strong>
-order.</p>
-<div class="sourceCode" id="cb11"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>f<span class="op">,</span> err <span class="op">:=</span> os<span class="op">.</span>Open<span class="op">(</span>name<span class="op">)</span></span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> err <span class="op">!=</span> <span class="ot">nil</span> <span class="op">{</span> <span class="cf">return</span> err <span class="op">}</span></span>
-<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="cf">defer</span> f<span class="op">.</span>Close<span class="op">()</span>           <span class="co">// whatever return/panic follows, it will be closed</span></span>
-<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>mu<span class="op">.</span>Lock<span class="op">()</span></span>
-<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a><span class="cf">defer</span> mu<span class="op">.</span>Unlock<span class="op">()</span>         <span class="co">// paired lock/unlock, prevents forgetting to unlock</span></span></code></pre></div>
+<h3 id="how-to-use-it-3">How to use it</h3>
+<p>Go has no destructors. Resource cleanup relies on <code>defer</code>:
+registered calls run before the function returns (including during panic
+unwinding), in <strong>last-in-first-out</strong> order (<a
+href="05-控制流.html">see the mechanics in Chapter 05</a>).</p>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;start&quot;</span><span class="op">)</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="cf">defer</span> fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;cleanup 1&quot;</span><span class="op">)</span> <span class="co">// LIFO: runs last</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a><span class="cf">defer</span> fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;cleanup 2&quot;</span><span class="op">)</span> <span class="co">// runs first</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;end&quot;</span><span class="op">)</span></span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a><span class="co">// output order: start end cleanup 2 cleanup 1</span></span></code></pre></div>
+<p>In practice it’s often used to pair “open/close” or
+“lock/unlock”:</p>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>f<span class="op">,</span> err <span class="op">:=</span> os<span class="op">.</span>Open<span class="op">(</span>name<span class="op">)</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> err <span class="op">!=</span> <span class="ot">nil</span> <span class="op">{</span> <span class="cf">return</span> err <span class="op">}</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="cf">defer</span> f<span class="op">.</span>Close<span class="op">()</span>           <span class="co">// whatever return/panic follows, it will be closed</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>mu<span class="op">.</span>Lock<span class="op">()</span></span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a><span class="cf">defer</span> mu<span class="op">.</span>Unlock<span class="op">()</span>         <span class="co">// paired lock/unlock, prevents forgetting to unlock</span></span></code></pre></div>
+<h3 id="comparison-with-c-3">Comparison with C</h3>
 <p>The difference from C++ RAII: RAII is bound to the <strong>object’s
 lifetime/scope</strong> (destructed on leaving the block);
 <code>defer</code> is bound to the <strong>function return</strong> (not
@@ -405,18 +519,25 @@ it is guaranteed to run only once, so it <strong>cannot replace
 defer/explicit Close</strong> for managing deterministic resources like
 files and locks.</p>
 </blockquote>
-<h2 id="garbage-collection-gc">5. Garbage collection (GC)</h2>
+<h2 id="v.-garbage-collection-gc">V. Garbage collection (GC)</h2>
+<h3 id="how-to-use-it-4">How to use it</h3>
 <p>Go is a garbage-collected language. You write no
 <code>free</code>/<code>delete</code> and manage no lifetimes; the
 compiler’s <a href="03-变量与内存模型.html">escape analysis (Chapter
-03)</a> decides whether a variable lives on the stack or the heap. Stack
-ones are reclaimed with the stack frame; heap ones are reclaimed by the
-GC.</p>
-<h3 id="concurrent-tri-color-mark-and-sweep">Concurrent tri-color
-mark-and-sweep</h3>
-<p>Go’s GC is a <strong>concurrent, non-moving, tri-color
-mark-and-sweep</strong> collector, whose core goal is an
-<strong>extremely short STW (stop-the-world)</strong>.</p>
+03)</a> decides whether a variable lives on the stack or the heap —
+stack ones are reclaimed with the stack frame, heap ones are reclaimed
+by the GC. Writing everyday business code, you basically never need to
+think about the GC — only in the rare case where you need to tune it do
+these “knobs” come into play:</p>
+<div class="sourceCode" id="cb15"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>debug<span class="op">.</span>SetGCPercent<span class="op">(</span><span class="dv">200</span><span class="op">)</span> <span class="co">// raise it → less GC, higher memory usage, better throughput</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>debug<span class="op">.</span>SetGCPercent<span class="op">(</span><span class="dv">50</span><span class="op">)</span>  <span class="co">// lower it → more frequent GC, less memory</span></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>runtime<span class="op">.</span>GC<span class="op">()</span>            <span class="co">// manually force one (blocking; generally only for tests/special cases)</span></span></code></pre></div>
+<h3 id="comparison-with-c-4">Comparison with C</h3>
+<p><strong>Concurrent tri-color mark-and-sweep.</strong> Go’s GC is a
+<strong>concurrent, non-moving, tri-color mark-and-sweep</strong>
+collector, whose core goal is an <strong>extremely short STW
+(stop-the-world)</strong>.</p>
 <p>The tri-color abstraction:</p>
 <ul>
 <li><strong>White</strong>: not yet visited, a candidate for
@@ -433,12 +554,11 @@ there are no gray objects left. The remaining white objects are garbage
 and get swept. <strong>The mark phase runs concurrently with user
 goroutines</strong> (mark workers use a fraction of the CPU), rather
 than being a long pause.</p>
-<h3 id="write-barrier">Write barrier</h3>
-<p>The trouble with concurrent marking: while the user program mutates
-pointers as marking runs, you can get a situation where “a black object
-comes to point to a white object, while the only gray reference to that
-white object is deleted” — the white object gets missed by the mark and
-wrongly collected.</p>
+<p><strong>Write barrier.</strong> The trouble with concurrent marking:
+while the user program mutates pointers as marking runs, you can get a
+situation where “a black object comes to point to a white object, while
+the only gray reference to that white object is deleted” — the white
+object gets missed by the mark and wrongly collected.</p>
 <p>The solution is the <strong>write barrier</strong>: during marking,
 the compiler inserts a small hook of code before every pointer write,
 re-coloring the involved objects gray to guarantee nothing is missed. Go
@@ -450,38 +570,32 @@ time.</p>
 [very short STW: enable write barrier] → [concurrent marking, user program runs alongside, protected by write barrier] →
 [very short STW: mark termination] → [concurrent sweep, alongside the user program]
 both STWs are typically sub-millisecond to millisecond</code></pre>
-<h3 id="trigger-timing-and-gogc">Trigger timing and GOGC</h3>
-<p>GC is driven by the <strong>heap growth ratio</strong>, controlled by
-the environment variable/parameter <code>GOGC</code> (default 100):</p>
+<p><strong>Trigger timing and GOGC.</strong> GC is driven by the
+<strong>heap growth ratio</strong>, controlled by the environment
+variable/parameter <code>GOGC</code> (default 100):</p>
 <blockquote>
 <p>The next round triggers when the live heap grows to
 <code>GOGC%</code> relative to the amount after the last GC.
 <code>GOGC=100</code> means GC once whenever the heap doubles (grows
 100%).</p>
 </blockquote>
-<div class="sourceCode" id="cb13"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>debug<span class="op">.</span>SetGCPercent<span class="op">(</span><span class="dv">200</span><span class="op">)</span> <span class="co">// higher → less GC, higher memory usage, better throughput</span></span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>debug<span class="op">.</span>SetGCPercent<span class="op">(</span><span class="dv">50</span><span class="op">)</span>  <span class="co">// lower → more frequent GC, less memory</span></span>
-<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>runtime<span class="op">.</span>GC<span class="op">()</span>            <span class="co">// manually force one (blocking; generally only for tests/special cases)</span></span></code></pre></div>
 <p>Go 1.19+ also provides a <strong>soft memory limit</strong>
 <code>GOMEMLIMIT</code> / <code>debug.SetMemoryLimit</code>, a backstop
 for memory-constrained environments like containers.</p>
-<h3 id="on-generations">On generations</h3>
-<p><strong>Go’s current GC is not generational</strong> (no generational
-GC), and it does no compaction/moving (non-moving, so object addresses
-are stable — which is why in Go you can freely take addresses and
-interop with cgo is relatively simple). The community historically
-discussed generations, but because escape analysis already keeps most
-short-lived objects on the stack (effectively a cheap “generation
-zero”), the payoff from generations is smaller; the implementation chose
-the current low-latency design instead. This may evolve across versions
-— defer to the runtime docs.</p>
-<h3 id="the-memory-allocator-mcache-mcentral-mspan">The memory
-allocator: mcache / mcentral / mspan</h3>
-<p>How are objects allocated on the heap? Go has a
-<strong>tcmalloc-style multi-level allocator</strong>, centered on
-<strong>bucketing by size class</strong> to avoid global lock
-contention:</p>
+<p><strong>On generations.</strong> <strong>Go’s current GC is not
+generational</strong> (no generational GC), and it does no
+compaction/moving (non-moving, so object addresses are stable — which is
+why in Go you can freely take addresses and interop with cgo is
+relatively simple). The community historically discussed generations,
+but because escape analysis already keeps most short-lived objects on
+the stack (effectively a cheap “generation zero”), the payoff from
+generations is smaller; the implementation chose the current low-latency
+design instead. This may evolve across versions — defer to the runtime
+docs.</p>
+<p><strong>The memory allocator: mcache / mcentral / mspan.</strong> How
+are objects allocated on the heap? Go has a <strong>tcmalloc-style
+multi-level allocator</strong>, centered on <strong>bucketing by size
+class</strong> to avoid global lock contention:</p>
 <pre><code>each P (see Chapter 10 scheduling) has an mcache (lock-free, thread-local)
         │  caches free objects by size class (about 70 classes: 8B,16B,...,32KB)
         ▼ when the local cache runs low, request from above
@@ -509,17 +623,32 @@ unnecessary interface boxing/closure captures, use
 href="12-常用第三方库.html">pprof</a> to find allocation hotspots.</p>
 <h2 id="summary">Summary</h2>
 <ul>
-<li>error is an interface value; error handling is explicit data flow,
-not exceptions; <code>%w</code> + <code>Is</code>/<code>As</code>
-organize the error chain.</li>
-<li>panic/recover is only for genuinely exceptional situations; recover
-must be inside a defer.</li>
-<li>No RAII; use defer for deterministic cleanup (note it is
-function-level, not block-level).</li>
-<li>The GC is concurrent tri-color mark-and-sweep + write barrier, with
-extremely short STW, non-generational and non-moving, driven by
-GOGC/heap growth; the allocator is a multi-level mcache/mcentral/mspan
-with lock-free P-local caches.</li>
+<li><strong>Usage level</strong>: functions return
+<code>(result, error)</code> as multiple values, and the caller checks
+with <code>if err != nil</code>;
+<code>errors.New</code>/<code>fmt.Errorf</code> create errors,
+<code>%w</code> wraps them into an error chain, and
+<code>errors.Is</code>/<code>errors.As</code> match along that chain;
+<code>defer</code> registers cleanup that runs before the function
+returns (last-in-first-out); <code>panic</code>/<code>recover</code> are
+only for genuinely exceptional situations, and <code>recover</code> must
+be called inside a <code>defer</code>.</li>
+<li><strong>Underlying level</strong>: <code>error</code> is just an
+ordinary interface value — <code>{itab, data}</code>, two words in
+memory — so returning one is as cheap as returning any other value, with
+no exception-table overhead; <code>errors.Is</code>/<code>As</code> are
+fundamentally a loop of comparison/reflection along the
+<code>Unwrap()</code> chain; once triggered, panic unwinds the call
+stack layer by layer, running each layer’s <code>defer</code>s, and
+recover stops the unwinding — if nothing recovers it, the process calls
+<code>exit(2)</code>; <code>defer</code> is bound to the function’s
+lifetime rather than a block’s, unlike C++ RAII’s scope-based
+destruction; the GC is concurrent tri-color mark-and-sweep plus a hybrid
+write barrier, with STW pushed down to sub-millisecond levels, driven by
+<code>GOGC</code>/heap growth, non-generational and non-moving; the
+allocator is the multi-level mcache/mcentral/mspan structure, with
+lock-free per-P local allocation — cutting heap allocation is what
+lowers GC pressure.</li>
 </ul>
 <hr />
 <p><a href="08-面向对象与类型系统.html">← Prev: Object-Orientation and

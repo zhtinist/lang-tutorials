@@ -113,6 +113,7 @@ id="toc-ecosystem-positioning">Ecosystem Positioning</a></li>
 id="toc-packaging-jar-and-fat-jar">Packaging: jar and fat-jar</a></li>
 <li><a href="#jni-the-cost-of-calling-c"
 id="toc-jni-the-cost-of-calling-c">JNI: The Cost of Calling C</a></li>
+<li><a href="#summary" id="toc-summary">Summary</a></li>
 </ul></li>
 </ul>
 </nav>
@@ -125,9 +126,25 @@ Java ecosystem unified dependency distribution long ago with
 covers build tools, the coordinate mechanism, and the ecosystem
 positioning of mainstream libraries—the focus is “what to use in which
 scenario,” not teaching APIs.</p>
+<p>This chapter is a bit different from the ones before it: those
+covered how the Java language itself works, while this one covers
+<strong>what ready-made tools and frameworks the ecosystem offers, what
+problem each one solves, and which one to reach for in which
+scenario</strong>. Suggested way to read it: for each section, it’s
+enough at first to just see “what this thing does and what the code
+looks like”; the mechanisms brought up later (reflection, annotation
+processors, dynamic proxies, SPI, and so on) explain “why it’s able to
+work that way,” and you don’t need to already understand JVM internals
+to follow along—any unfamiliar term is explained the first time it comes
+up.</p>
 <h2 id="build-and-dependency-management">Build and Dependency
 Management</h2>
 <h3 id="coordinates-and-repositories">Coordinates and Repositories</h3>
+<p>Put simply: you write one line in a config file saying “which
+library, which version,” and the build tool automatically goes to a
+repository, fetches the matching jar, and drops it into your project—no
+need to go hunt down source code or prebuilt binaries on some website
+and hand-configure include/lib paths the way you would in C/C++.</p>
 <p>Every library is uniquely identified by its <strong>GAV
 coordinate</strong>: <code>groupId:artifactId:version</code>. Analogous
 to “namespace + library name + version” in C++, but here it is a single
@@ -155,8 +172,7 @@ class="sourceCode groovy"><code class="sourceCode groovy"><span id="cb3-1"><a hr
 <p>The build tool downloads jars from a <strong>repository</strong> into
 a local cache (Maven’s <code>~/.m2/repository</code>); the default
 repository is <strong>Maven Central</strong>, and you can add a private
-server (Nexus/Artifactory). This step replaces the C++ chore of manually
-finding libraries and configuring include/link paths.</p>
+server (Nexus/Artifactory).</p>
 <h3 id="transitive-dependencies-and-scope">Transitive Dependencies and
 Scope</h3>
 <p>A key mechanism: <strong>transitive dependencies</strong>. You depend
@@ -255,7 +271,15 @@ integrated); for standalone small tools use Gson.</p>
 <h3 id="enterprise-framework-spring-spring-boot">Enterprise Framework:
 Spring / Spring Boot</h3>
 <p>The de facto standard for Java backends. Its core is the <strong>IoC
-container + DI + AOP</strong>.</p>
+container + DI + AOP</strong>—three terms that sound abstract, but what
+they actually do is quite down-to-earth: Spring maintains a “big
+factory” behind the scenes, and whenever your class needs something, it
+just asks the factory for it (by declaring it) instead of calling
+<code>new</code> itself; when you need to slot in some shared logic
+before or after a method (say, opening a transaction or writing a log
+line), you don’t hand-write it into every method either—declare it once
+and it’s added automatically. Let’s unpack each of those in turn
+below.</p>
 <p><strong>IoC (Inversion of Control) / DI (Dependency
 Injection)</strong>: an object does not <code>new</code> its
 dependencies itself but declares what it needs, and the container
@@ -467,10 +491,14 @@ class="sourceCode bash"><code class="sourceCode bash"><span id="cb15-1"><a href=
 shade plugin’s transformer is responsible for merging them.</p>
 </blockquote>
 <h2 id="jni-the-cost-of-calling-c">JNI: The Cost of Calling C</h2>
-<p>Java calls C/C++ via <strong>JNI (Java Native Interface)</strong>
-(when you need to reuse an existing native library or do CPU-intensive
-computation). But the cost is not small, and it is usually a last
-resort:</p>
+<p>Java code itself runs inside the JVM’s managed environment (automatic
+garbage collection, memory safety), and it has no way to directly call a
+compiled C function. <strong>JNI (Java Native Interface)</strong> is the
+official bridge for this: it lets a Java method call into native code
+written in C/C++ and compiled to a <code>.so</code>/<code>.dll</code>
+(useful when you need to reuse an existing native library or do
+CPU-intensive computation). But crossing this bridge doesn’t come cheap,
+and it’s usually a last resort:</p>
 <div class="sourceCode" id="cb16"><pre
 class="sourceCode java"><code class="sourceCode java"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> NativeLib <span class="op">{</span></span>
 <span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">loadLibrary</span><span class="op">(</span><span class="st">&quot;mylib&quot;</span><span class="op">);</span> <span class="op">}</span>   <span class="co">// load libmylib.so/.dll</span></span>
@@ -499,6 +527,35 @@ combine it with the type information from <a
 href="08-面向对象与类型系统.html">08-Object Orientation and the Type
 System</a>; for the class loading and runtime model of a fat-jar, see <a
 href="01-运行模型.html">01-Runtime Model</a>.</p>
+<h2 id="summary">Summary</h2>
+<ul>
+<li><strong>At the usage level (how to choose, how to write
+it)</strong>: dependencies are declared with GAV coordinates, and the
+build tool pulls them in automatically (transitive dependencies
+included), with scope controlling which phase they’re visible in; for
+JSON, pick Jackson (full ecosystem) or Gson (lightweight); Spring uses
+annotations to declare Beans and transaction boundaries; JPA/Hibernate
+map tables to annotated classes; testing uses JUnit 5 + Mockito to
+isolate dependencies; Lombok uses annotations to cut boilerplate;
+logging is written against the SLF4J interface, with the implementation
+swapped via a config file; packaging as a fat-jar lets you run
+everything with one command; and JNI/FFM are only for when you must
+reuse a native library or squeeze out every last bit of
+performance.</li>
+<li><strong>At the underlying level (why it’s able to work this
+way)</strong>: Jackson and Spring DI rely on <strong>reflection</strong>
+to read/write fields and discover types at runtime; Spring AOP relies on
+<strong>dynamic proxies</strong> (a JDK <code>Proxy</code> or a CGLIB
+subclass) wrapping a layer around each method call; Lombok is an
+<strong>annotation processor</strong> that rewrites the AST at compile
+time, at zero runtime cost; the pluggability behind both the SLF4J
+facade and JDBC drivers comes down to the JDK’s own
+<strong>SPI/<code>ServiceLoader</code></strong>; a fat-jar is just
+multiple jars’ classes and resources merged into one package, with the
+class-loading model unchanged; and JNI’s cost comes from the parameter
+marshaling and GC interaction involved in crossing the boundary between
+the “managed heap” and “raw memory.”</li>
+</ul>
 <hr />
 <p><a href="11-标准库算法.html">← Prev: Standard Library Algorithms</a>
 · <a href="index.html">Index</a></p>

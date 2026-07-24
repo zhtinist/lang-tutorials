@@ -103,35 +103,91 @@
 <ul>
 <li><a href="#control-flow" id="toc-control-flow">Control Flow</a>
 <ul>
+<li><a href="#get-it-running-first-branches-and-loops-at-a-glance"
+id="toc-get-it-running-first-branches-and-loops-at-a-glance">Get It
+Running First: Branches and Loops at a Glance</a></li>
+<li><a
+href="#going-deeper-the-bytecode-level-mechanics-of-branches-and-loops"
+id="toc-going-deeper-the-bytecode-level-mechanics-of-branches-and-loops">Going
+Deeper: The Bytecode-Level Mechanics of Branches and Loops</a></li>
 <li><a href="#if" id="toc-if">1. if</a></li>
 <li><a href="#switch-three-forms-bytecode"
-id="toc-switch-three-forms-bytecode">2. switch: three forms +
-bytecode</a></li>
+id="toc-switch-three-forms-bytecode">2. switch: Three Forms +
+Bytecode</a></li>
 <li><a href="#loops" id="toc-loops">3. Loops</a></li>
 <li><a href="#labeled-break-continue" id="toc-labeled-break-continue">4.
 Labeled break / continue</a></li>
 <li><a href="#the-ternary-operator" id="toc-the-ternary-operator">5. The
-ternary operator</a></li>
+Ternary Operator</a></li>
 <li><a href="#instanceof-pattern-matching"
-id="toc-instanceof-pattern-matching">6. instanceof pattern
-matching</a></li>
+id="toc-instanceof-pattern-matching">6. instanceof Pattern
+Matching</a></li>
 <li><a href="#text-blocks-jdk-15" id="toc-text-blocks-jdk-15">7. Text
-blocks (JDK 15+)</a></li>
+Blocks (JDK 15+)</a></li>
 <li><a href="#summary" id="toc-summary">Summary</a></li>
 </ul></li>
 </ul>
 </nav>
 <h1 id="control-flow">Control Flow</h1>
-<p>Control flow is mostly identical to C, so this chapter focuses on the
-<strong>differences</strong> and the <strong>bytecode-level
-mechanics</strong>, rather than re-explaining the common knowledge of
-<code>if/for/while</code>. The highlights: the three forms of
-<code>switch</code> and their bytecode, the iterator behind the enhanced
-<code>for</code>, pattern matching, and text blocks.</p>
+<p>Java’s branches and loops are highly similar to C’s, so this chapter
+first gives a zero-background overview you can copy straight away,
+letting you write <code>if/for/while/switch</code> right off the bat;
+the body of the chapter then focuses on the <strong>differences</strong>
+and the <strong>bytecode-level mechanics</strong>, without re-explaining
+common knowledge. The highlights: the three forms of <code>switch</code>
+and their bytecode, the iterator behind the enhanced <code>for</code>,
+pattern matching, and text blocks. If you just want to write code, “Get
+It Running First” is enough; if you want to understand why
+<code>switch</code> is sometimes faster than an equivalent if-else
+chain, and how for-each really expands, keep reading.</p>
+<hr />
+<h2 id="get-it-running-first-branches-and-loops-at-a-glance">Get It
+Running First: Branches and Loops at a Glance</h2>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> FlowDemo <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span> score <span class="op">=</span> <span class="dv">85</span><span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>score <span class="op">&gt;=</span> <span class="dv">90</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;A&quot;</span><span class="op">);</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="cf">else</span> <span class="cf">if</span> <span class="op">(</span>score <span class="op">&gt;=</span> <span class="dv">60</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;Pass&quot;</span><span class="op">);</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="cf">else</span> <span class="op">{</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;Fail&quot;</span><span class="op">);</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">3</span><span class="op">;</span> i<span class="op">++)</span> <span class="op">{</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>i<span class="op">);</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span> n <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>        <span class="cf">while</span> <span class="op">(</span>n <span class="op">&lt;</span> <span class="dv">3</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;n=&quot;</span> <span class="op">+</span> n<span class="op">);</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>            n<span class="op">++;</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span> day <span class="op">=</span> <span class="dv">3</span><span class="op">;</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>        <span class="cf">switch</span> <span class="op">(</span>day<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>            <span class="cf">case</span> <span class="dv">1</span><span class="op">:</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>                <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;Mon&quot;</span><span class="op">);</span></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>                <span class="cf">break</span><span class="op">;</span></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>            <span class="kw">default</span><span class="op">:</span></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>                <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;other&quot;</span><span class="op">);</span></span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Output: <code>Pass</code> <code>0</code> <code>1</code>
+<code>2</code> <code>n=0</code> <code>n=1</code> <code>n=2</code>
+<code>other</code>. The syntax is almost identical to C, so just copy
+it. Next come the differences and the bytecode-level details.</p>
+<hr />
+<h2
+id="going-deeper-the-bytecode-level-mechanics-of-branches-and-loops">Going
+Deeper: The Bytecode-Level Mechanics of Branches and Loops</h2>
 <h2 id="if">1. if</h2>
 <p>Basically the same as C, with one hard difference: <strong>the
 condition must be a <code>boolean</code></strong> (see <a
-href="02-基础语法.html">“Basic Syntax”</a>). Something like
+href="02-基础语法.html">Basic Syntax</a>). Something like
 <code>if (n)</code> — “nonzero means true” — won’t compile in Java; you
 must write <code>if (n != 0)</code>. The upside is that it eradicates
 the classic bug of accidentally writing <code>if (a = b)</code> instead
@@ -141,27 +197,30 @@ isn’t of boolean type it’s a compile error outright.</p>
 comparison instruction (<code>if_icmpge</code>, <code>ifnull</code>,
 <code>ifeq</code>, etc.) plus a jump, exactly as you saw in <a
 href="01-运行模型.html">Chapter 1</a> — no surprises.</p>
-<h2 id="switch-three-forms-bytecode">2. switch: three forms +
-bytecode</h2>
+<h2 id="switch-three-forms-bytecode">2. switch: Three Forms +
+Bytecode</h2>
+<h3 id="how-to-use-them">How to Use Them</h3>
+<p>switch has three forms in total; all of this is “just copy the
+syntax” for now—the bytecode-level differences come later.</p>
 <h3 id="classic-switch-the-fall-through-trap-is-still-there">2.1 Classic
 switch: the fall-through trap is still there</h3>
 <p>Exactly like C: omitting <code>break</code> <strong>falls
 through</strong> to the next case.</p>
-<div class="sourceCode" id="cb1"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> day <span class="op">=</span> <span class="dv">3</span><span class="op">;</span></span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="cf">switch</span> <span class="op">(</span>day<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">case</span> <span class="dv">1</span><span class="op">:</span></span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">case</span> <span class="dv">2</span><span class="op">:</span></span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">case</span> <span class="dv">3</span><span class="op">:</span></span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;First half of the workweek&quot;</span><span class="op">);</span></span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">break</span><span class="op">;</span>                       <span class="co">// omit this and it falls through — same pitfall as C</span></span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">case</span> <span class="dv">6</span><span class="op">:</span></span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">case</span> <span class="dv">7</span><span class="op">:</span></span>
-<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;Weekend&quot;</span><span class="op">);</span></span>
-<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>        <span class="cf">break</span><span class="op">;</span></span>
-<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="kw">default</span><span class="op">:</span></span>
-<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;Other&quot;</span><span class="op">);</span></span>
-<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> day <span class="op">=</span> <span class="dv">3</span><span class="op">;</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="cf">switch</span> <span class="op">(</span>day<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">case</span> <span class="dv">1</span><span class="op">:</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">case</span> <span class="dv">2</span><span class="op">:</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">case</span> <span class="dv">3</span><span class="op">:</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;First half of the workweek&quot;</span><span class="op">);</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">break</span><span class="op">;</span>                       <span class="co">// omit this and it falls through — same pitfall as C</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">case</span> <span class="dv">6</span><span class="op">:</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">case</span> <span class="dv">7</span><span class="op">:</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;Weekend&quot;</span><span class="op">);</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>        <span class="cf">break</span><span class="op">;</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    <span class="kw">default</span><span class="op">:</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;Other&quot;</span><span class="op">);</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>Types supported by the classic switch: integer types (and wrapper
 classes that can unbox to int), <code>char</code>, <code>enum</code>,
 and <strong><code>String</code></strong> (C doesn’t support switching on
@@ -174,20 +233,20 @@ returns a value</h3>
 <p>The new syntax uses <code>-&gt;</code>, has <strong>no fall-through
 and needs no break</strong>, and can also be <strong>evaluated as an
 expression</strong>:</p>
-<div class="sourceCode" id="cb2"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> day <span class="op">=</span> <span class="dv">3</span><span class="op">;</span></span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> kind <span class="op">=</span> <span class="cf">switch</span> <span class="op">(</span>day<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">case</span> <span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">,</span> <span class="dv">4</span><span class="op">,</span> <span class="dv">5</span> <span class="op">-&gt;</span> <span class="st">&quot;Workday&quot;</span><span class="op">;</span>      <span class="co">// multiple labels separated by commas</span></span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">case</span> <span class="dv">6</span><span class="op">,</span> <span class="dv">7</span>          <span class="op">-&gt;</span> <span class="st">&quot;Weekend&quot;</span><span class="op">;</span></span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">default</span>            <span class="op">-&gt;</span> <span class="st">&quot;Illegal&quot;</span><span class="op">;</span></span>
-<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="op">};</span>                                        <span class="co">// note: as an expression, it ends with a semicolon</span></span>
-<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="co">// use a block + yield to return a value when you need multiple statements</span></span>
-<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> score <span class="op">=</span> <span class="cf">switch</span> <span class="op">(</span>grade<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">case</span> <span class="ch">&#39;A&#39;</span> <span class="op">-&gt;</span> <span class="dv">100</span><span class="op">;</span></span>
-<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">case</span> <span class="ch">&#39;B&#39;</span> <span class="op">-&gt;</span> <span class="op">{</span> <span class="dt">int</span> base <span class="op">=</span> <span class="dv">80</span><span class="op">;</span> <span class="cf">yield</span> base <span class="op">+</span> <span class="dv">5</span><span class="op">;</span> <span class="op">}</span>  <span class="co">// yield hands out the block&#39;s value</span></span>
-<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    <span class="kw">default</span>  <span class="op">-&gt;</span> <span class="dv">0</span><span class="op">;</span></span>
-<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> day <span class="op">=</span> <span class="dv">3</span><span class="op">;</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> kind <span class="op">=</span> <span class="cf">switch</span> <span class="op">(</span>day<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">case</span> <span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">,</span> <span class="dv">4</span><span class="op">,</span> <span class="dv">5</span> <span class="op">-&gt;</span> <span class="st">&quot;Workday&quot;</span><span class="op">;</span>      <span class="co">// multiple labels separated by commas</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">case</span> <span class="dv">6</span><span class="op">,</span> <span class="dv">7</span>          <span class="op">-&gt;</span> <span class="st">&quot;Weekend&quot;</span><span class="op">;</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">default</span>            <span class="op">-&gt;</span> <span class="st">&quot;Illegal&quot;</span><span class="op">;</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="op">};</span>                                        <span class="co">// note: as an expression, it ends with a semicolon</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a><span class="co">// use a block + yield to return a value when you need multiple statements</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> score <span class="op">=</span> <span class="cf">switch</span> <span class="op">(</span>grade<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">case</span> <span class="ch">&#39;A&#39;</span> <span class="op">-&gt;</span> <span class="dv">100</span><span class="op">;</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">case</span> <span class="ch">&#39;B&#39;</span> <span class="op">-&gt;</span> <span class="op">{</span> <span class="dt">int</span> base <span class="op">=</span> <span class="dv">80</span><span class="op">;</span> <span class="cf">yield</span> base <span class="op">+</span> <span class="dv">5</span><span class="op">;</span> <span class="op">}</span>  <span class="co">// yield hands out the block&#39;s value</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    <span class="kw">default</span>  <span class="op">-&gt;</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
 <p>Key points: - A <code>-&gt;</code> branch <strong>exits automatically
 once executed</strong>; there is no fall-through, syntactically killing
 the “forgot to write break” bug. - When used as an expression, the
@@ -201,15 +260,15 @@ confuse the two).</p>
 Pattern-matching switch (JDK 21+): dispatch by type</h3>
 <p>A switch can match on <strong>type</strong> and bind a variable;
 combined with sealed types it enables exhaustiveness checking:</p>
-<div class="sourceCode" id="cb3"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="bu">Object</span> obj <span class="op">=</span> <span class="kw">...</span><span class="op">;</span></span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> desc <span class="op">=</span> <span class="cf">switch</span> <span class="op">(</span>obj<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">case</span> <span class="bu">Integer</span> i when i <span class="op">&gt;</span> <span class="dv">0</span> <span class="op">-&gt;</span> <span class="st">&quot;positive integer &quot;</span> <span class="op">+</span> i<span class="op">;</span>   <span class="co">// when is a guard condition</span></span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">case</span> <span class="bu">Integer</span> i            <span class="op">-&gt;</span> <span class="st">&quot;non-positive integer &quot;</span> <span class="op">+</span> i<span class="op">;</span></span>
-<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">case</span> <span class="bu">String</span> s             <span class="op">-&gt;</span> <span class="st">&quot;string of length &quot;</span> <span class="op">+</span> s<span class="op">.</span><span class="fu">length</span><span class="op">();</span></span>
-<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">case</span> <span class="kw">null</span>                 <span class="op">-&gt;</span> <span class="st">&quot;null value&quot;</span><span class="op">;</span>              <span class="co">// null can be matched explicitly</span></span>
-<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">default</span>                   <span class="op">-&gt;</span> <span class="st">&quot;other type&quot;</span><span class="op">;</span></span>
-<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="bu">Object</span> obj <span class="op">=</span> <span class="kw">...</span><span class="op">;</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> desc <span class="op">=</span> <span class="cf">switch</span> <span class="op">(</span>obj<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">case</span> <span class="bu">Integer</span> i when i <span class="op">&gt;</span> <span class="dv">0</span> <span class="op">-&gt;</span> <span class="st">&quot;positive integer &quot;</span> <span class="op">+</span> i<span class="op">;</span>   <span class="co">// when is a guard condition</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">case</span> <span class="bu">Integer</span> i            <span class="op">-&gt;</span> <span class="st">&quot;non-positive integer &quot;</span> <span class="op">+</span> i<span class="op">;</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">case</span> <span class="bu">String</span> s             <span class="op">-&gt;</span> <span class="st">&quot;string of length &quot;</span> <span class="op">+</span> s<span class="op">.</span><span class="fu">length</span><span class="op">();</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">case</span> <span class="kw">null</span>                 <span class="op">-&gt;</span> <span class="st">&quot;null value&quot;</span><span class="op">;</span>              <span class="co">// null can be matched explicitly</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">default</span>                   <span class="op">-&gt;</span> <span class="st">&quot;other type&quot;</span><span class="op">;</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
 <p>This effectively collapses a chain of
 <code>if (obj instanceof Integer i) ... else if (obj instanceof String s) ...</code>
 into a structured form — a product of Java moving toward “algebraic data
@@ -217,30 +276,35 @@ types + pattern matching.” A completely different level from C’s
 switch.</p>
 <p>Here is the runnable full version; <code>describe</code> dispatches
 on several actual types:</p>
-<div class="sourceCode" id="cb4"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> PatternSwitch <span class="op">{</span></span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="bu">String</span> <span class="fu">describe</span><span class="op">(</span><span class="bu">Object</span> obj<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="cf">switch</span> <span class="op">(</span>obj<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>            <span class="cf">case</span> <span class="bu">Integer</span> i when i <span class="op">&gt;</span> <span class="dv">0</span> <span class="op">-&gt;</span> <span class="st">&quot;positive integer &quot;</span> <span class="op">+</span> i<span class="op">;</span></span>
-<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>            <span class="cf">case</span> <span class="bu">Integer</span> i            <span class="op">-&gt;</span> <span class="st">&quot;non-positive integer &quot;</span> <span class="op">+</span> i<span class="op">;</span></span>
-<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>            <span class="cf">case</span> <span class="bu">String</span> s             <span class="op">-&gt;</span> <span class="st">&quot;string of length &quot;</span> <span class="op">+</span> s<span class="op">.</span><span class="fu">length</span><span class="op">();</span></span>
-<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>            <span class="cf">case</span> <span class="kw">null</span>                 <span class="op">-&gt;</span> <span class="st">&quot;null value&quot;</span><span class="op">;</span></span>
-<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>            <span class="kw">default</span>                   <span class="op">-&gt;</span> <span class="st">&quot;other type&quot;</span><span class="op">;</span></span>
-<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>        <span class="op">};</span></span>
-<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="fu">describe</span><span class="op">(</span><span class="dv">42</span><span class="op">));</span>     <span class="co">// positive integer 42</span></span>
-<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="fu">describe</span><span class="op">(-</span><span class="dv">3</span><span class="op">));</span>     <span class="co">// non-positive integer -3</span></span>
-<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="fu">describe</span><span class="op">(</span><span class="st">&quot;hello&quot;</span><span class="op">));</span> <span class="co">// string of length 5</span></span>
-<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="fu">describe</span><span class="op">(</span><span class="kw">null</span><span class="op">));</span>   <span class="co">// null value</span></span>
-<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="fu">describe</span><span class="op">(</span><span class="fl">3.14</span><span class="op">));</span>   <span class="co">// other type</span></span>
-<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> PatternSwitch <span class="op">{</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="bu">String</span> <span class="fu">describe</span><span class="op">(</span><span class="bu">Object</span> obj<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="cf">switch</span> <span class="op">(</span>obj<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>            <span class="cf">case</span> <span class="bu">Integer</span> i when i <span class="op">&gt;</span> <span class="dv">0</span> <span class="op">-&gt;</span> <span class="st">&quot;positive integer &quot;</span> <span class="op">+</span> i<span class="op">;</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>            <span class="cf">case</span> <span class="bu">Integer</span> i            <span class="op">-&gt;</span> <span class="st">&quot;non-positive integer &quot;</span> <span class="op">+</span> i<span class="op">;</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>            <span class="cf">case</span> <span class="bu">String</span> s             <span class="op">-&gt;</span> <span class="st">&quot;string of length &quot;</span> <span class="op">+</span> s<span class="op">.</span><span class="fu">length</span><span class="op">();</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>            <span class="cf">case</span> <span class="kw">null</span>                 <span class="op">-&gt;</span> <span class="st">&quot;null value&quot;</span><span class="op">;</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>            <span class="kw">default</span>                   <span class="op">-&gt;</span> <span class="st">&quot;other type&quot;</span><span class="op">;</span></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>        <span class="op">};</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="fu">describe</span><span class="op">(</span><span class="dv">42</span><span class="op">));</span>     <span class="co">// positive integer 42</span></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="fu">describe</span><span class="op">(-</span><span class="dv">3</span><span class="op">));</span>     <span class="co">// non-positive integer -3</span></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="fu">describe</span><span class="op">(</span><span class="st">&quot;hello&quot;</span><span class="op">));</span> <span class="co">// string of length 5</span></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="fu">describe</span><span class="op">(</span><span class="kw">null</span><span class="op">));</span>   <span class="co">// null value</span></span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="fu">describe</span><span class="op">(</span><span class="fl">3.14</span><span class="op">));</span>   <span class="co">// other type</span></span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>Note that the <strong>order of cases matters</strong>: the guarded
 <code>Integer i when i &gt; 0</code> must come before the unguarded
 <code>Integer i</code>; if you put the unguarded one first, it would
 swallow all <code>Integer</code>s and the compiler would reject the
 later case as “already covered, unreachable.”</p>
+<h3 id="underlying-behavior-contrasted-with-c">Underlying Behavior,
+Contrasted with C</h3>
+<p>You now know how to use all three forms; let’s look at how switch is
+actually implemented at the bytecode level—which is also why it’s
+sometimes faster than an equivalent if-else chain.</p>
 <h3 id="bytecode-tableswitch-vs-lookupswitch">2.4 Bytecode: tableswitch
 vs lookupswitch</h3>
 <p>A switch compiles to one of two instructions in bytecode, the
@@ -294,24 +358,24 @@ values as contiguous as possible favors generating a jump table.</p>
 <p>Here is a concrete example contrasting the two instructions.
 <code>dense</code> has contiguous cases (0~3), <code>sparse</code> has
 sparse ones (1/100/10000):</p>
-<div class="sourceCode" id="cb6"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> SwitchByteCode <span class="op">{</span></span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">int</span> <span class="fu">dense</span><span class="op">(</span><span class="dt">int</span> x<span class="op">)</span> <span class="op">{</span>   <span class="co">// cases 0,1,2,3 contiguous</span></span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">switch</span> <span class="op">(</span>x<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>            <span class="cf">case</span> <span class="dv">0</span><span class="op">:</span> <span class="cf">return</span> <span class="dv">10</span><span class="op">;</span>  <span class="cf">case</span> <span class="dv">1</span><span class="op">:</span> <span class="cf">return</span> <span class="dv">11</span><span class="op">;</span></span>
-<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>            <span class="cf">case</span> <span class="dv">2</span><span class="op">:</span> <span class="cf">return</span> <span class="dv">12</span><span class="op">;</span>  <span class="cf">case</span> <span class="dv">3</span><span class="op">:</span> <span class="cf">return</span> <span class="dv">13</span><span class="op">;</span></span>
-<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>            <span class="kw">default</span><span class="op">:</span> <span class="cf">return</span> <span class="op">-</span><span class="dv">1</span><span class="op">;</span></span>
-<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
-<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">int</span> <span class="fu">sparse</span><span class="op">(</span><span class="dt">int</span> x<span class="op">)</span> <span class="op">{</span>  <span class="co">// cases 1,100,10000 sparse</span></span>
-<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">switch</span> <span class="op">(</span>x<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>            <span class="cf">case</span> <span class="dv">1</span><span class="op">:</span> <span class="cf">return</span> <span class="dv">10</span><span class="op">;</span>  <span class="cf">case</span> <span class="dv">100</span><span class="op">:</span> <span class="cf">return</span> <span class="dv">11</span><span class="op">;</span></span>
-<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>            <span class="cf">case</span> <span class="dv">10000</span><span class="op">:</span> <span class="cf">return</span> <span class="dv">12</span><span class="op">;</span></span>
-<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>            <span class="kw">default</span><span class="op">:</span> <span class="cf">return</span> <span class="op">-</span><span class="dv">1</span><span class="op">;</span></span>
-<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
-<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{}</span></span>
-<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> SwitchByteCode <span class="op">{</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">int</span> <span class="fu">dense</span><span class="op">(</span><span class="dt">int</span> x<span class="op">)</span> <span class="op">{</span>   <span class="co">// cases 0,1,2,3 contiguous</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">switch</span> <span class="op">(</span>x<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>            <span class="cf">case</span> <span class="dv">0</span><span class="op">:</span> <span class="cf">return</span> <span class="dv">10</span><span class="op">;</span>  <span class="cf">case</span> <span class="dv">1</span><span class="op">:</span> <span class="cf">return</span> <span class="dv">11</span><span class="op">;</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>            <span class="cf">case</span> <span class="dv">2</span><span class="op">:</span> <span class="cf">return</span> <span class="dv">12</span><span class="op">;</span>  <span class="cf">case</span> <span class="dv">3</span><span class="op">:</span> <span class="cf">return</span> <span class="dv">13</span><span class="op">;</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>            <span class="kw">default</span><span class="op">:</span> <span class="cf">return</span> <span class="op">-</span><span class="dv">1</span><span class="op">;</span></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">int</span> <span class="fu">sparse</span><span class="op">(</span><span class="dt">int</span> x<span class="op">)</span> <span class="op">{</span>  <span class="co">// cases 1,100,10000 sparse</span></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">switch</span> <span class="op">(</span>x<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>            <span class="cf">case</span> <span class="dv">1</span><span class="op">:</span> <span class="cf">return</span> <span class="dv">10</span><span class="op">;</span>  <span class="cf">case</span> <span class="dv">100</span><span class="op">:</span> <span class="cf">return</span> <span class="dv">11</span><span class="op">;</span></span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>            <span class="cf">case</span> <span class="dv">10000</span><span class="op">:</span> <span class="cf">return</span> <span class="dv">12</span><span class="op">;</span></span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>            <span class="kw">default</span><span class="op">:</span> <span class="cf">return</span> <span class="op">-</span><span class="dv">1</span><span class="op">;</span></span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{}</span></span>
+<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>The key output of
 <code>javac SwitchByteCode.java &amp;&amp; javap -c SwitchByteCode.class</code>
 (verified):</p>
@@ -339,39 +403,45 @@ offset table for <code>0..3</code>, jumped into by index at runtime;
 key-value pairs searched with binary search. Same switch, but the
 distribution of case values decides which instruction is used.</p>
 <h2 id="loops">3. Loops</h2>
-<h3 id="for-while-do-while">for / while / do-while</h3>
-<p>All three have exactly the same semantics as C, so no need to belabor
-them:</p>
-<div class="sourceCode" id="cb8"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> n<span class="op">;</span> i<span class="op">++)</span> <span class="op">{</span> <span class="kw">...</span> <span class="op">}</span></span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="cf">while</span> <span class="op">(</span>cond<span class="op">)</span> <span class="op">{</span> <span class="kw">...</span> <span class="op">}</span></span>
-<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="cf">do</span> <span class="op">{</span> <span class="kw">...</span> <span class="op">}</span> <span class="cf">while</span> <span class="op">(</span>cond<span class="op">);</span>   <span class="co">// executes at least once</span></span></code></pre></div>
-<p>The bytecode is just the loop test plus a <code>goto</code> back-edge
-(see the <code>goto 4</code> in <a href="01-运行模型.html">Chapter
-1</a>). The back-edge count is precisely one of the signals HotSpot uses
-to decide a loop is “hot” and trigger JIT compilation.</p>
-<h3 id="enhanced-for-for-each-based-on-iterableiterator">Enhanced for
-(for-each): based on Iterable/iterator</h3>
+<h3 id="how-to-use-them-1">How to Use Them</h3>
+<p><code>for</code> / <code>while</code> / <code>do-while</code> all
+have exactly the same semantics as C, so no need to belabor them:</p>
 <div class="sourceCode" id="cb9"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span><span class="op">[]</span> arr <span class="op">=</span> <span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">};</span></span>
-<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> x <span class="op">:</span> arr<span class="op">)</span> <span class="op">{</span> <span class="kw">...</span> <span class="op">}</span>              <span class="co">// iterate an array</span></span>
-<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="bu">List</span><span class="op">&lt;</span><span class="bu">String</span><span class="op">&gt;</span> list <span class="op">=</span> <span class="bu">List</span><span class="op">.</span><span class="fu">of</span><span class="op">(</span><span class="st">&quot;a&quot;</span><span class="op">,</span><span class="st">&quot;b&quot;</span><span class="op">);</span></span>
-<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="bu">String</span> s <span class="op">:</span> list<span class="op">)</span> <span class="op">{</span> <span class="kw">...</span> <span class="op">}</span>          <span class="co">// iterate a collection</span></span></code></pre></div>
-<p>The underlying mechanism depends on what’s being iterated: -
-<strong>Arrays</strong>: the compiler lowers this to a plain indexed for
-loop (controlled by length, accessed by index), with <strong>no</strong>
-iterator object and zero extra overhead. - <strong>Collections
-implementing <code>Iterable</code></strong>: the compiler lowers this to
-calling <code>iterator()</code> to get an iterator, then looping over
+class="sourceCode java"><code class="sourceCode java"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> n<span class="op">;</span> i<span class="op">++)</span> <span class="op">{</span> <span class="kw">...</span> <span class="op">}</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="cf">while</span> <span class="op">(</span>cond<span class="op">)</span> <span class="op">{</span> <span class="kw">...</span> <span class="op">}</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="cf">do</span> <span class="op">{</span> <span class="kw">...</span> <span class="op">}</span> <span class="cf">while</span> <span class="op">(</span>cond<span class="op">);</span>   <span class="co">// executes at least once</span></span></code></pre></div>
+<p>Java also has an <strong>enhanced for (for-each)</strong> that C
+doesn’t have, specifically for “iterating every element of a thing”
+without managing an index yourself:</p>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span><span class="op">[]</span> arr <span class="op">=</span> <span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">};</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> x <span class="op">:</span> arr<span class="op">)</span> <span class="op">{</span> <span class="kw">...</span> <span class="op">}</span>              <span class="co">// iterate an array</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="bu">List</span><span class="op">&lt;</span><span class="bu">String</span><span class="op">&gt;</span> list <span class="op">=</span> <span class="bu">List</span><span class="op">.</span><span class="fu">of</span><span class="op">(</span><span class="st">&quot;a&quot;</span><span class="op">,</span><span class="st">&quot;b&quot;</span><span class="op">);</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="bu">String</span> s <span class="op">:</span> list<span class="op">)</span> <span class="op">{</span> <span class="kw">...</span> <span class="op">}</span>          <span class="co">// iterate a collection</span></span></code></pre></div>
+<h3 id="underlying-behavior-contrasted-with-c-1">Underlying Behavior,
+Contrasted with C</h3>
+<p>The bytecode of
+<code>for</code>/<code>while</code>/<code>do-while</code> is just the
+loop test plus a <code>goto</code> back-edge (see the
+<code>goto 4</code> in <a href="01-运行模型.html">Chapter 1</a>). The
+back-edge count is precisely one of the signals HotSpot uses to decide a
+loop is “hot” and trigger JIT compilation.</p>
+<p>The underlying mechanism of the <strong>enhanced for</strong> depends
+on what’s being iterated: - <strong>Arrays</strong>: the compiler lowers
+this to a plain indexed for loop (controlled by length, accessed by
+index), with <strong>no</strong> iterator object and zero extra
+overhead. - <strong>Collections implementing
+<code>Iterable</code></strong>: the compiler lowers this to calling
+<code>iterator()</code> to get an iterator, then looping over
 <code>hasNext()</code>/<code>next()</code>. The equivalent
 expansion:</p>
-<div class="sourceCode" id="cb10"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="co">// for (String s : list) {...} actually compiles into ↓</span></span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="bu">Iterator</span><span class="op">&lt;</span><span class="bu">String</span><span class="op">&gt;</span> it <span class="op">=</span> list<span class="op">.</span><span class="fu">iterator</span><span class="op">();</span> it<span class="op">.</span><span class="fu">hasNext</span><span class="op">();</span> <span class="op">)</span> <span class="op">{</span></span>
-<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>    <span class="bu">String</span> s <span class="op">=</span> it<span class="op">.</span><span class="fu">next</span><span class="op">();</span></span>
-<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">...</span></span>
-<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="co">// for (String s : list) {...} actually compiles into ↓</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="bu">Iterator</span><span class="op">&lt;</span><span class="bu">String</span><span class="op">&gt;</span> it <span class="op">=</span> list<span class="op">.</span><span class="fu">iterator</span><span class="op">();</span> it<span class="op">.</span><span class="fu">hasNext</span><span class="op">();</span> <span class="op">)</span> <span class="op">{</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>    <span class="bu">String</span> s <span class="op">=</span> it<span class="op">.</span><span class="fu">next</span><span class="op">();</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">...</span></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>Compared with C++’s range-based for
 (<code>for (auto&amp; x : container)</code>, which relies on
 <code>begin()/end()</code>), this maps almost one-to-one: Java relies on
@@ -382,70 +452,70 @@ body</strong>; otherwise the iterator detects the structural change and
 throws <code>ConcurrentModificationException</code> (to remove, use the
 iterator’s own <code>remove()</code> or use <code>removeIf</code>).
 Collections and iterators are covered in detail in <a
-href="07-复合数据结构.html">“Composite Data Structures”</a>.</p>
+href="07-复合数据结构.html">Composite Data Structures</a>.</p>
 <h2 id="labeled-break-continue">4. Labeled break / continue</h2>
 <p>Java has no <code>goto</code> (it’s a reserved word but unused), but
 it provides <strong>labeled break/continue</strong> to break out of /
 continue an <strong>outer</strong> loop, covering the common C scenario
 of using goto to escape nested loops:</p>
-<div class="sourceCode" id="cb11"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>outer<span class="op">:</span></span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> n<span class="op">;</span> i<span class="op">++)</span> <span class="op">{</span></span>
-<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> j <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> j <span class="op">&lt;</span> m<span class="op">;</span> j<span class="op">++)</span> <span class="op">{</span></span>
-<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>matrix<span class="op">[</span>i<span class="op">][</span>j<span class="op">]</span> <span class="op">==</span> target<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>            found <span class="op">=</span> <span class="kw">true</span><span class="op">;</span></span>
-<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>            <span class="cf">break</span> outer<span class="op">;</span>        <span class="co">// break straight out of both nested loops</span></span>
-<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
-<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>skip<span class="op">)</span> <span class="cf">continue</span> outer<span class="op">;</span>  <span class="co">// jump straight to the outer loop&#39;s next iteration</span></span>
-<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>outer<span class="op">:</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> n<span class="op">;</span> i<span class="op">++)</span> <span class="op">{</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> j <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> j <span class="op">&lt;</span> m<span class="op">;</span> j<span class="op">++)</span> <span class="op">{</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>matrix<span class="op">[</span>i<span class="op">][</span>j<span class="op">]</span> <span class="op">==</span> target<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>            found <span class="op">=</span> <span class="kw">true</span><span class="op">;</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>            <span class="cf">break</span> outer<span class="op">;</span>        <span class="co">// break straight out of both nested loops</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>skip<span class="op">)</span> <span class="cf">continue</span> outer<span class="op">;</span>  <span class="co">// jump straight to the outer loop&#39;s next iteration</span></span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p><code>break outer</code> ends the entire loop the label points to;
 <code>continue outer</code> jumps to that loop’s next iteration. More
 structured and readable than C’s flag variables or goto. At the bytecode
 level it’s still a <code>goto</code> to the corresponding offset.</p>
-<h2 id="the-ternary-operator">5. The ternary operator</h2>
-<div class="sourceCode" id="cb12"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> max <span class="op">=</span> <span class="op">(</span>a <span class="op">&gt;</span> b<span class="op">)</span> <span class="op">?</span> a <span class="op">:</span> b<span class="op">;</span></span></code></pre></div>
+<h2 id="the-ternary-operator">5. The Ternary Operator</h2>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> max <span class="op">=</span> <span class="op">(</span>a <span class="op">&gt;</span> b<span class="op">)</span> <span class="op">?</span> a <span class="op">:</span> b<span class="op">;</span></span></code></pre></div>
 <p>Same as C. Note that in Java the two branches of a ternary expression
 must have <strong>compatible types</strong> (type promotion / boxing is
 applied), e.g. <code>cond ? 1 : 2.0</code> is a double overall. Mixing
 wrapper classes with primitives can trigger auto-unboxing and cause an
 unexpected NPE — watch out.</p>
-<h2 id="instanceof-pattern-matching">6. instanceof pattern matching</h2>
+<h2 id="instanceof-pattern-matching">6. instanceof Pattern Matching</h2>
 <p>The classic <code>instanceof</code> checks the type and then requires
 a manual cast; pattern matching (JDK 16+) does it in one step and binds
 a variable:</p>
-<div class="sourceCode" id="cb13"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="co">// classic style</span></span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="op">(</span>obj <span class="kw">instanceof</span> <span class="bu">String</span><span class="op">)</span> <span class="op">{</span></span>
-<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    <span class="bu">String</span> s <span class="op">=</span> <span class="op">(</span><span class="bu">String</span><span class="op">)</span> obj<span class="op">;</span>    <span class="co">// still need an explicit cast</span></span>
-<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>    <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>s<span class="op">.</span><span class="fu">length</span><span class="op">());</span></span>
-<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a><span class="co">// pattern-matching style</span></span>
-<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="op">(</span>obj <span class="kw">instanceof</span> <span class="bu">String</span> s<span class="op">)</span> <span class="op">{</span>  <span class="co">// on a successful test, obj is bound to s (already of type String)</span></span>
-<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>    <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>s<span class="op">.</span><span class="fu">length</span><span class="op">());</span></span>
-<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a><span class="co">// you can keep using the bound variable within the same condition</span></span>
-<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="op">(</span>obj <span class="kw">instanceof</span> <span class="bu">String</span> s <span class="op">&amp;&amp;</span> s<span class="op">.</span><span class="fu">length</span><span class="op">()</span> <span class="op">&gt;</span> <span class="dv">3</span><span class="op">)</span> <span class="op">{</span> <span class="kw">...</span> <span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="co">// classic style</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="op">(</span>obj <span class="kw">instanceof</span> <span class="bu">String</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>    <span class="bu">String</span> s <span class="op">=</span> <span class="op">(</span><span class="bu">String</span><span class="op">)</span> obj<span class="op">;</span>    <span class="co">// still need an explicit cast</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>    <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>s<span class="op">.</span><span class="fu">length</span><span class="op">());</span></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a><span class="co">// pattern-matching style</span></span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="op">(</span>obj <span class="kw">instanceof</span> <span class="bu">String</span> s<span class="op">)</span> <span class="op">{</span>  <span class="co">// on a successful test, obj is bound to s (already of type String)</span></span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a>    <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>s<span class="op">.</span><span class="fu">length</span><span class="op">());</span></span>
+<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a><span class="co">// you can keep using the bound variable within the same condition</span></span>
+<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="op">(</span>obj <span class="kw">instanceof</span> <span class="bu">String</span> s <span class="op">&amp;&amp;</span> s<span class="op">.</span><span class="fu">length</span><span class="op">()</span> <span class="op">&gt;</span> <span class="dv">3</span><span class="op">)</span> <span class="op">{</span> <span class="kw">...</span> <span class="op">}</span></span></code></pre></div>
 <p>The scope of <code>s</code> is “wherever it’s guaranteed to be a
 String” (flow-sensitive scoping). This is the same direction of language
 evolution as the type system in <a
 href="08-面向对象与类型系统.html">Chapter 8</a> and the pattern-matching
 switch in this chapter. It’s essentially a smoother version of C++’s
 <code>if (auto* p = dynamic_cast&lt;String*&gt;(obj))</code>.</p>
-<h2 id="text-blocks-jdk-15">7. Text blocks (JDK 15+)</h2>
+<h2 id="text-blocks-jdk-15">7. Text Blocks (JDK 15+)</h2>
 <p>Multi-line string literals that spare you from hand-writing
 <code>\n</code> and concatenation, similar to a heredoc in other
 languages:</p>
-<div class="sourceCode" id="cb14"><pre
-class="sourceCode java"><code class="sourceCode java"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> json <span class="op">=</span> <span class="st">&quot;&quot;&quot;</span></span>
-<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="st">        {</span></span>
-<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="st">          &quot;name&quot;: &quot;Ada&quot;,</span></span>
-<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a><span class="st">          &quot;age&quot;: 36</span></span>
-<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a><span class="st">        }</span></span>
-<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a><span class="st">        &quot;&quot;&quot;</span><span class="op">;</span>                    <span class="co">// wrapped in triple quotes; the indentation baseline is fixed at compile time and common leading whitespace is stripped</span></span></code></pre></div>
+<div class="sourceCode" id="cb15"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> json <span class="op">=</span> <span class="st">&quot;&quot;&quot;</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="st">        {</span></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a><span class="st">          &quot;name&quot;: &quot;Ada&quot;,</span></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a><span class="st">          &quot;age&quot;: 36</span></span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a><span class="st">        }</span></span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a><span class="st">        &quot;&quot;&quot;</span><span class="op">;</span>                    <span class="co">// wrapped in triple quotes; the indentation baseline is fixed at compile time and common leading whitespace is stripped</span></span></code></pre></div>
 <p>Key points: - It’s still an ordinary <code>String</code> (immutable,
 interned into the constant pool); only the <strong>way you write
 it</strong> differs, and at runtime it’s no different from an ordinary
@@ -457,6 +527,17 @@ Compared with C, where you can only string together adjacent
 <code>"..."</code> literals or use trailing <code>\</code>, text blocks
 are far cleaner.</p>
 <h2 id="summary">Summary</h2>
+<ul>
+<li><strong>At the usage level</strong>:
+<code>if/for/while/do-while</code> syntax is basically copied from C;
+<code>switch</code> supports the <code>-&gt;</code> expression form (no
+fall-through, can return a value) and the type-matching pattern form;
+enhanced for (<code>for (T x : container)</code>) iterates
+arrays/collections; labeled
+<code>break outer</code>/<code>continue outer</code> break out of nested
+loops; <code>instanceof</code> patterns test the type and bind at once;
+text blocks <code>"""..."""</code> write multi-line strings.</li>
+<li><strong>At the implementation level</strong>:
 <ul>
 <li>An <code>if</code> condition must be a boolean, ruling out
 <code>if(a=b)</code>-style slips.</li>
@@ -472,13 +553,12 @@ n))</strong>, chosen automatically by the compiler; inspect with
 <code>Iterable.iterator()</code>; mutating the collection during
 iteration throws <code>ConcurrentModificationException</code>.</li>
 <li>Labeled break/continue replace cross-level goto.</li>
-<li><code>instanceof</code> patterns test the type and bind at once;
-text blocks write multi-line strings.</li>
+</ul></li>
 </ul>
 <hr />
 <p><a href="04-数据类型.html">← Prev: Data Types</a> · <a
 href="index.html">Index</a> · <a href="06-函数与调用栈.html">Next:
-Functions and the Call Stack</a> →</p>
+Functions and the Call Stack</a> → </content> </invoke></p>
 </div>
 </body>
 </html>
