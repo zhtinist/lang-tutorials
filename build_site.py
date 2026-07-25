@@ -19,7 +19,8 @@ TUTS = [("python-tutorial", "python", "Python"),
 # 仅中文、无英文版的独立板块(不参与 zh/en 双语镜像)
 ZH_ONLY = [("algo-notes", "algo", "算法笔记"),
            ("architecture-notes", "architecture", "架构设计"),
-           ("ood-lld-notes", "oodlld", "OOD/LLD")]
+           ("ood-lld-notes", "oodlld", "OOD/LLD"),
+           ("container-notes", "container", "容器对照")]
 LANGS = ["zh"]  # 英文版暂停维护,先隐藏入口(源文件保留在 *-tutorial-en/,以后需要时改回 ["zh", "en"] 即可)
 
 TOGGLE_JS = ("function switchLang(){var p=location.pathname,en=p.indexOf('/en/')>-1,"
@@ -99,6 +100,7 @@ def home_html(lang):
         "algo-notes": "数据结构手写实现、核心刷题框架、经典数据结构、暴力搜索、动态规划与其他算法技巧。",
         "architecture-notes": "五种经典架构模式、RESTful、整洁架构、DDD,学会选型而非背名词。",
         "ood-lld-notes": "OOP 基础、SOLID 原则、UML 类图、三大类设计模式、LLD 面试框架与经典案例。",
+        "container-notes": "C++/Python/Go/Java 容器操作横向对照:长度、判存在、拷贝语义、常见坑速查。",
     }
     if lang == "zh":
         cards += "\n".join(
