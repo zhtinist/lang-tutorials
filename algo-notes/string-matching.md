@@ -206,7 +206,103 @@ def shortest_palindrome(s: str) -> str:
 
 ---
 
-## 四、Z 函数
+## 四、有限自动机字符串匹配
+
+### 4.1 核心思想
+
+```
+CLRS 32.3 的思路：把"匹配进度"本身建模成一个有限状态自动机。
+
+状态 q ∈ {0, 1, ..., m} 表示"当前已经匹配上的、pattern 的前缀长度"。
+转移函数 δ(q, a) = 在状态 q（已匹配 pattern[0:q]）时读入字符 a 之后，
+                    新的状态是多少
+                  = pattern 的最长前缀，使得它同时是 pattern[0:q] + a 的后缀
+
+一旦转移表 δ 建好，匹配阶段就是：
+  q = 0
+  for 每个字符 a in text:
+      q = δ(q, a)
+      if q == m: 找到一次匹配
+
+这一步是纯粹的"查表 + 前进"，O(1) 每字符，全程没有任何回溯，
+比朴素匹配（可能反复回退指针）更"干脆"，总匹配时间严格 O(n)。
+
+代价：构建 δ 需要对每个状态 q（0..m）、每个字符 a（|Σ| 种）都算一次
+最长前缀，朴素实现是 O(m^3|Σ|)（或稍微优化到 O(m^2|Σ|)），
+预处理的时间和空间都是 O(m|Σ|)。
+
+对比 KMP 的 next 数组：预处理只要 O(m) 时间、O(m) 空间，
+不依赖字母表大小 |Σ|。这就是自动机方法的短板——
+当 |Σ| 很大（比如任意 Unicode 字符）时，预处理开销会明显更大。
+
+CLRS 讲有限自动机匹配，是把它当作引出 KMP 的一个"垫脚石"：
+KMP 的 next 数组本质上就是这个自动机的一种压缩表示——
+不用真的建出完整的 m x |Σ| 转移表，只存一个长度为 m 的
+"失配后退到哪里"的数组，通过 while 循环里的回退动态模拟出
+同样的转移效果。这也是为什么实际写代码几乎只用 KMP，
+不用完整建表的自动机版本。
+```
+
+### 4.2 实现 · [LC 28](https://leetcode.com/problems/find-the-index-of-the-first-occurrence-in-a-string/)
+
+```python
+def build_automaton(pattern: str, alphabet: str) -> list[dict[str, int]]:
+    """
+    构建有限自动机的转移函数 delta。
+    delta[q][a] = pattern[0:q] + a 的最长前缀长度（该前缀同时是 pattern 的前缀）。
+    朴素构造，正确性优先，时间 O(m^2 |Sigma|)，允许比匹配阶段慢得多。
+    """
+    m = len(pattern)
+    delta: list[dict[str, int]] = [dict() for _ in range(m + 1)]
+
+    for q in range(m + 1):
+        for a in alphabet:
+            s = pattern[:q] + a
+            k = min(m, q + 1)
+            while k > 0 and pattern[:k] != s[len(s) - k :]:
+                k -= 1
+            delta[q][a] = k
+
+    return delta
+
+
+def automaton_search(text: str, pattern: str) -> int:
+    """利用有限自动机做字符串匹配。返回 pattern 在 text 中首次出现的位置，O(n)。"""
+    if not pattern:
+        return 0
+
+    n, m = len(text), len(pattern)
+    if n < m:
+        return -1
+
+    alphabet = set(text) | set(pattern)
+    delta = build_automaton(pattern, alphabet)
+
+    q = 0
+    for i in range(n):
+        q = delta[q].get(text[i], 0)
+        if q == m:
+            return i - m + 1  # 匹配成功
+
+    return -1
+```
+
+### 4.3 与 KMP 的关系
+
+```
+本质上和上面的 KMP 是同一个思想的两种实现——
+KMP 的 next 数组可以看成这个自动机的一种压缩表示，
+不用真的建出完整的转移表就能达到同样的匹配效果，
+这也是为什么实际写代码几乎只用 KMP 不用完整的自动机版本。
+
+           预处理             匹配        是否依赖 |Σ|
+自动机法    O(m|Σ|)（表）      O(n)        是
+KMP        O(m)（数组）       O(n)        否
+```
+
+---
+
+## 五、Z 函数
 
 ```python
 def z_function(s: str) -> list[int]:
@@ -231,18 +327,19 @@ def z_function(s: str) -> list[int]:
 
 ---
 
-## 五、算法对比
+## 六、算法对比
 
 | 算法 | 预处理 | 匹配 | 适用场景 |
 |------|--------|------|---------|
 | KMP | O(m) | O(n) | 单模式匹配 |
 | Rabin-Karp | O(1) | O(n) 平均 | 多模式匹配 |
+| 有限自动机 | O(m·\|Σ\|) | O(n) | 单模式匹配；理解 KMP 的中间过渡 |
 | Z 函数 | O(n) | O(n) | 字符串周期性 |
 | 暴力 | O(1) | O(nm) | 仅短串 |
 
 ---
 
-## 六、习题推荐
+## 七、习题推荐
 
 | 题号 | 题目 | 难度 | 技巧 |
 |------|------|------|------|

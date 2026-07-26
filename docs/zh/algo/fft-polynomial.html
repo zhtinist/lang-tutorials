@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="zh-CN" xml:lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>多项式与快速傅里叶变换 · Polynomial Multiplication &amp;
+FFT</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../../assets/style.css" />
+</head>
+<body>
+<div class="topbar"><div class="wrap"><a class="home" href="../index.html"><span class="logo">📚</span><span class="brand">面向 C/C++ 程序员的其他语言教程</span></a>
+<a href="../python/index.html">Python</a>
+<a href="../java/index.html">Java</a>
+<a href="../go/index.html">Go</a>
+<a href="../algo/index.html" style="color:var(--accent-dark);font-weight:700">算法笔记</a>
+<a href="../architecture/index.html">架构设计</a>
+<a href="../oodlld/index.html">OOD/LLD</a>
+<a href="../container/index.html">容器对照</a></div></div>
+<div class="wrap">
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#多项式与快速傅里叶变换-polynomial-multiplication-fft"
+id="toc-多项式与快速傅里叶变换-polynomial-multiplication-fft">多项式与快速傅里叶变换
+· Polynomial Multiplication &amp; FFT</a>
+<ul>
+<li><a href="#一系数表示-vs-点值表示"
+id="toc-一系数表示-vs-点值表示">一、系数表示 vs 点值表示</a></li>
+<li><a href="#二单位复根与-dft" id="toc-二单位复根与-dft">二、单位复根与
+DFT</a></li>
+<li><a href="#三fft分治求值"
+id="toc-三fft分治求值">三、FFT：分治求值</a></li>
+<li><a href="#四应用大整数乘法-字符串形式的数字相乘"
+id="toc-四应用大整数乘法-字符串形式的数字相乘">四、应用：大整数乘法 /
+字符串形式的数字相乘</a></li>
+<li><a href="#五复杂度总结"
+id="toc-五复杂度总结">五、复杂度总结</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1
+id="多项式与快速傅里叶变换-polynomial-multiplication-fft">多项式与快速傅里叶变换
+· Polynomial Multiplication &amp; FFT</h1>
+<blockquote>
+<p>两个 n 次多项式相乘，暴力算法是 O(n²)（每一项乘每一项）。FFT
+能把它降到 O(n log n)——
+靠的是”换一种方式表示多项式”：不用系数表示，而用”多项式在 n
+个点上的取值”表示， 点值表示下乘法是逐点相乘
+O(n)，只是”求值”和”插值”这两步的转换需要 FFT 加速。</p>
+</blockquote>
+<hr />
+<h2 id="一系数表示-vs-点值表示">一、系数表示 vs 点值表示</h2>
+<pre><code>一个 n-1 次多项式，可以用两种等价的方式表示：
+
+1. 系数表示：[a0, a1, ..., a(n-1)]，多项式是 a0 + a1*x + ... + a(n-1)*x^(n-1)
+   两个多项式相乘（卷积）：O(n²)，每一项乘每一项再合并同类项。
+
+2. 点值表示：[(x0,y0), (x1,y1), ..., (x(n-1),y(n-1))]，n 个不同的点能唯一确定一个 n-1 次多项式
+   两个多项式相乘：只要用同一组 x 坐标分别求出两个多项式的点值，
+   对应的 y 值相乘就是乘积多项式在这些点上的取值——O(n)！
+
+问题变成：怎么快速地&quot;系数-&gt;点值&quot;（求值）和&quot;点值-&gt;系数&quot;（插值）？
+朴素求值 n 个点每个 O(n)，总共 O(n²)，没有比暴力乘法快。
+FFT 的贡献：如果选的 n 个点是&quot;n 次单位复根&quot;，求值和插值都能做到 O(n log n)。</code></pre>
+<hr />
+<h2 id="二单位复根与-dft">二、单位复根与 DFT</h2>
+<pre><code>n 次单位复根：满足 w^n = 1 的复数，一共有 n 个，均匀分布在复平面单位圆上。
+w_n = e^(2πi/n)，其余的根是 w_n 的幂次：1, w_n, w_n², ..., w_n^(n-1)。
+
+离散傅里叶变换 DFT：在这 n 个单位复根上对多项式求值，就是 DFT。
+逆离散傅里叶变换 IDFT：从这 n 个点值反推回系数，本质是在 1/w_n 这组根上再做一次类似的变换（除以 n）。
+
+为什么选单位复根：它们有&quot;周期性&quot;和&quot;折半&quot;的对称性质（w^2 是 n/2 次单位根），
+这正是分治能够把 O(n²) 降到 O(n log n) 的关键——下面 FFT 部分会用到这个折半技巧。</code></pre>
+<hr />
+<h2 id="三fft分治求值">三、FFT：分治求值</h2>
+<h3 id="核心思路">3.1 核心思路</h3>
+<pre><code>把多项式 A(x) = a0 + a1*x + a2*x² + ... 按下标奇偶拆成两个约一半大小的多项式：
+  A_even(x) = a0 + a2*x + a4*x² + ...   （偶数下标系数）
+  A_odd(x)  = a1 + a3*x + a5*x² + ...   （奇数下标系数）
+  A(x) = A_even(x²) + x * A_odd(x²)
+
+要在 n 个单位复根 {w^0, w^1, ..., w^(n-1)} 上对 A 求值，
+注意到 w^k 和 w^(k+n/2) 满足 (w^k)² = (w^(k+n/2))²（因为 w^(n/2) = -1），
+也就是说，对 A_even 和 A_odd 只需要在 n/2 个点（各自的单位复根）上求值，
+就能同时算出 A 在全部 n 个点上的取值——这就是分治：
+  T(n) = 2T(n/2) + O(n)  =&gt;  O(n log n)</code></pre>
+<h3 id="完整实现">3.2 完整实现</h3>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> cmath</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> fft(a: <span class="bu">list</span>[<span class="bu">complex</span>], invert: <span class="bu">bool</span> <span class="op">=</span> <span class="va">False</span>) <span class="op">-&gt;</span> <span class="bu">list</span>[<span class="bu">complex</span>]:</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    <span class="co">&quot;&quot;&quot;</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="co">    对系数数组 a 做 DFT（invert=False）或 IDFT（invert=True）。</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="co">    len(a) 必须是 2 的幂。递归版本，思路直接对应上面的分治推导。</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="co">    &quot;&quot;&quot;</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>    n <span class="op">=</span> <span class="bu">len</span>(a)</span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> n <span class="op">==</span> <span class="dv">1</span>:</span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> a[:]</span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>    even <span class="op">=</span> fft(a[<span class="dv">0</span>::<span class="dv">2</span>], invert)</span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>    odd <span class="op">=</span> fft(a[<span class="dv">1</span>::<span class="dv">2</span>], invert)</span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>    result <span class="op">=</span> [<span class="ot">0j</span>] <span class="op">*</span> n</span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a>    angle_sign <span class="op">=</span> <span class="op">-</span><span class="dv">1</span> <span class="cf">if</span> <span class="kw">not</span> invert <span class="cf">else</span> <span class="dv">1</span></span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> k <span class="kw">in</span> <span class="bu">range</span>(n <span class="op">//</span> <span class="dv">2</span>):</span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a>        angle <span class="op">=</span> angle_sign <span class="op">*</span> <span class="dv">2</span> <span class="op">*</span> cmath.pi <span class="op">*</span> k <span class="op">/</span> n</span>
+<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a>        w <span class="op">=</span> cmath.exp(<span class="ot">1j</span> <span class="op">*</span> angle)  <span class="co"># w = e^(iθ)，第 k 个（或逆变换的共轭）单位复根</span></span>
+<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a>        result[k] <span class="op">=</span> even[k] <span class="op">+</span> w <span class="op">*</span> odd[k]           <span class="co"># 对应 w^k</span></span>
+<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a>        result[k <span class="op">+</span> n <span class="op">//</span> <span class="dv">2</span>] <span class="op">=</span> even[k] <span class="op">-</span> w <span class="op">*</span> odd[k]  <span class="co"># 对应 w^(k+n/2) = -w^k</span></span>
+<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> invert:</span>
+<span id="cb4-25"><a href="#cb4-25" aria-hidden="true" tabindex="-1"></a>        result <span class="op">=</span> [x <span class="op">/</span> <span class="dv">2</span> <span class="cf">for</span> x <span class="kw">in</span> result]  <span class="co"># 每层递归除以2，log n 层合起来正好是除以 n</span></span>
+<span id="cb4-26"><a href="#cb4-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-27"><a href="#cb4-27" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> result</span></code></pre></div>
+<blockquote>
+<p><strong>为什么 IDFT 每层除以 2 就够了</strong>：IDFT 的公式是
+<code>a_k = (1/n) * Σ y_j * w^(-jk)</code>， 总共要除以
+n。这个函数是递归的，从最底层（n=1）到最顶层一共有 log₂n 层，
+每层都把当前子问题的结果除以 2，log₂n 层各除以 2，累计起来正好是除以 n =
+2^(log₂n)。</p>
+</blockquote>
+<h3 id="多项式乘法">3.3 多项式乘法</h3>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> multiply_polynomials(a: <span class="bu">list</span>[<span class="bu">int</span>], b: <span class="bu">list</span>[<span class="bu">int</span>]) <span class="op">-&gt;</span> <span class="bu">list</span>[<span class="bu">int</span>]:</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">&quot;&quot;&quot;a, b: 系数列表（低次到高次）。返回 a*b 的系数列表。&quot;&quot;&quot;</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    result_size <span class="op">=</span> <span class="dv">1</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> result_size <span class="op">&lt;</span> <span class="bu">len</span>(a) <span class="op">+</span> <span class="bu">len</span>(b):</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>        result_size <span class="op">*=</span> <span class="dv">2</span>  <span class="co"># FFT 需要长度是 2 的幂，且要能装下乘积（次数=len(a)+len(b)-2）</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>    fa <span class="op">=</span> [<span class="bu">complex</span>(x) <span class="cf">for</span> x <span class="kw">in</span> a] <span class="op">+</span> [<span class="ot">0j</span>] <span class="op">*</span> (result_size <span class="op">-</span> <span class="bu">len</span>(a))</span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>    fb <span class="op">=</span> [<span class="bu">complex</span>(x) <span class="cf">for</span> x <span class="kw">in</span> b] <span class="op">+</span> [<span class="ot">0j</span>] <span class="op">*</span> (result_size <span class="op">-</span> <span class="bu">len</span>(b))</span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>    fa <span class="op">=</span> fft(fa)</span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>    fb <span class="op">=</span> fft(fb)</span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>    fc <span class="op">=</span> [x <span class="op">*</span> y <span class="cf">for</span> x, y <span class="kw">in</span> <span class="bu">zip</span>(fa, fb)]  <span class="co"># 点值表示下，乘法就是逐点相乘，O(n)</span></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>    fc <span class="op">=</span> fft(fc, invert<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>    result <span class="op">=</span> [<span class="bu">round</span>(x.real) <span class="cf">for</span> x <span class="kw">in</span> fc]  <span class="co"># 系数是整数时，浮点误差四舍五入即可还原</span></span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> <span class="bu">len</span>(result) <span class="op">&gt;</span> <span class="bu">len</span>(a) <span class="op">+</span> <span class="bu">len</span>(b) <span class="op">-</span> <span class="dv">1</span>:</span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>        result.pop()  <span class="co"># 去掉补零多出来的高次项（理论上应该是0，四舍五入后也是0）</span></span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> result</span></code></pre></div>
+<h3 id="正确性验证">3.4 正确性验证</h3>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> multiply_naive(a: <span class="bu">list</span>[<span class="bu">int</span>], b: <span class="bu">list</span>[<span class="bu">int</span>]) <span class="op">-&gt;</span> <span class="bu">list</span>[<span class="bu">int</span>]:</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>    result <span class="op">=</span> [<span class="dv">0</span>] <span class="op">*</span> (<span class="bu">len</span>(a) <span class="op">+</span> <span class="bu">len</span>(b) <span class="op">-</span> <span class="dv">1</span>)</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> i, x <span class="kw">in</span> <span class="bu">enumerate</span>(a):</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> j, y <span class="kw">in</span> <span class="bu">enumerate</span>(b):</span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>            result[i <span class="op">+</span> j] <span class="op">+=</span> x <span class="op">*</span> y</span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> result</span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> random</span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>random.seed(<span class="dv">0</span>)</span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>fail <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">200</span>):</span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a>    na, nb <span class="op">=</span> random.randint(<span class="dv">1</span>, <span class="dv">20</span>), random.randint(<span class="dv">1</span>, <span class="dv">20</span>)</span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>    a <span class="op">=</span> [random.randint(<span class="op">-</span><span class="dv">50</span>, <span class="dv">50</span>) <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(na)]</span>
+<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a>    b <span class="op">=</span> [random.randint(<span class="op">-</span><span class="dv">50</span>, <span class="dv">50</span>) <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(nb)]</span>
+<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> multiply_polynomials(a, b) <span class="op">!=</span> multiply_naive(a, b):</span>
+<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a>        fail <span class="op">+=</span> <span class="dv">1</span></span>
+<span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f&quot;FFT 多项式乘法 vs 暴力乘法：200 次随机测试，不匹配 </span><span class="sc">{</span>fail<span class="sc">}</span><span class="ss"> 次&quot;</span>)</span>
+<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-21"><a href="#cb6-21" aria-hidden="true" tabindex="-1"></a><span class="co"># 规模更大的例子（暴力是 O(n²)，FFT 是 O(n log n)，n=500 时差距已经很明显）</span></span>
+<span id="cb6-22"><a href="#cb6-22" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> [random.randint(<span class="op">-</span><span class="dv">9</span>, <span class="dv">9</span>) <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">500</span>)]</span>
+<span id="cb6-23"><a href="#cb6-23" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> [random.randint(<span class="op">-</span><span class="dv">9</span>, <span class="dv">9</span>) <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">500</span>)]</span>
+<span id="cb6-24"><a href="#cb6-24" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">&quot;n=500 大规模测试一致:&quot;</span>, multiply_polynomials(a, b) <span class="op">==</span> multiply_naive(a, b))</span></code></pre></div>
+<hr />
+<h2 id="四应用大整数乘法-字符串形式的数字相乘">四、应用：大整数乘法 /
+字符串形式的数字相乘</h2>
+<pre><code>把一个大整数看成一个多项式（每一位是一个系数，x=10），
+&quot;两个大整数相乘&quot;就变成了&quot;两个多项式相乘，再处理进位&quot;——
+用 FFT 做多项式乘法部分，可以把大整数乘法从朴素的 O(n²)（n=位数）降到 O(n log n)。
+LeetCode 上 43. Multiply Strings 数据范围小（n ≤ 200），暴力 O(n²) 竖式乘法完全够用，
+但如果 n 是 10^5、10^6 级别（大数库/密码学场景），FFT 乘法就是必需的优化。</code></pre>
+<hr />
+<h2 id="五复杂度总结">五、复杂度总结</h2>
+<table>
+<colgroup>
+<col style="width: 30%" />
+<col style="width: 40%" />
+<col style="width: 30%" />
+</colgroup>
+<thead>
+<tr>
+<th>方法</th>
+<th>复杂度</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>暴力多项式乘法</td>
+<td>O(n²)</td>
+<td>直接按定义展开</td>
+</tr>
+<tr>
+<td>FFT 多项式乘法</td>
+<td>O(n log n)</td>
+<td>系数-&gt;点值(FFT)-&gt;逐点相乘-&gt;点值-&gt;系数(IFFT)</td>
+</tr>
+<tr>
+<td>NTT（数论变换）</td>
+<td>O(n log n)</td>
+<td>FFT 的整数取模版本，避免浮点误差，常用于模数下的多项式乘法</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>本文的递归 FFT 简单直观但有额外的列表切片开销；工程实现通常用”迭代 +
+位逆序置换”版本， 常数因子更小，但原理跟这里的分治推导完全一样。</p>
+</blockquote>
+<hr />
+<p><a href="index.html">← 返回索引</a></p>
+</div>
+</body>
+</html>

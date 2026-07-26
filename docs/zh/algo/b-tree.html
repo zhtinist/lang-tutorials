@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="zh-CN" xml:lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>B 树 · B-Tree</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../../assets/style.css" />
+</head>
+<body>
+<div class="topbar"><div class="wrap"><a class="home" href="../index.html"><span class="logo">📚</span><span class="brand">面向 C/C++ 程序员的其他语言教程</span></a>
+<a href="../python/index.html">Python</a>
+<a href="../java/index.html">Java</a>
+<a href="../go/index.html">Go</a>
+<a href="../algo/index.html" style="color:var(--accent-dark);font-weight:700">算法笔记</a>
+<a href="../architecture/index.html">架构设计</a>
+<a href="../oodlld/index.html">OOD/LLD</a>
+<a href="../container/index.html">容器对照</a></div></div>
+<div class="wrap">
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#b-树-b-tree" id="toc-b-树-b-tree">B 树 · B-Tree</a>
+<ul>
+<li><a href="#一定义" id="toc-一定义">一、定义</a></li>
+<li><a href="#二查找" id="toc-二查找">二、查找</a></li>
+<li><a href="#三插入" id="toc-三插入">三、插入</a></li>
+<li><a href="#四删除只讲思路不实现"
+id="toc-四删除只讲思路不实现">四、删除（只讲思路，不实现）</a></li>
+<li><a href="#五b-树与红黑树对比" id="toc-五b-树与红黑树对比">五、B
+树与红黑树对比</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1 id="b-树-b-tree">B 树 · B-Tree</h1>
+<blockquote>
+<p>B 树是一棵<strong>多路平衡搜索树</strong>：每个节点可以存多个
+key、有多个子节点，不再是”一分二”而是”一分多”。
+专为磁盘/数据库设计——每个节点对应一次磁盘 I/O，多路能让树高大幅降低，
+从而大幅减少查询时的磁盘读取次数。MySQL InnoDB
+的索引、大多数文件系统都用它（或它的变体 B+树）。</p>
+</blockquote>
+<hr />
+<h2 id="一定义">一、定义</h2>
+<blockquote>
+<p>用<strong>最小度数 (minimum degree) t</strong> 描述一棵 B
+树的”胖瘦”，t ≥ 2。</p>
+</blockquote>
+<pre><code>每个节点（除根节点外）:
+  - 最多有 2t-1 个 key，最多有 2t 个子节点
+  - 至少有 t-1 个 key，至少有 t 个子节点（根节点可以少于 t-1 个，只要至少有1个key）
+
+一个内部节点的 key 把它的子树分成 (key数+1) 段，
+子节点 i 的所有 key 都落在 keys[i-1] 和 keys[i] 之间（跟 BST 的性质是一致的，
+只是 BST 每个节点只有1个key、2个子节点，B树把这个&quot;1对2&quot;推广成了&quot;多对多&quot;）。
+
+所有叶子节点在同一深度——这是 B 树&quot;绝对平衡&quot;（不是红黑树那种近似平衡）的关键性质，
+靠的是插入时&quot;节点满了就分裂，把中间 key 弹给父节点&quot;，而不是靠旋转。</code></pre>
+<blockquote>
+<p><strong>t 越大，节点越”胖”（能存的 key
+越多），树越”矮”</strong>——这正是磁盘场景想要的：
+让一次磁盘读取（读一个节点）尽量多做事，用最少的磁盘读取次数完成一次查找。</p>
+</blockquote>
+<hr />
+<h2 id="二查找">二、查找</h2>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> BTreeNode:</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, leaf: <span class="bu">bool</span> <span class="op">=</span> <span class="va">True</span>) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.keys: <span class="bu">list</span>[<span class="bu">int</span>] <span class="op">=</span> []</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.children: <span class="bu">list</span>[<span class="st">&quot;BTreeNode&quot;</span>] <span class="op">=</span> []</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.leaf <span class="op">=</span> leaf</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> BTree:</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, t: <span class="bu">int</span> <span class="op">=</span> <span class="dv">3</span>) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.t <span class="op">=</span> t  <span class="co"># 最小度数</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.root <span class="op">=</span> BTreeNode(leaf<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> search(<span class="va">self</span>, key: <span class="bu">int</span>, node: <span class="st">&quot;BTreeNode | None&quot;</span> <span class="op">=</span> <span class="va">None</span>):</span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>        <span class="co">&quot;&quot;&quot;在节点内顺序找第一个 &gt;= key 的位置，命中就返回，否则递归进对应子树。&quot;&quot;&quot;</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> node <span class="kw">is</span> <span class="va">None</span>:</span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>            node <span class="op">=</span> <span class="va">self</span>.root</span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>        i <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>        <span class="cf">while</span> i <span class="op">&lt;</span> <span class="bu">len</span>(node.keys) <span class="kw">and</span> key <span class="op">&gt;</span> node.keys[i]:</span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>            i <span class="op">+=</span> <span class="dv">1</span></span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> i <span class="op">&lt;</span> <span class="bu">len</span>(node.keys) <span class="kw">and</span> key <span class="op">==</span> node.keys[i]:</span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> (node, i)  <span class="co"># 找到了，返回所在节点和下标</span></span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> node.leaf:</span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="va">None</span>  <span class="co"># 已经是叶子还没找到，说明不存在</span></span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="va">self</span>.search(key, node.children[i])</span></code></pre></div>
+<blockquote>
+<p>复杂度 O(t · log_t n)：树高是 O(log_t n)，每层节点内部顺序查找最多扫
+O(t) 个 key （如果节点内部也用二分查找，能优化到 O(log t · log_t
+n)，但工程上 t 通常不大，顺序扫描更简单也够快）。</p>
+</blockquote>
+<hr />
+<h2 id="三插入">三、插入</h2>
+<h3 id="核心思路满了就分裂绝不往下走的时候才发现没地方">3.1
+核心思路：满了就分裂，绝不”往下走的时候才发现没地方”</h3>
+<pre><code>B树插入的关键技巧：从根开始往下找插入位置的过程中，
+只要发现&quot;即将进入的子节点已经满了（2t-1个key）&quot;，就提前把它分裂，
+而不是一路走到叶子才发现满了再往回处理。
+
+这样做的好处：插入操作只需要&quot;从上往下走一趟&quot;，不需要任何回溯，
+因为每次下降前都已经保证&quot;要进入的节点还有空位&quot;。
+
+分裂一个满节点（2t-1个key）：
+  - 中间的 key（第 t 个，下标 t-1）被&quot;弹&quot;到父节点里
+  - 剩下的 t-1 个 key 留在左边（原节点），t-1 个 key 分给新建的右边节点
+  - 如果原节点不是叶子，它的 2t 个子节点也对半分给左右两边（各 t 个）</code></pre>
+<h3 id="完整实现">3.2 完整实现</h3>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> BTreeNode:</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, leaf: <span class="bu">bool</span> <span class="op">=</span> <span class="va">True</span>) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.keys: <span class="bu">list</span>[<span class="bu">int</span>] <span class="op">=</span> []</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.children: <span class="bu">list</span>[<span class="st">&quot;BTreeNode&quot;</span>] <span class="op">=</span> []</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.leaf <span class="op">=</span> leaf</span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> BTree:</span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, t: <span class="bu">int</span> <span class="op">=</span> <span class="dv">3</span>) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.t <span class="op">=</span> t  <span class="co"># 最小度数</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.root <span class="op">=</span> BTreeNode(leaf<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> search(<span class="va">self</span>, key: <span class="bu">int</span>, node: <span class="st">&quot;BTreeNode | None&quot;</span> <span class="op">=</span> <span class="va">None</span>):</span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> node <span class="kw">is</span> <span class="va">None</span>:</span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>            node <span class="op">=</span> <span class="va">self</span>.root</span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>        i <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a>        <span class="cf">while</span> i <span class="op">&lt;</span> <span class="bu">len</span>(node.keys) <span class="kw">and</span> key <span class="op">&gt;</span> node.keys[i]:</span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a>            i <span class="op">+=</span> <span class="dv">1</span></span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> i <span class="op">&lt;</span> <span class="bu">len</span>(node.keys) <span class="kw">and</span> key <span class="op">==</span> node.keys[i]:</span>
+<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> (node, i)</span>
+<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> node.leaf:</span>
+<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="va">None</span></span>
+<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="va">self</span>.search(key, node.children[i])</span>
+<span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-25"><a href="#cb4-25" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> insert(<span class="va">self</span>, key: <span class="bu">int</span>) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
+<span id="cb4-26"><a href="#cb4-26" aria-hidden="true" tabindex="-1"></a>        root <span class="op">=</span> <span class="va">self</span>.root</span>
+<span id="cb4-27"><a href="#cb4-27" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="bu">len</span>(root.keys) <span class="op">==</span> <span class="dv">2</span> <span class="op">*</span> <span class="va">self</span>.t <span class="op">-</span> <span class="dv">1</span>:</span>
+<span id="cb4-28"><a href="#cb4-28" aria-hidden="true" tabindex="-1"></a>            <span class="co"># 根节点满了：新建一个根，把旧根作为它唯一的子节点，然后分裂旧根</span></span>
+<span id="cb4-29"><a href="#cb4-29" aria-hidden="true" tabindex="-1"></a>            new_root <span class="op">=</span> BTreeNode(leaf<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb4-30"><a href="#cb4-30" aria-hidden="true" tabindex="-1"></a>            new_root.children.append(root)</span>
+<span id="cb4-31"><a href="#cb4-31" aria-hidden="true" tabindex="-1"></a>            <span class="va">self</span>._split_child(new_root, <span class="dv">0</span>)</span>
+<span id="cb4-32"><a href="#cb4-32" aria-hidden="true" tabindex="-1"></a>            <span class="va">self</span>.root <span class="op">=</span> new_root</span>
+<span id="cb4-33"><a href="#cb4-33" aria-hidden="true" tabindex="-1"></a>            <span class="va">self</span>._insert_nonfull(new_root, key)</span>
+<span id="cb4-34"><a href="#cb4-34" aria-hidden="true" tabindex="-1"></a>        <span class="cf">else</span>:</span>
+<span id="cb4-35"><a href="#cb4-35" aria-hidden="true" tabindex="-1"></a>            <span class="va">self</span>._insert_nonfull(root, key)</span>
+<span id="cb4-36"><a href="#cb4-36" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-37"><a href="#cb4-37" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> _split_child(<span class="va">self</span>, parent: <span class="st">&quot;BTreeNode&quot;</span>, i: <span class="bu">int</span>) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
+<span id="cb4-38"><a href="#cb4-38" aria-hidden="true" tabindex="-1"></a>        <span class="co">&quot;&quot;&quot;把 parent 的第 i 个子节点（已经是满的，2t-1个key）分裂成两个各 t-1 个 key 的节点。&quot;&quot;&quot;</span></span>
+<span id="cb4-39"><a href="#cb4-39" aria-hidden="true" tabindex="-1"></a>        t <span class="op">=</span> <span class="va">self</span>.t</span>
+<span id="cb4-40"><a href="#cb4-40" aria-hidden="true" tabindex="-1"></a>        child <span class="op">=</span> parent.children[i]</span>
+<span id="cb4-41"><a href="#cb4-41" aria-hidden="true" tabindex="-1"></a>        new_node <span class="op">=</span> BTreeNode(leaf<span class="op">=</span>child.leaf)</span>
+<span id="cb4-42"><a href="#cb4-42" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-43"><a href="#cb4-43" aria-hidden="true" tabindex="-1"></a>        mid_key <span class="op">=</span> child.keys[t <span class="op">-</span> <span class="dv">1</span>]           <span class="co"># 中间的 key，弹给父节点</span></span>
+<span id="cb4-44"><a href="#cb4-44" aria-hidden="true" tabindex="-1"></a>        new_node.keys <span class="op">=</span> child.keys[t:]        <span class="co"># 右半部分给新节点</span></span>
+<span id="cb4-45"><a href="#cb4-45" aria-hidden="true" tabindex="-1"></a>        child.keys <span class="op">=</span> child.keys[:t <span class="op">-</span> <span class="dv">1</span>]       <span class="co"># 左半部分留在原节点</span></span>
+<span id="cb4-46"><a href="#cb4-46" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-47"><a href="#cb4-47" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="kw">not</span> child.leaf:</span>
+<span id="cb4-48"><a href="#cb4-48" aria-hidden="true" tabindex="-1"></a>            new_node.children <span class="op">=</span> child.children[t:]</span>
+<span id="cb4-49"><a href="#cb4-49" aria-hidden="true" tabindex="-1"></a>            child.children <span class="op">=</span> child.children[:t]</span>
+<span id="cb4-50"><a href="#cb4-50" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-51"><a href="#cb4-51" aria-hidden="true" tabindex="-1"></a>        parent.children.insert(i <span class="op">+</span> <span class="dv">1</span>, new_node)  <span class="co"># 新节点成为 parent 的第 i+1 个子节点</span></span>
+<span id="cb4-52"><a href="#cb4-52" aria-hidden="true" tabindex="-1"></a>        parent.keys.insert(i, mid_key)            <span class="co"># 中间 key 插入 parent</span></span>
+<span id="cb4-53"><a href="#cb4-53" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-54"><a href="#cb4-54" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> _insert_nonfull(<span class="va">self</span>, node: <span class="st">&quot;BTreeNode&quot;</span>, key: <span class="bu">int</span>) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
+<span id="cb4-55"><a href="#cb4-55" aria-hidden="true" tabindex="-1"></a>        <span class="co">&quot;&quot;&quot;在一个&quot;保证不满&quot;的节点里插入 key（叶子直接插，内部节点递归下降）。&quot;&quot;&quot;</span></span>
+<span id="cb4-56"><a href="#cb4-56" aria-hidden="true" tabindex="-1"></a>        i <span class="op">=</span> <span class="bu">len</span>(node.keys) <span class="op">-</span> <span class="dv">1</span></span>
+<span id="cb4-57"><a href="#cb4-57" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> node.leaf:</span>
+<span id="cb4-58"><a href="#cb4-58" aria-hidden="true" tabindex="-1"></a>            node.keys.append(<span class="va">None</span>)  <span class="co"># 占位，腾出空间</span></span>
+<span id="cb4-59"><a href="#cb4-59" aria-hidden="true" tabindex="-1"></a>            <span class="cf">while</span> i <span class="op">&gt;=</span> <span class="dv">0</span> <span class="kw">and</span> key <span class="op">&lt;</span> node.keys[i]:</span>
+<span id="cb4-60"><a href="#cb4-60" aria-hidden="true" tabindex="-1"></a>                node.keys[i <span class="op">+</span> <span class="dv">1</span>] <span class="op">=</span> node.keys[i]</span>
+<span id="cb4-61"><a href="#cb4-61" aria-hidden="true" tabindex="-1"></a>                i <span class="op">-=</span> <span class="dv">1</span></span>
+<span id="cb4-62"><a href="#cb4-62" aria-hidden="true" tabindex="-1"></a>            node.keys[i <span class="op">+</span> <span class="dv">1</span>] <span class="op">=</span> key</span>
+<span id="cb4-63"><a href="#cb4-63" aria-hidden="true" tabindex="-1"></a>        <span class="cf">else</span>:</span>
+<span id="cb4-64"><a href="#cb4-64" aria-hidden="true" tabindex="-1"></a>            <span class="cf">while</span> i <span class="op">&gt;=</span> <span class="dv">0</span> <span class="kw">and</span> key <span class="op">&lt;</span> node.keys[i]:</span>
+<span id="cb4-65"><a href="#cb4-65" aria-hidden="true" tabindex="-1"></a>                i <span class="op">-=</span> <span class="dv">1</span></span>
+<span id="cb4-66"><a href="#cb4-66" aria-hidden="true" tabindex="-1"></a>            i <span class="op">+=</span> <span class="dv">1</span>  <span class="co"># 要进入的子节点下标</span></span>
+<span id="cb4-67"><a href="#cb4-67" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> <span class="bu">len</span>(node.children[i].keys) <span class="op">==</span> <span class="dv">2</span> <span class="op">*</span> <span class="va">self</span>.t <span class="op">-</span> <span class="dv">1</span>:</span>
+<span id="cb4-68"><a href="#cb4-68" aria-hidden="true" tabindex="-1"></a>                <span class="co"># 下降前先分裂：保证进去的子节点一定不满</span></span>
+<span id="cb4-69"><a href="#cb4-69" aria-hidden="true" tabindex="-1"></a>                <span class="va">self</span>._split_child(node, i)</span>
+<span id="cb4-70"><a href="#cb4-70" aria-hidden="true" tabindex="-1"></a>                <span class="cf">if</span> key <span class="op">&gt;</span> node.keys[i]:</span>
+<span id="cb4-71"><a href="#cb4-71" aria-hidden="true" tabindex="-1"></a>                    i <span class="op">+=</span> <span class="dv">1</span>  <span class="co"># 分裂后中间key上移，可能要调整进入左边还是右边</span></span>
+<span id="cb4-72"><a href="#cb4-72" aria-hidden="true" tabindex="-1"></a>            <span class="va">self</span>._insert_nonfull(node.children[i], key)</span>
+<span id="cb4-73"><a href="#cb4-73" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-74"><a href="#cb4-74" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> inorder(<span class="va">self</span>) <span class="op">-&gt;</span> <span class="bu">list</span>[<span class="bu">int</span>]:</span>
+<span id="cb4-75"><a href="#cb4-75" aria-hidden="true" tabindex="-1"></a>        <span class="co">&quot;&quot;&quot;中序遍历应该是有序的——多路版本：node.keys[i] 前面遍历 children[i]，后面遍历 children[i+1]。&quot;&quot;&quot;</span></span>
+<span id="cb4-76"><a href="#cb4-76" aria-hidden="true" tabindex="-1"></a>        result: <span class="bu">list</span>[<span class="bu">int</span>] <span class="op">=</span> []</span>
+<span id="cb4-77"><a href="#cb4-77" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-78"><a href="#cb4-78" aria-hidden="true" tabindex="-1"></a>        <span class="kw">def</span> dfs(node: <span class="st">&quot;BTreeNode&quot;</span>) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
+<span id="cb4-79"><a href="#cb4-79" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> node.leaf:</span>
+<span id="cb4-80"><a href="#cb4-80" aria-hidden="true" tabindex="-1"></a>                result.extend(node.keys)</span>
+<span id="cb4-81"><a href="#cb4-81" aria-hidden="true" tabindex="-1"></a>            <span class="cf">else</span>:</span>
+<span id="cb4-82"><a href="#cb4-82" aria-hidden="true" tabindex="-1"></a>                <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="bu">len</span>(node.keys)):</span>
+<span id="cb4-83"><a href="#cb4-83" aria-hidden="true" tabindex="-1"></a>                    dfs(node.children[i])</span>
+<span id="cb4-84"><a href="#cb4-84" aria-hidden="true" tabindex="-1"></a>                    result.append(node.keys[i])</span>
+<span id="cb4-85"><a href="#cb4-85" aria-hidden="true" tabindex="-1"></a>                dfs(node.children[<span class="op">-</span><span class="dv">1</span>])</span>
+<span id="cb4-86"><a href="#cb4-86" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-87"><a href="#cb4-87" aria-hidden="true" tabindex="-1"></a>        dfs(<span class="va">self</span>.root)</span>
+<span id="cb4-88"><a href="#cb4-88" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> result</span></code></pre></div>
+<h3 id="正确性验证">3.3 正确性验证</h3>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> random</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> check_btree_properties(tree: <span class="st">&quot;BTree&quot;</span>) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    <span class="co">&quot;&quot;&quot;校验 B 树的结构性质：key数量上下界、节点内有序、子节点数、所有叶子同深度。&quot;&quot;&quot;</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>    t <span class="op">=</span> tree.t</span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>    leaf_depths: <span class="bu">list</span>[<span class="bu">int</span>] <span class="op">=</span> []</span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> check(node: <span class="st">&quot;BTreeNode&quot;</span>, depth: <span class="bu">int</span>, is_root: <span class="bu">bool</span>) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">assert</span> <span class="bu">len</span>(node.keys) <span class="op">&lt;=</span> <span class="dv">2</span> <span class="op">*</span> t <span class="op">-</span> <span class="dv">1</span>, <span class="st">&quot;单节点key数超过上限&quot;</span></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="kw">not</span> is_root:</span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>            <span class="cf">assert</span> <span class="bu">len</span>(node.keys) <span class="op">&gt;=</span> t <span class="op">-</span> <span class="dv">1</span>, <span class="st">&quot;单节点key数低于下限&quot;</span></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>        <span class="cf">assert</span> node.keys <span class="op">==</span> <span class="bu">sorted</span>(node.keys), <span class="st">&quot;节点内key未排序&quot;</span></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> node.leaf:</span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>            leaf_depths.append(depth)</span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>        <span class="cf">else</span>:</span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>            <span class="cf">assert</span> <span class="bu">len</span>(node.children) <span class="op">==</span> <span class="bu">len</span>(node.keys) <span class="op">+</span> <span class="dv">1</span>, <span class="st">&quot;子节点数应该等于key数+1&quot;</span></span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> child <span class="kw">in</span> node.children:</span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>                check(child, depth <span class="op">+</span> <span class="dv">1</span>, <span class="va">False</span>)</span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a>    check(tree.root, <span class="dv">0</span>, <span class="va">True</span>)</span>
+<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a>    <span class="cf">assert</span> <span class="bu">len</span>(<span class="bu">set</span>(leaf_depths)) <span class="op">==</span> <span class="dv">1</span>, <span class="ss">f&quot;叶子深度不一致: </span><span class="sc">{</span><span class="bu">set</span>(leaf_depths)<span class="sc">}</span><span class="ss">&quot;</span></span>
+<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a>random.seed(<span class="dv">0</span>)</span>
+<span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a>fail <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">100</span>):</span>
+<span id="cb5-28"><a href="#cb5-28" aria-hidden="true" tabindex="-1"></a>    t <span class="op">=</span> random.choice([<span class="dv">2</span>, <span class="dv">3</span>, <span class="dv">4</span>])</span>
+<span id="cb5-29"><a href="#cb5-29" aria-hidden="true" tabindex="-1"></a>    n <span class="op">=</span> random.randint(<span class="dv">0</span>, <span class="dv">300</span>)</span>
+<span id="cb5-30"><a href="#cb5-30" aria-hidden="true" tabindex="-1"></a>    vals <span class="op">=</span> random.sample(<span class="bu">range</span>(<span class="op">-</span><span class="dv">2000</span>, <span class="dv">2000</span>), n)</span>
+<span id="cb5-31"><a href="#cb5-31" aria-hidden="true" tabindex="-1"></a>    tree <span class="op">=</span> BTree(t<span class="op">=</span>t)</span>
+<span id="cb5-32"><a href="#cb5-32" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> v <span class="kw">in</span> vals:</span>
+<span id="cb5-33"><a href="#cb5-33" aria-hidden="true" tabindex="-1"></a>        tree.insert(v)</span>
+<span id="cb5-34"><a href="#cb5-34" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-35"><a href="#cb5-35" aria-hidden="true" tabindex="-1"></a>    check_btree_properties(tree)                  <span class="co"># 结构性质全部满足</span></span>
+<span id="cb5-36"><a href="#cb5-36" aria-hidden="true" tabindex="-1"></a>    <span class="cf">assert</span> tree.inorder() <span class="op">==</span> <span class="bu">sorted</span>(vals)          <span class="co"># 中序遍历有序</span></span>
+<span id="cb5-37"><a href="#cb5-37" aria-hidden="true" tabindex="-1"></a>    <span class="cf">assert</span> <span class="bu">all</span>(tree.search(v) <span class="kw">is</span> <span class="kw">not</span> <span class="va">None</span> <span class="cf">for</span> v <span class="kw">in</span> vals)  <span class="co"># 所有插入的key都能查到</span></span>
+<span id="cb5-38"><a href="#cb5-38" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-39"><a href="#cb5-39" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">&quot;100 次随机插入测试全部通过（不同 t、不同规模，结构性质 + 有序性 + 查找全部校验）&quot;</span>)</span></code></pre></div>
+<hr />
+<h2 id="四删除只讲思路不实现">四、删除（只讲思路，不实现）</h2>
+<p>B
+树删除比插入更麻烦——插入只需要”往下走的时候把满节点分裂掉”，删除却要保证
+“往下走的时候经过的每个节点都至少有 t 个 key”（否则删完可能不满足最小
+key 数限制）， 所以要在往下走的路上，遇到”只有 t-1 个 key（already
+最小）的节点”就要先做点什么。</p>
+<pre><code>大致思路（往下走的过程中，维护&quot;当前节点至少有 t 个 key&quot;这个不变量）：
+1. 如果要删除的 key 在当前节点里，且当前节点是叶子——直接删除。
+2. 如果要删除的 key 在当前节点里，且当前节点不是叶子——
+   用前驱或后继 key 替换它（跟普通 BST 删除同样的思路），
+   转化成&quot;在子树里删除前驱/后继&quot;的子问题。
+3. 如果要删除的 key 不在当前节点，需要往下走：
+   如果即将进入的子节点恰好只有 t-1 个 key（最小值，不能再减了），
+   要先&quot;借&quot;一个 key（从兄弟节点借，前提是兄弟节点 key 数 &gt; t-1）
+   或者&quot;合并&quot;（跟兄弟节点及父节点的分隔 key 合并成一个节点），
+   保证进入的子节点至少有 t 个 key，才能安全地继续往下删。
+
+跟红黑树删除一样：情况分支多、边界密集，面试/笔试基本不会要求手写，
+记住&quot;删除要保证经过的节点都够&#39;胖&#39;，不够就先借/合并&quot;这个核心思想即可。</code></pre>
+<hr />
+<h2 id="五b-树与红黑树对比">五、B 树与红黑树对比</h2>
+<table>
+<colgroup>
+<col style="width: 30%" />
+<col style="width: 40%" />
+<col style="width: 30%" />
+</colgroup>
+<thead>
+<tr>
+<th>维度</th>
+<th>红黑树</th>
+<th>B 树</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>每节点 key 数</td>
+<td>1 个</td>
+<td>多个（t-1 到 2t-1 个）</td>
+</tr>
+<tr>
+<td>每节点子节点数</td>
+<td>2 个</td>
+<td>多个（t 到 2t 个）</td>
+</tr>
+<tr>
+<td>树高</td>
+<td>O(log₂ n)</td>
+<td>O(log_t n)，t 越大树越矮</td>
+</tr>
+<tr>
+<td>平衡方式</td>
+<td>旋转 + 染色</td>
+<td>节点分裂/合并</td>
+</tr>
+<tr>
+<td>典型场景</td>
+<td>内存中的有序容器（<code>std::map</code> 等）</td>
+<td>磁盘索引（数据库、文件系统）——降低磁盘 I/O 次数是首要目标</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>内存访问速度和磁盘访问速度差几个数量级，所以内存数据结构（红黑树）优化的是”比较次数”，
+磁盘数据结构（B树）优化的是”访问节点（=磁盘读取）的次数”——这也是为什么
+B树选择”胖节点、矮树”。</p>
+</blockquote>
+<hr />
+<p><a href="index.html">← 返回索引</a></p>
+</div>
+</body>
+</html>

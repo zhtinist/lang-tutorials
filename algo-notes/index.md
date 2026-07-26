@@ -4,17 +4,28 @@
 
 ## 目录
 
+> **按 CLRS 章节分类查找**：[clrs-index.md](clrs-index.md) 把本专题里源自《算法导论》的内容
+> 按算法类型（数据结构/图论/数论/字符串/几何/复杂度理论……）重新整理了一份速查表。
+
 ### 第零章前半 · 数据结构手写实现
 
 | 专题 | 文件 | 核心内容 |
 |------|------|----------|
 | 动态数组 | [dynamic-array.md](dynamic-array.md) | 扩容机制、均摊分析、环形数组 |
 | 单/双链表实现 | [linked-list-implementation.md](linked-list-implementation.md) | 单链表完整CRUD、双链表、复杂度对比 |
-| 栈和队列实现 | [stack-queue-implementation.md](stack-queue-implementation.md) | 链表/数组实现、环形队列、双端队列、互相实现 |
-| 哈希表实现 | [hash-table-implementation.md](hash-table-implementation.md) | 拉链法、线性探查法、布隆过滤器 |
+| 栈和队列实现 | [stack-queue-implementation.md](stack-queue-implementation.md) | 链表/数组实现、环形队列、双端队列、互相实现、经典应用 |
+| 哈希表实现 | [hash-table-implementation.md](hash-table-implementation.md) | 拉链法、线性探查法、布隆过滤器、array/set/dict选择依据 |
 | 二叉堆实现 | [binary-heap-implementation.md](binary-heap-implementation.md) | swim/sink、建堆O(n)证明、最大堆、堆排序 |
+| 斐波那契堆（简化版） | [fibonacci-heap.md](fibonacci-heap.md) | 均摊O(1)的decrease_key、级联剪切 |
+| 红黑树 | [red-black-tree.md](red-black-tree.md) | 5条性质、插入完整实现（三种情况+镜像）、删除思路 |
+| B 树 | [b-tree.md](b-tree.md) | 多路平衡、search/insert（含分裂）、删除思路 |
+| 数据结构的扩张 | [interval-tree.md](interval-tree.md) | 顺序统计树（OS-SELECT/OS-RANK）、区间树 |
+| 顺序统计量的选择算法 | [order-statistics-selection.md](order-statistics-selection.md) | 快速选择回顾、中位数的中位数（worst-case线性） |
 | 十大排序算法 | [sorting-algorithms.md](sorting-algorithms.md) | 冒泡/选择/插入/希尔/快排/归并/堆排/计数/桶/基数 |
-| 图结构基础 | [graph-basics.md](graph-basics.md) | 邻接矩阵/表、DFS/BFS、拓扑排序、Dijkstra、MST |
+| 图结构基础 | [graph-basics.md](graph-basics.md) | 邻接矩阵/表、DFS/BFS、拓扑排序、Dijkstra、Floyd-Warshall、Kruskal |
+| 最小生成树补充 | [minimum-spanning-tree.md](minimum-spanning-tree.md) | Prim 算法（对照 Kruskal） |
+| 最短路径补充 | [shortest-path-advanced.md](shortest-path-advanced.md) | Bellman-Ford、DAG最短路、Johnson算法 |
+| 最大流 | [max-flow.md](max-flow.md) | Edmonds-Karp、二分图最大匹配、推送-重贴标签简介 |
 
 ### 第零章 · 核心刷题框架
 
@@ -28,6 +39,7 @@
 | 回溯框架 | [backtracking.md](backtracking.md) | 排列、组合、子集、N皇后 |
 | 动态规划框架 | [dp-framework.md](dp-framework.md) | DP三要素、自顶向下/自底向上、状态转移 |
 | 复杂度分析实战 | [complexity-analysis.md](complexity-analysis.md) | O(n)会不会超时的实测估算、递归的时间/空间复杂度 |
+| 摊还分析 | [amortized-analysis.md](amortized-analysis.md) | 聚合分析/核算法/势能法三种证明方法、动态数组与二进制计数器实例 |
 
 ### 第一章 · 经典数据结构
 
@@ -71,9 +83,14 @@
 | 贪心算法 | [greedy.md](greedy.md) | 区间调度、跳跃游戏、哈夫曼编码 |
 | 位运算 | [bit-manipulation.md](bit-manipulation.md) | 位运算技巧、状态压缩、Brian Kernighan |
 | 数学算法 | [math-algorithms.md](math-algorithms.md) | 快速幂、筛法、GCD、模运算 |
+| 数论算法 | [number-theory-algorithms.md](number-theory-algorithms.md) | 扩展欧几里得、中国剩余定理、RSA、Miller-Rabin、Pollard's rho |
 | 区间问题 | [intervals.md](intervals.md) | 区间合并、插入、交集、扫描线 |
 | 字符串匹配 | [string-matching.md](string-matching.md) | KMP、Rabin-Karp、Z函数 |
 | 回文串算法 | [manacher-palindrome.md](manacher-palindrome.md) | 中心扩展法、Manacher O(n) |
+| 多项式与快速傅里叶变换 | [fft-polynomial.md](fft-polynomial.md) | 系数/点值表示、FFT分治求值、O(n log n)多项式乘法 |
+| 计算几何学 | [computational-geometry.md](computational-geometry.md) | 叉积、线段相交、凸包、最近点对 |
+| NP完全性 | [np-completeness.md](np-completeness.md) | P/NP、归约、经典NP完全问题、与刷题的关系 |
+| 近似算法 | [approximation-algorithms.md](approximation-algorithms.md) | 顶点覆盖2-近似、TSP近似、集合覆盖贪心 |
 | 杂项技巧 | [miscellaneous.md](miscellaneous.md) | 快速选择、摩尔投票、蓄水池抽样 |
 
 ### 附录
