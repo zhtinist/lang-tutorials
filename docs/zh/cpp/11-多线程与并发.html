@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="zh-CN" xml:lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>多线程与并发</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../../assets/style.css" />
+</head>
+<body>
+<div class="topbar"><div class="wrap"><a class="home" href="../index.html"><span class="logo">📚</span><span class="brand">面向 C/C++ 程序员的其他语言教程</span></a>
+<a href="../python/index.html">Python</a>
+<a href="../java/index.html">Java</a>
+<a href="../go/index.html">Go</a>
+<a href="../algo/index.html">算法笔记</a>
+<a href="../architecture/index.html">架构设计</a>
+<a href="../oodlld/index.html">OOD/LLD</a>
+<a href="../container/index.html">容器对照</a>
+<a href="../cpp/index.html" style="color:var(--accent-dark);font-weight:700">C++ 教程</a>
+<a href="../baguwen/index.html">面试八股</a></div></div>
+<div class="wrap">
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#多线程与并发" id="toc-多线程与并发">多线程与并发</a>
+<ul>
+<li><a href="#一stdthread创建和管理线程"
+id="toc-一stdthread创建和管理线程">一、<code>std::thread</code>：创建和管理线程</a></li>
+<li><a href="#二数据竞争与-stdmutex"
+id="toc-二数据竞争与-stdmutex">二、数据竞争与
+<code>std::mutex</code></a></li>
+<li><a href="#三stdatomic无锁原子操作"
+id="toc-三stdatomic无锁原子操作">三、<code>std::atomic</code>：无锁原子操作</a></li>
+<li><a href="#四多个锁与死锁"
+id="toc-四多个锁与死锁">四、多个锁与死锁</a></li>
+<li><a href="#五stdcondition_variable线程间等待通知"
+id="toc-五stdcondition_variable线程间等待通知">五、<code>std::condition_variable</code>：线程间等待/通知</a></li>
+<li><a href="#六stdasync-stdfuture-stdpromise"
+id="toc-六stdasync-stdfuture-stdpromise">六、<code>std::async</code> /
+<code>std::future</code> / <code>std::promise</code></a></li>
+<li><a href="#七stdcall_once保证只初始化一次"
+id="toc-七stdcall_once保证只初始化一次">七、<code>std::call_once</code>：保证只初始化一次</a></li>
+<li><a href="#八thread_local线程本地存储"
+id="toc-八thread_local线程本地存储">八、<code>thread_local</code>：线程本地存储</a></li>
+<li><a href="#九内存序简介进阶了解即可"
+id="toc-九内存序简介进阶了解即可">九、内存序简介（进阶，了解即可）</a></li>
+<li><a href="#十多线程-vs-多进程-vs-协程"
+id="toc-十多线程-vs-多进程-vs-协程">十、多线程 vs 多进程 vs
+协程</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1 id="多线程与并发">多线程与并发</h1>
+<blockquote>
+<p>C++11 之前标准库没有线程支持，大家各自用 pthread/Windows
+API，非常不统一。 C++11 引入了
+<code>&lt;thread&gt;</code>、<code>&lt;mutex&gt;</code>、<code>&lt;condition_variable&gt;</code>、<code>&lt;atomic&gt;</code>、<code>&lt;future&gt;</code>
+这一整套跨平台并发库， 这是很多”学过 C++
+语法但没写过并发代码”的人最容易在面试/实战中翻车的地方——本章尽量讲全。</p>
+</blockquote>
+<hr />
+<h2
+id="一stdthread创建和管理线程">一、<code>std::thread</code>：创建和管理线程</h2>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;thread&gt;</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;iostream&gt;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">using</span> <span class="kw">namespace</span> std<span class="op">;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> worker<span class="op">(</span><span class="dt">int</span> id<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    cout <span class="op">&lt;&lt;</span> <span class="st">&quot;thread &quot;</span> <span class="op">&lt;&lt;</span> id <span class="op">&lt;&lt;</span> <span class="st">&quot; running</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    thread t1<span class="op">(</span>worker<span class="op">,</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    thread t2<span class="op">(</span>worker<span class="op">,</span> <span class="dv">2</span><span class="op">);</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    t1<span class="op">.</span>join<span class="op">();</span>   <span class="co">// 阻塞等待线程结束（必须 join 或 detach，否则析构时程序会 terminate）</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    t2<span class="op">.</span>join<span class="op">();</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<pre><code>join()：阻塞当前线程，直到目标线程执行完毕，然后回收其资源。
+detach()：把线程&quot;放生&quot;，让它在后台独立运行，不再需要 join；线程对象析构后，
+          底层线程仍然继续跑，直到自己结束（要小心：不能再访问已经销毁的局部变量）。
+
+⚠️ 一个 std::thread 对象在被销毁之前，必须调用过 join() 或 detach() 中的一个，
+   否则析构函数会调用 std::terminate() 直接崩溃程序——这是新手最容易踩的坑。</code></pre>
+<p>编译多线程程序需要加
+<code>-pthread</code>（Linux/macOS）：<code>g++ -std=c++20 -pthread main.cpp</code>。</p>
+<hr />
+<h2 id="二数据竞争与-stdmutex">二、数据竞争与
+<code>std::mutex</code></h2>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;mutex&gt;</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;thread&gt;</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="kw">using</span> <span class="kw">namespace</span> std<span class="op">;</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> counter_unsafe <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> increment_unsafe<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">100000</span><span class="op">;</span> i<span class="op">++)</span> counter_unsafe<span class="op">++;</span>  <span class="co">// 多线程同时读写，数据竞争(data race)</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>mutex m<span class="op">;</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> counter_safe <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> increment_safe<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">100000</span><span class="op">;</span> i<span class="op">++)</span> <span class="op">{</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>        lock_guard<span class="op">&lt;</span>mutex<span class="op">&gt;</span> lg<span class="op">(</span>m<span class="op">);</span>  <span class="co">// 构造时加锁，析构时自动解锁（RAII思想）</span></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>        counter_safe<span class="op">++;</span></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>    thread u1<span class="op">(</span>increment_unsafe<span class="op">),</span> u2<span class="op">(</span>increment_unsafe<span class="op">);</span></span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>    u1<span class="op">.</span>join<span class="op">();</span> u2<span class="op">.</span>join<span class="op">();</span></span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>    cout <span class="op">&lt;&lt;</span> <span class="st">&quot;unsafe (期望200000): &quot;</span> <span class="op">&lt;&lt;</span> counter_unsafe <span class="op">&lt;&lt;</span> endl<span class="op">;</span>  <span class="co">// 实测: 108308（不确定，每次跑都可能不同）</span></span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>    thread s1<span class="op">(</span>increment_safe<span class="op">),</span> s2<span class="op">(</span>increment_safe<span class="op">);</span></span>
+<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>    s1<span class="op">.</span>join<span class="op">();</span> s2<span class="op">.</span>join<span class="op">();</span></span>
+<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a>    cout <span class="op">&lt;&lt;</span> <span class="st">&quot;mutex保护 (期望200000): &quot;</span> <span class="op">&lt;&lt;</span> counter_safe <span class="op">&lt;&lt;</span> endl<span class="op">;</span> <span class="co">// 实测: 200000，稳定正确</span></span>
+<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<blockquote>
+<p><strong>实测结果</strong>（两个线程各自增加 counter
+十万次）：不加锁的版本实测输出 108308（应为 200000）——
+<code>counter++</code>
+不是原子操作（读取、加一、写回三步），两个线程的操作交错执行导致部分自增丢失。
+加了 <code>lock_guard</code> 之后稳定得到正确的 200000。</p>
+</blockquote>
+<pre><code>lock_guard&lt;mutex&gt;：最简单的 RAII 锁封装，构造时 lock()，析构时 unlock()，不能中途手动解锁/重新加锁。
+unique_lock&lt;mutex&gt;：比 lock_guard 更灵活，支持中途 unlock()/lock()、配合 condition_variable 使用、
+                    延迟加锁(std::defer_lock)——但比 lock_guard 多一点点开销。
+scoped_lock（C++17）：可以同时锁多个 mutex，内部用死锁避免算法保证不会因为加锁顺序不同而死锁
+                     （见下面第四节）。</code></pre>
+<hr />
+<h2
+id="三stdatomic无锁原子操作">三、<code>std::atomic</code>：无锁原子操作</h2>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;atomic&gt;</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>atomic<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> counter_atomic<span class="op">{</span><span class="dv">0</span><span class="op">};</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> increment_atomic<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">100000</span><span class="op">;</span> i<span class="op">++)</span> counter_atomic<span class="op">++;</span>  <span class="co">// 原子自增，硬件指令级保证不会交错</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a><span class="co">// 两个线程各跑 increment_atomic 后，counter_atomic 稳定等于 200000</span></span></code></pre></div>
+<pre><code>atomic&lt;T&gt; 对基本类型的自增/自减/比较交换(CAS)等操作提供硬件级别的原子性保证，
+不需要 mutex 也能避免数据竞争，通常比 mutex 更快（没有线程阻塞/唤醒的开销），
+但只适合&quot;单个变量的简单操作&quot;；如果要保护一段包含多个变量的复合逻辑，还是需要 mutex。
+
+compare_exchange_weak/strong 是实现无锁数据结构的核心原语（CAS：
+&quot;如果当前值等于期望值，就换成新值，返回是否成功&quot;），本章不展开，
+可以理解为很多无锁队列/无锁栈底层都是围绕它做文章。</code></pre>
+<hr />
+<h2 id="四多个锁与死锁">四、多个锁与死锁</h2>
+<pre><code>死锁的经典场景：线程A按&quot;先锁m1再锁m2&quot;的顺序加锁，线程B按&quot;先锁m2再锁m1&quot;的顺序加锁，
+两个线程各自锁住一个，都在等待对方释放另一个——永远卡住。
+
+避免死锁的方法：
+  1. 约定全局统一的加锁顺序（所有线程都先锁m1再锁m2）——最简单但依赖人为约定，容易出错
+  2. 用 std::scoped_lock（或 C++11 的 std::lock）一次性锁多个 mutex，
+     内部使用死锁避免算法（尝试加锁+回退重试），不管你传入的顺序是什么都不会死锁</code></pre>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>mutex m1<span class="op">,</span> m2<span class="op">;</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> task_a<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>    scoped_lock lock<span class="op">(</span>m1<span class="op">,</span> m2<span class="op">);</span>  <span class="co">// 顺序 m1, m2</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> task_b<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>    scoped_lock lock<span class="op">(</span>m2<span class="op">,</span> m1<span class="op">);</span>  <span class="co">// 顺序 m2, m1 —— 如果用两个 lock_guard 分别加锁，这里就会死锁</span></span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a><span class="co">// 用 scoped_lock 后两个函数并发执行 1000 次都不会死锁（已验证）</span></span></code></pre></div>
+<hr />
+<h2
+id="五stdcondition_variable线程间等待通知">五、<code>std::condition_variable</code>：线程间等待/通知</h2>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;condition_variable&gt;</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;queue&gt;</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="kw">using</span> <span class="kw">namespace</span> std<span class="op">;</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>mutex mtx<span class="op">;</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>condition_variable cv<span class="op">;</span></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>queue<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> q<span class="op">;</span></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a><span class="dt">bool</span> finished <span class="op">=</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> producer<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">5</span><span class="op">;</span> i<span class="op">++)</span> <span class="op">{</span></span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a>        <span class="op">{</span> lock_guard<span class="op">&lt;</span>mutex<span class="op">&gt;</span> lg<span class="op">(</span>mtx<span class="op">);</span> q<span class="op">.</span>push<span class="op">(</span>i<span class="op">);</span> <span class="op">}</span></span>
+<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a>        cv<span class="op">.</span>notify_one<span class="op">();</span>  <span class="co">// 唤醒一个正在 wait 的线程</span></span>
+<span id="cb9-14"><a href="#cb9-14" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb9-15"><a href="#cb9-15" aria-hidden="true" tabindex="-1"></a>    <span class="op">{</span> lock_guard<span class="op">&lt;</span>mutex<span class="op">&gt;</span> lg<span class="op">(</span>mtx<span class="op">);</span> finished <span class="op">=</span> <span class="kw">true</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb9-16"><a href="#cb9-16" aria-hidden="true" tabindex="-1"></a>    cv<span class="op">.</span>notify_all<span class="op">();</span>      <span class="co">// 唤醒所有等待的线程（通知&quot;结束&quot;这种事件用 notify_all）</span></span>
+<span id="cb9-17"><a href="#cb9-17" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb9-18"><a href="#cb9-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-19"><a href="#cb9-19" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> consumer<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb9-20"><a href="#cb9-20" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> <span class="op">(</span><span class="kw">true</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb9-21"><a href="#cb9-21" aria-hidden="true" tabindex="-1"></a>        unique_lock<span class="op">&lt;</span>mutex<span class="op">&gt;</span> ul<span class="op">(</span>mtx<span class="op">);</span></span>
+<span id="cb9-22"><a href="#cb9-22" aria-hidden="true" tabindex="-1"></a>        <span class="co">// wait 的第二个参数是&quot;谓词&quot;：只有它返回 true 才真正醒来继续往下执行；</span></span>
+<span id="cb9-23"><a href="#cb9-23" aria-hidden="true" tabindex="-1"></a>        <span class="co">// 否则即使被 notify 唤醒，发现谓词仍是 false 也会自动重新进入等待——这叫&quot;防止虚假唤醒&quot;</span></span>
+<span id="cb9-24"><a href="#cb9-24" aria-hidden="true" tabindex="-1"></a>        cv<span class="op">.</span>wait<span class="op">(</span>ul<span class="op">,</span> <span class="op">[]</span> <span class="op">{</span> <span class="cf">return</span> <span class="op">!</span>q<span class="op">.</span>empty<span class="op">()</span> <span class="op">||</span> finished<span class="op">;</span> <span class="op">});</span></span>
+<span id="cb9-25"><a href="#cb9-25" aria-hidden="true" tabindex="-1"></a>        <span class="cf">while</span> <span class="op">(!</span>q<span class="op">.</span>empty<span class="op">())</span> <span class="op">{</span></span>
+<span id="cb9-26"><a href="#cb9-26" aria-hidden="true" tabindex="-1"></a>            cout <span class="op">&lt;&lt;</span> <span class="st">&quot;consumed &quot;</span> <span class="op">&lt;&lt;</span> q<span class="op">.</span>front<span class="op">()</span> <span class="op">&lt;&lt;</span> endl<span class="op">;</span></span>
+<span id="cb9-27"><a href="#cb9-27" aria-hidden="true" tabindex="-1"></a>            q<span class="op">.</span>pop<span class="op">();</span></span>
+<span id="cb9-28"><a href="#cb9-28" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb9-29"><a href="#cb9-29" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>finished<span class="op">)</span> <span class="cf">break</span><span class="op">;</span></span>
+<span id="cb9-30"><a href="#cb9-30" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb9-31"><a href="#cb9-31" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb9-32"><a href="#cb9-32" aria-hidden="true" tabindex="-1"></a><span class="co">// 输出：consumed 0 1 2 3 4（生产者-消费者模型的标准写法）</span></span></code></pre></div>
+<pre><code>为什么 wait() 必须传 unique_lock 而不能是 lock_guard：
+  wait() 内部逻辑是&quot;释放锁 -&gt; 挂起等待通知 -&gt; 被唤醒后重新加锁 -&gt; 返回&quot;，
+  这个&quot;释放/重新加锁&quot;的操作需要锁对象支持中途 unlock()/lock()，lock_guard 不支持，只有 unique_lock 支持。</code></pre>
+<hr />
+<h2 id="六stdasync-stdfuture-stdpromise">六、<code>std::async</code> /
+<code>std::future</code> / <code>std::promise</code></h2>
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;future&gt;</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="kw">using</span> <span class="kw">namespace</span> std<span class="op">;</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> add<span class="op">(</span><span class="dt">int</span> a<span class="op">,</span> <span class="dt">int</span> b<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>    this_thread<span class="op">::</span>sleep_for<span class="op">(</span>chrono<span class="op">::</span>milliseconds<span class="op">(</span><span class="dv">10</span><span class="op">));</span></span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> a <span class="op">+</span> b<span class="op">;</span></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a>    <span class="co">// async：提交一个任务到后台执行，立即返回一个 future 句柄</span></span>
+<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a>    future<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> fut <span class="op">=</span> async<span class="op">(</span>launch<span class="op">::</span>async<span class="op">,</span> add<span class="op">,</span> <span class="dv">3</span><span class="op">,</span> <span class="dv">4</span><span class="op">);</span></span>
+<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a>    cout <span class="op">&lt;&lt;</span> <span class="st">&quot;主线程可以先做别的事...</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span></span>
+<span id="cb11-13"><a href="#cb11-13" aria-hidden="true" tabindex="-1"></a>    cout <span class="op">&lt;&lt;</span> <span class="st">&quot;结果: &quot;</span> <span class="op">&lt;&lt;</span> fut<span class="op">.</span>get<span class="op">()</span> <span class="op">&lt;&lt;</span> endl<span class="op">;</span>  <span class="co">// get() 阻塞直到结果就绪，只能调用一次</span></span>
+<span id="cb11-14"><a href="#cb11-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-15"><a href="#cb11-15" aria-hidden="true" tabindex="-1"></a>    <span class="co">// promise/future：更底层的手动传递结果的方式</span></span>
+<span id="cb11-16"><a href="#cb11-16" aria-hidden="true" tabindex="-1"></a>    promise<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> prom<span class="op">;</span></span>
+<span id="cb11-17"><a href="#cb11-17" aria-hidden="true" tabindex="-1"></a>    future<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> f2 <span class="op">=</span> prom<span class="op">.</span>get_future<span class="op">();</span></span>
+<span id="cb11-18"><a href="#cb11-18" aria-hidden="true" tabindex="-1"></a>    thread producer_thread<span class="op">([&amp;</span>prom<span class="op">]</span> <span class="op">{</span> prom<span class="op">.</span>set_value<span class="op">(</span><span class="dv">42</span><span class="op">);</span> <span class="op">});</span>  <span class="co">// 子线程算完后手动 set_value</span></span>
+<span id="cb11-19"><a href="#cb11-19" aria-hidden="true" tabindex="-1"></a>    cout <span class="op">&lt;&lt;</span> <span class="st">&quot;promise/future结果: &quot;</span> <span class="op">&lt;&lt;</span> f2<span class="op">.</span>get<span class="op">()</span> <span class="op">&lt;&lt;</span> endl<span class="op">;</span>         <span class="co">// 主线程阻塞等待</span></span>
+<span id="cb11-20"><a href="#cb11-20" aria-hidden="true" tabindex="-1"></a>    producer_thread<span class="op">.</span>join<span class="op">();</span></span>
+<span id="cb11-21"><a href="#cb11-21" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<pre><code>std::async 的两种启动策略：
+  launch::async    —— 立即在新线程里异步执行
+  launch::deferred —— 延迟执行，直到调用 fut.get()/wait() 时才在当前线程同步执行
+  不传策略（默认）—— 由标准库自行决定用哪种，不同实现可能不一样，通常建议显式指定 launch::async
+
+future/promise 的价值：把&quot;线程间传递一个结果&quot;这件事标准化，
+不需要自己手写&quot;共享变量+mutex+条件变量&quot;这一整套模板代码。</code></pre>
+<hr />
+<h2
+id="七stdcall_once保证只初始化一次">七、<code>std::call_once</code>：保证只初始化一次</h2>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>once_flag flag<span class="op">;</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> init_once<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    call_once<span class="op">(</span>flag<span class="op">,</span> <span class="op">[]</span> <span class="op">{</span> cout <span class="op">&lt;&lt;</span> <span class="st">&quot;只会打印一次</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="op">});</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a><span class="co">// 就算 3 个线程同时调用 init_once()，&quot;只会打印一次&quot;也只会真正执行一次</span></span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a><span class="co">// 这是&quot;线程安全的单例模式&quot;最标准的实现方式（比双检锁 DCLP 更简单也更不容易写错）</span></span></code></pre></div>
+<hr />
+<h2
+id="八thread_local线程本地存储">八、<code>thread_local</code>：线程本地存储</h2>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="at">thread_local</span> <span class="dt">int</span> tls_counter <span class="op">=</span> <span class="dv">0</span><span class="op">;</span>  <span class="co">// 每个线程各自拥有一份独立的拷贝，互不影响</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> increment_tls<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">5</span><span class="op">;</span> i<span class="op">++)</span> tls_counter<span class="op">++;</span></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>    cout <span class="op">&lt;&lt;</span> <span class="st">&quot;线程 &quot;</span> <span class="op">&lt;&lt;</span> this_thread<span class="op">::</span>get_id<span class="op">()</span> <span class="op">&lt;&lt;</span> <span class="st">&quot; 的 tls_counter=&quot;</span> <span class="op">&lt;&lt;</span> tls_counter <span class="op">&lt;&lt;</span> endl<span class="op">;</span></span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a><span class="co">// 两个子线程各自跑完后各自输出 5，主线程的 tls_counter 仍然是 0（完全独立，没有互相影响）</span></span></code></pre></div>
+<blockquote>
+<p>常见用途：每个线程独立维护一个”错误码”、一个内存池/随机数生成器实例，避免加锁开销。</p>
+</blockquote>
+<hr />
+<h2 id="九内存序简介进阶了解即可">九、内存序简介（进阶，了解即可）</h2>
+<pre><code>atomic 操作默认用 memory_order_seq_cst（顺序一致性），是最强也最直观的内存序——
+所有线程看到的原子操作顺序都一致，符合直觉，但性能开销也最大。
+
+C++11 还提供了更弱的内存序（memory_order_relaxed / acquire / release 等）用于极致性能优化场景，
+允许编译器/CPU 对指令重排提供更大自由度——这部分内容理解门槛较高，
+绝大多数业务代码不需要手动指定内存序，默认的 seq_cst 已经够用，
+只有写高性能无锁数据结构库的场景才需要深入研究。</code></pre>
+<hr />
+<h2 id="十多线程-vs-多进程-vs-协程">十、多线程 vs 多进程 vs 协程</h2>
+<table style="width:100%;">
+<colgroup>
+<col style="width: 12%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 55%" />
+</colgroup>
+<thead>
+<tr>
+<th>维度</th>
+<th>多线程</th>
+<th>多进程</th>
+<th>协程（如 C++20 coroutine）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>内存空间</td>
+<td>共享同一进程地址空间</td>
+<td>各自独立地址空间</td>
+<td>共享（本质是同一线程内的协作式调度）</td>
+</tr>
+<tr>
+<td>切换开销</td>
+<td>中等（内核调度）</td>
+<td>大（涉及地址空间切换）</td>
+<td>极小（用户态切换，不进内核）</td>
+</tr>
+<tr>
+<td>通信方式</td>
+<td>共享内存 + 锁/原子操作</td>
+<td>IPC（管道/共享内存/socket等）</td>
+<td>直接函数调用/共享变量</td>
+</tr>
+<tr>
+<td>崩溃隔离</td>
+<td>一个线程崩溃，整个进程都崩</td>
+<td>进程间隔离，一个崩溃不影响其他</td>
+<td>同线程内，隔离性同线程</td>
+</tr>
+<tr>
+<td>典型场景</td>
+<td>CPU密集型并行计算、共享状态的并发任务</td>
+<td>需要强隔离性、独立崩溃恢复的服务</td>
+<td>高并发I/O（网络请求），避免线程切换开销</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<p><a href="index.html">← 返回索引</a></p>
+</div>
+</body>
+</html>

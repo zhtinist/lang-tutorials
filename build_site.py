@@ -20,7 +20,9 @@ TUTS = [("python-tutorial", "python", "Python"),
 ZH_ONLY = [("algo-notes", "algo", "算法笔记"),
            ("architecture-notes", "architecture", "架构设计"),
            ("ood-lld-notes", "oodlld", "OOD/LLD"),
-           ("container-notes", "container", "容器对照")]
+           ("container-notes", "container", "容器对照"),
+           ("cpp-tutorial", "cpp", "C++ 教程"),
+           ("interview-baguwen", "baguwen", "面试八股")]
 LANGS = ["zh"]  # 英文版暂停维护,先隐藏入口(源文件保留在 *-tutorial-en/,以后需要时改回 ["zh", "en"] 即可)
 
 TOGGLE_JS = ("function switchLang(){var p=location.pathname,en=p.indexOf('/en/')>-1,"
@@ -101,6 +103,8 @@ def home_html(lang):
         "architecture-notes": "五种经典架构模式、RESTful、整洁架构、DDD,学会选型而非背名词。",
         "ood-lld-notes": "OOP 基础、SOLID 原则、UML 类图、三大类设计模式、LLD 面试框架与经典案例。",
         "container-notes": "C++/Python/Go/Java 容器操作横向对照:长度、判存在、拷贝语义、常见坑速查。",
+        "cpp-tutorial": "全面覆盖 C++ 知识点的速查手册:基础语法、STL 容器与算法、智能指针、多线程,不求最深但求不漏。",
+        "interview-baguwen": "综合多个 1000+ star 仓库整理的面试高频考点,Python 和 C++ 各一套密集问答。",
     }
     if lang == "zh":
         cards += "\n".join(
