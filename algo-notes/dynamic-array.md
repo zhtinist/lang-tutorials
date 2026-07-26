@@ -216,7 +216,29 @@ class CircularArray(Generic[T]):
 
 ---
 
-## 六、关键概念
+## 六、二维数组的内存布局（Python 的一个坑）
+
+```python
+# Python 的 list-of-lists：每一行是独立的对象，内存不连续
+grid = [[0] * 3 for _ in range(3)]
+print([id(row) for row in grid])
+# 例如 [4344946624, 4344946560, 4344946432]  —— 三个地址之间没有固定间隔，不连续
+
+# numpy 的二维数组：真正连续内存（C 语言 int arr[3][3] 也是这样）
+import numpy as np
+arr = np.zeros((3, 3))
+print(arr.strides)             # (24, 8) —— 移动一行=24字节(3个float64)，移动一列=8字节
+print(arr.flags["C_CONTIGUOUS"])  # True
+```
+
+> `grid[i][j]` 对 Python `list` 来说其实是两次指针跳转（先取第 i 个 list 对象，再取它的第 j 个元素），
+> 不是"一次地址计算"；只有 numpy 数组或者其他语言里真正的二维数组（如 C 的 `int arr[n][m]`）才是
+> 完全连续内存、`arr[i][j] = base + (i*m+j)*sizeof(T)` 一次算出地址。写算法时这通常不影响正确性，
+> 但解释了为什么 numpy 处理大矩阵通常比嵌套 list 快很多——缓存局部性完全不同。
+
+---
+
+## 七、关键概念
 
 | 概念 | 说明 |
 |------|------|

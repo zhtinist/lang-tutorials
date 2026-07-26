@@ -237,6 +237,89 @@ def combination_sum2(candidates: list[int], target: int) -> list[list[int]]:
     return ans
 ```
 
+### 去重的另一种写法：同层用局部 set
+
+> 上面 `subsets_with_dup`/`combination_sum2` 的去重都是 `i > start and nums[i] == nums[i-1]`（排序 + 跳相邻重复）。
+> 还有一种等价写法：在**每次进入 backtrack 时新建一个局部 `set`**，记录"这一层已经试过的值"，命中就跳过。
+
+```python
+def subsets_with_dup_v2(nums: list[int]) -> list[list[int]]:
+    """
+    用局部 set 去重，效果等价于 i > start and nums[i] == nums[i-1]。
+    ⚠️ 仍然需要先排序——sort 保证相同的值在数组里是连续一段，
+    这样"同一层"扫过去才能把它们当成互斥的兄弟分支来去重；
+    不排序的话，两个相隔很远的相同值会被误判成"不同层"，照样产生重复子集。
+    """
+    nums.sort()
+    ans: list[list[int]] = []
+
+    def backtrack(start: int, path: list[int]) -> None:
+        ans.append(path.copy())
+        used_at_this_level: set[int] = set()  # 关键：每次调用都是全新的局部变量
+        for i in range(start, len(nums)):
+            if nums[i] in used_at_this_level:
+                continue
+            used_at_this_level.add(nums[i])
+            path.append(nums[i])
+            backtrack(i + 1, path)
+            path.pop()
+
+    backtrack(0, [])
+    return ans
+```
+
+**两个常见的错误写法**（都是把 `set` 的生命周期搞错了）：
+
+```python
+# 错误 1：set 声明在外层（函数级/类成员），所有递归调用共享同一个 set，从不重置。
+# 一旦某个值在任意分支被用过，就在整个搜索过程中被永久拉黑，导致漏解。
+def buggy_shared_set(nums: list[int]) -> list[list[int]]:
+    nums.sort()
+    ans: list[list[int]] = []
+    used = set()  # bug: 应该是每层局部变量，不是整个搜索共享一个
+
+    def backtrack(start: int, path: list[int]) -> None:
+        ans.append(path.copy())
+        for i in range(start, len(nums)):
+            if nums[i] in used:
+                continue
+            used.add(nums[i])
+            path.append(nums[i])
+            backtrack(i + 1, path)
+            path.pop()
+
+    backtrack(0, [])
+    return ans  # 例如 nums=[1,2,2,2] 只会得到 3 个子集而不是正确的 8 个
+
+
+# 错误 2：想到"错误1"的问题后，改成共享一个 set 但在进入 backtrack 时 clear()。
+# 看起来"清空过了"，但子递归调用也会 clear 同一个对象——
+# 子调用返回后，父层循环剩下的迭代已经被清空，去重状态全丢了，结果里出现重复子集。
+def buggy_shared_clear(nums: list[int]) -> list[list[int]]:
+    nums.sort()
+    ans: list[list[int]] = []
+    shared = set()
+
+    def backtrack(start: int, path: list[int]) -> None:
+        ans.append(path.copy())
+        shared.clear()  # bug: 清空的是共享对象，子调用会再清一次，污染父层
+        for i in range(start, len(nums)):
+            if nums[i] in shared:
+                continue
+            shared.add(nums[i])
+            path.append(nums[i])
+            backtrack(i + 1, path)
+            path.pop()
+
+    backtrack(0, [])
+    return ans  # nums=[1,2,2,2] 会得到重复的 [1,2] [1,2,2] 等，多出一堆重复项
+```
+
+**两种正确写法怎么选**：`i > start and nums[i] == nums[i-1]` 不需要额外空间，是首选；
+局部 `set` 版本更直观但每层都要新建一个 set 对象（哈希开销 + 额外空间），
+在数据量大、递归层数深的时候会比数组版本慢一些——两者结果等价，前者是工程上更优的写法，
+后者更适合刚学这个套路、想先写出"看得懂"的版本时使用。
+
 ---
 
 ## 四、N 皇后 · [LC 51](https://leetcode.com/problems/n-queens/)

@@ -145,6 +145,78 @@ def level_order(root: TreeNode | None) -> list[list[int]]:
     return ans
 ```
 
+### 2.3 统一迭代法
+
+> 2.2 里的前/中/后序迭代写法互相长得不一样（前序和后序是"根右左"反转的技巧，中序是另一套游标逻辑），
+> 不好记。下面这个技巧用一个 `None` 哨兵标记"这个节点已经展开过、下次遇到它就可以直接记录"，
+> 三种遍历顺序几乎是同一份代码，只是**入栈顺序不同**——只需要记一种写法，用入栈顺序推另外两种。
+
+```python
+# 前序：根 → 左 → 右。入栈顺序（倒序压栈）：right, left, node, None
+def preorder_unified(root: TreeNode | None) -> list[int]:
+    if not root:
+        return []
+    ans: list[int] = []
+    stack: list[TreeNode | None] = [root]
+    while stack:
+        node = stack.pop()
+        if node is not None:
+            if node.right:
+                stack.append(node.right)
+            if node.left:
+                stack.append(node.left)
+            stack.append(node)
+            stack.append(None)  # 标记：下次弹出 None 时，下面压的 node 就该被记录了
+        else:
+            node = stack.pop()  # 弹出真正的节点
+            ans.append(node.val)  # type: ignore
+    return ans
+
+
+# 中序：左 → 根 → 右。入栈顺序：right, node, None, left
+def inorder_unified(root: TreeNode | None) -> list[int]:
+    if not root:
+        return []
+    ans: list[int] = []
+    stack: list[TreeNode | None] = [root]
+    while stack:
+        node = stack.pop()
+        if node is not None:
+            if node.right:
+                stack.append(node.right)
+            stack.append(node)
+            stack.append(None)
+            if node.left:
+                stack.append(node.left)
+        else:
+            node = stack.pop()
+            ans.append(node.val)  # type: ignore
+    return ans
+
+
+# 后序：左 → 右 → 根。入栈顺序：node, None, right, left
+def postorder_unified(root: TreeNode | None) -> list[int]:
+    if not root:
+        return []
+    ans: list[int] = []
+    stack: list[TreeNode | None] = [root]
+    while stack:
+        node = stack.pop()
+        if node is not None:
+            stack.append(node)
+            stack.append(None)
+            if node.right:
+                stack.append(node.right)
+            if node.left:
+                stack.append(node.left)
+        else:
+            node = stack.pop()
+            ans.append(node.val)  # type: ignore
+    return ans
+```
+
+**记忆方法**：先写"正常顺序"（比如中序是 左-根-右），把其中该被"延后记录"的那个节点（根）后面紧跟一个 `None`，其余节点照常入栈——但入栈是倒序（栈顶应该是第一个要处理的），所以实际压栈顺序要反过来写。三份代码的差异只在 `if node.right / stack.append(node) / stack.append(None) / if node.left` 这四步的排列顺序上。
+
 ---
 
 ## 三、前/中/后序位置的区别
@@ -255,6 +327,60 @@ def is_symmetric(root: TreeNode | None) -> bool:
 
     return check(root.left, root.right) if root else True
 ```
+
+### 4.5 路径问题里的"隐式回溯" · [LC 257](https://leetcode.com/problems/binary-tree-paths/)
+
+```python
+def binary_tree_paths(root: TreeNode | None) -> list[str]:
+    """
+    显式回溯：用一个共享的 list 记录路径，每层结束手动 pop() 撤销。
+    这是 backtracking.md 里"做选择 → 递归 → 撤销选择"的标准写法。
+    """
+    ans: list[str] = []
+    path: list[str] = []
+
+    def dfs(node: TreeNode | None) -> None:
+        if not node:
+            return
+        path.append(str(node.val))          # 做选择
+        if not node.left and not node.right:
+            ans.append("->".join(path))
+        else:
+            dfs(node.left)
+            dfs(node.right)
+        path.pop()                           # 撤销选择（看得见的回溯）
+
+    dfs(root)
+    return ans
+
+
+def binary_tree_paths_implicit(root: TreeNode | None) -> list[str]:
+    """
+    隐式回溯：直接把 path 拼成新字符串传给下一层，不 mutate 共享状态。
+    因为 Python 字符串不可变，`path + "->"` 每次都产生一个新对象，
+    当前调用栈帧里的 path 变量永远指向"进入这一层时"的那个值——
+    函数返回后父层的 path 自然"回到了原样"，等价于自动完成了撤销这一步，
+    只是没有显式的 pop()。
+    """
+    ans: list[str] = []
+
+    def dfs(node: TreeNode | None, path: str) -> None:
+        if not node:
+            return
+        path += str(node.val)
+        if not node.left and not node.right:
+            ans.append(path)
+            return
+        dfs(node.left, path + "->")
+        dfs(node.right, path + "->")
+
+    dfs(root, "")
+    return ans
+```
+
+> 两种写法结果完全一样。**看到递归函数把"路径"作为参数按值传递（而不是操作一个共享的可变对象），
+> 就是隐式回溯**——常见于字符串拼接、`path + [x]` 生成新列表（注意不是 `path.append(x)`）等场景。
+> 反过来，只要传的是同一个可变对象（list/dict），就必须显式 `pop()`/撤销，否则各分支会互相污染。
 
 ---
 
@@ -413,6 +539,7 @@ class Codec:
 | [LC 543](https://leetcode.com/problems/diameter-of-binary-tree/) | Diameter | Easy | 后序+直径 |
 | [LC 226](https://leetcode.com/problems/invert-binary-tree/) | Invert Binary Tree | Easy | 前序交换 |
 | [LC 101](https://leetcode.com/problems/symmetric-tree/) | Symmetric Tree | Easy | 双指针检查 |
+| [LC 257](https://leetcode.com/problems/binary-tree-paths/) | Binary Tree Paths | Easy | 隐式/显式回溯 |
 | [LC 105](https://leetcode.com/problems/construct-binary-tree-from-preorder-and-inorder-traversal/) | Construct from Pre+In | Medium | 构造模板 |
 | [LC 106](https://leetcode.com/problems/construct-binary-tree-from-inorder-and-postorder-traversal/) | Construct from In+Post | Medium | 构造模板 |
 | [LC 236](https://leetcode.com/problems/lowest-common-ancestor-of-a-binary-tree/) | Lowest Common Ancestor | Medium | 后序遍历 |

@@ -176,7 +176,77 @@ def find_length(nums1: list[int], nums2: list[int]) -> int:
 
 ---
 
-## 三、编辑距离 · [LC 72](https://leetcode.com/problems/edit-distance/)
+## 三、编辑距离的三步铺垫
+
+> 编辑距离（插入/删除/替换取 min）的转移方程第一次见容易觉得"背下来就行"，但不知道它从哪来。
+> 下面三道题由简到难，每一道都是前一道去掉一个操作/加一个操作，最后自然推出编辑距离的完整方程。
+
+### 3.1 第一步：只判断"是不是子序列" · [LC 392](https://leetcode.com/problems/is-subsequence/)
+
+```python
+def is_subsequence(s: str, t: str) -> bool:
+    """
+    判断 s 是否是 t 的子序列（只能删除 t 中的字符，不能增/改）。
+    dp[i][j] = s[0:i] 能在 t[0:j] 里匹配到的最长前缀长度。
+    - 字符相等：dp[i][j] = dp[i-1][j-1] + 1（都往前推一格）
+    - 不相等：dp[i][j] = dp[i][j-1]（t 跳过这个字符，s 不动，只能从 t 少一个字符的情况延续）
+    最后看 dp[m][n] 是否等于 len(s)：s 是否整个被匹配完。
+    """
+    m, n = len(s), len(t)
+    dp = [[0] * (n + 1) for _ in range(m + 1)]
+
+    for i in range(1, m + 1):
+        for j in range(1, n + 1):
+            if s[i - 1] == t[j - 1]:
+                dp[i][j] = dp[i - 1][j - 1] + 1
+            else:
+                dp[i][j] = dp[i][j - 1]  # 只有"t 删除一个字符"这一种操作
+
+    return dp[m][n] == m
+```
+
+### 3.2 第二步：子序列计数 · [LC 115](https://leetcode.com/problems/distinct-subsequences/)
+
+```python
+def num_distinct(s: str, t: str) -> int:
+    """
+    s 的子序列中，有多少种不同的删除方式能得到 t。
+    比 LC 392 进一步：不再是"能不能匹配"，而是"有多少种匹配方式"，
+    所以 dp[i][j] 从布尔值变成计数，转移从"取更优的一支"变成"把两支加起来"。
+
+    dp[i][j] = s[0:i] 中有多少种子序列等于 t[0:j]
+    - s[i-1] == t[j-1]：s 的这个字符「可以选，也可以不选」
+        选它匹配 t[j-1]  -> dp[i-1][j-1] 种方式
+        不选它（留着它不用，指望 s 前面的字符凑出 t[0:j]）-> dp[i-1][j] 种方式
+        两者相加
+    - 不相等：s 的这个字符只能不用 -> dp[i-1][j]
+
+    base case：dp[i][0] = 1（把 s 前 i 个字符全部删掉，唯一一种方式凑出空串 t=""）
+    """
+    m, n = len(s), len(t)
+    dp = [[0] * (n + 1) for _ in range(m + 1)]
+    for i in range(m + 1):
+        dp[i][0] = 1
+
+    for i in range(1, m + 1):
+        for j in range(1, n + 1):
+            if s[i - 1] == t[j - 1]:
+                dp[i][j] = dp[i - 1][j - 1] + dp[i - 1][j]
+            else:
+                dp[i][j] = dp[i - 1][j]
+
+    return dp[m][n]
+```
+
+> **从 LC 392 到 LC 115 到编辑距离的演化逻辑**：
+> LC 392 只有"删除"一种操作，状态是布尔值（能不能匹配完）；
+> LC 115 还是只有"删除"，但状态从布尔值变成计数（有几种删除方式能匹配完）；
+> 编辑距离（下面）在"删除"基础上加上"插入"和"替换"两种操作，状态又从计数变回"最少操作次数"，
+> 三种操作分别对应三个可以转移过来的方向，取最小值——这就是为什么编辑距离的方程里有 3 项 `min(...)`。
+
+---
+
+## 四、编辑距离 · [LC 72](https://leetcode.com/problems/edit-distance/)
 
 ```python
 def min_distance(word1: str, word2: str) -> int:
@@ -240,7 +310,7 @@ def min_distance_1d(word1: str, word2: str) -> int:
 
 ---
 
-## 四、正则表达式匹配 · [LC 10](https://leetcode.com/problems/regular-expression-matching/)
+## 五、正则表达式匹配 · [LC 10](https://leetcode.com/problems/regular-expression-matching/)
 
 ```python
 def is_match(s: str, p: str) -> bool:
@@ -277,7 +347,7 @@ def is_match(s: str, p: str) -> bool:
 
 ---
 
-## 五、总结
+## 六、总结
 
 | 问题 | 状态定义 | 转移核心 | 复杂度 |
 |------|---------|---------|--------|
@@ -289,7 +359,7 @@ def is_match(s: str, p: str) -> bool:
 
 ---
 
-## 六、习题推荐
+## 七、习题推荐
 
 | 题号 | 题目 | 难度 | 技巧 |
 |------|------|------|------|

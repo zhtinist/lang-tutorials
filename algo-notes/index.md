@@ -27,6 +27,7 @@
 | BFS 框架 | [bfs-framework.md](bfs-framework.md) | 树的BFS、图的BFS、最短路径 |
 | 回溯框架 | [backtracking.md](backtracking.md) | 排列、组合、子集、N皇后 |
 | 动态规划框架 | [dp-framework.md](dp-framework.md) | DP三要素、自顶向下/自底向上、状态转移 |
+| 复杂度分析实战 | [complexity-analysis.md](complexity-analysis.md) | O(n)会不会超时的实测估算、递归的时间/空间复杂度 |
 
 ### 第一章 · 经典数据结构
 
@@ -72,6 +73,7 @@
 | 数学算法 | [math-algorithms.md](math-algorithms.md) | 快速幂、筛法、GCD、模运算 |
 | 区间问题 | [intervals.md](intervals.md) | 区间合并、插入、交集、扫描线 |
 | 字符串匹配 | [string-matching.md](string-matching.md) | KMP、Rabin-Karp、Z函数 |
+| 回文串算法 | [manacher-palindrome.md](manacher-palindrome.md) | 中心扩展法、Manacher O(n) |
 | 杂项技巧 | [miscellaneous.md](miscellaneous.md) | 快速选择、摩尔投票、蓄水池抽样 |
 
 ### 附录

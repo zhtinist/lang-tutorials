@@ -272,7 +272,51 @@ class BloomFilter:
 
 ---
 
-## 六、哈希表复杂度
+## 六、什么时候用 array，什么时候用 set，什么时候用 dict
+
+> 三者都能做到 O(1) 判断/统计，但代价和适用范围不同，选错不会导致错误，只是浪费性能。
+
+```
+key 的取值范围小且固定（比如小写字母、0-255 的字节值）
+  -> 用数组（list 当定长数组用），下标直接映射，没有哈希计算和哈希冲突开销
+     例：字符频次统计用 count = [0] * 26，比 dict 更快更省内存
+
+只需要判断"有没有出现过"，不需要附加信息
+  -> 用 set，别为了图省事用 dict 然后把 value 全设成 True/None
+     例：查重、判断环、visited 标记
+
+需要"key -> 附加信息"（计数、下标、上一次出现的位置……）
+  -> 用 dict，这是唯一能存值的
+     例：两数之和存"值 -> 下标"、滑动窗口存"字符 -> 出现次数"
+```
+
+### 例子对比：判断异位词
+
+```python
+def is_anagram_array(s: str, t: str) -> bool:
+    """key 范围固定是 26 个小写字母 -> 用数组，O(1) 空间，没有哈希开销。"""
+    if len(s) != len(t):
+        return False
+    count = [0] * 26
+    for ch in s:
+        count[ord(ch) - ord("a")] += 1
+    for ch in t:
+        count[ord(ch) - ord("a")] -= 1
+    return all(c == 0 for c in count)
+
+
+def is_anagram_dict(s: str, t: str) -> bool:
+    """key 范围不确定（比如允许 Unicode）时才需要 dict，多付哈希函数的开销。"""
+    from collections import Counter
+    return Counter(s) == Counter(t)
+```
+
+两种写法结果一样（[LC 242](https://leetcode.com/problems/valid-anagram/)），但前者对 26 个字母这种"已知小范围"更快；
+一旦 key 范围不再是小写字母（比如要支持任意 Unicode 字符），数组就不可行了，只能退回 dict。
+
+---
+
+## 七、哈希表复杂度
 
 | 操作 | 平均情况 | 最坏情况 |
 |------|:---:|:---:|

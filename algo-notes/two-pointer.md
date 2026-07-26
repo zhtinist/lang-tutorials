@@ -258,17 +258,108 @@ def move_zeroes(nums: list[int]) -> None:
 
 ---
 
-## 四、总结
+## 四、字符串反转技巧（整体反转 + 局部反转）
+
+> 双指针原地反转（`while l < r: swap; l+=1; r-=1`）不仅能反转整个字符串，
+> 组合起来还能做"只反转一部分""调整顺序但不改变每部分内部顺序"这类操作，
+> 不需要额外的数组/栈就能原地完成。
+
+### 4.1 反转字符串里的单词 · [LC 151](https://leetcode.com/problems/reverse-words-in-a-string/)
+
+```python
+def reverse_words(s: str) -> str:
+    """
+    要把单词顺序反转，同时单词内部字母顺序不能变。
+    技巧：先反转整个字符串（这样单词顺序对了，但每个单词内部也被反转了），
+         再把每个单词单独反转回来（修正单词内部顺序）。
+    额外要处理多余空格（连续空格/首尾空格），先原地压缩掉。
+    """
+    chars = list(s)
+    n = len(chars)
+
+    # 1. 双指针原地去除多余空格：只保留单词间恰好一个空格
+    slow = fast = 0
+    while fast < n and chars[fast] == " ":       # 跳过开头空格
+        fast += 1
+    while fast < n:
+        if chars[fast] != " ":
+            chars[slow] = chars[fast]
+            slow += 1
+            fast += 1
+        else:
+            chars[slow] = " "
+            slow += 1
+            while fast < n and chars[fast] == " ":  # 跳过单词间的连续空格
+                fast += 1
+    if slow > 0 and chars[slow - 1] == " ":          # 去掉结尾可能剩的一个空格
+        slow -= 1
+    chars = chars[:slow]
+
+    def reverse(arr: list[str], l: int, r: int) -> None:
+        while l < r:
+            arr[l], arr[r] = arr[r], arr[l]
+            l += 1
+            r -= 1
+
+    # 2. 整体反转
+    reverse(chars, 0, len(chars) - 1)
+
+    # 3. 每个单词各自反转回来
+    start = 0
+    for i in range(len(chars) + 1):
+        if i == len(chars) or chars[i] == " ":
+            reverse(chars, start, i - 1)
+            start = i + 1
+
+    return "".join(chars)
+```
+
+### 4.2 左旋转字符串 · [剑指 Offer 58-II](https://leetcode.cn/problems/zuo-xuan-zhuan-zi-fu-chuan-lcof/)
+
+```python
+def left_rotate(s: str, n: int) -> str:
+    """
+    把字符串前 n 个字符移到末尾，例如 "abcdefg" 左旋 2 位 -> "cdefgab"。
+    技巧（三次反转）：
+      1. 反转前 n 个字符： "abcdefg" -> "bacdefg"
+      2. 反转剩下的字符：           -> "bagfedc"
+      3. 反转整个字符串：           -> "cdefgab"
+    直觉：把两段各自"倒过来"再整体"倒过来"，相当于两段互换了位置，
+         且每段内部顺序被复原——这和"反转单词顺序"是同一个思路的镜像用法。
+    """
+    chars = list(s)
+    length = len(chars)
+    n %= length
+
+    def reverse(arr: list[str], l: int, r: int) -> None:
+        while l < r:
+            arr[l], arr[r] = arr[r], arr[l]
+            l += 1
+            r -= 1
+
+    reverse(chars, 0, n - 1)
+    reverse(chars, n, length - 1)
+    reverse(chars, 0, length - 1)
+    return "".join(chars)
+```
+
+> 这两题是同一个"反转组合技"的两种用法：LC 151 是"先整体反转、再修正每一段内部顺序"；
+> 左旋转字符串是反过来"先修正每一段内部顺序、再整体反转"——遇到"原地调整顺序但不能用额外空间"的字符串/数组题，可以想想能不能拆成几段反转来做。
+
+---
+
+## 五、总结
 
 | 类型 | 适用场景 | 核心技巧 |
 |------|----------|----------|
 | 快慢指针 | 链表环检测、中点、倒数第K个 | 快指针一次两步，慢指针一步 |
 | 左右指针 | 有序数组、nSum、盛水/接雨水 | 相向而行，根据条件移动左或右 |
 | 前后指针 | 原地去重、移除、移动 | slow 指向结果尾部，fast 扫描 |
+| 反转组合 | 单词反转、字符串左旋 | 整体反转 + 局部反转的组合 |
 
 ---
 
-## 五、习题推荐
+## 六、习题推荐
 
 | 题号 | 题目 | 难度 | 技巧 |
 |------|------|------|------|
@@ -286,6 +377,8 @@ def move_zeroes(nums: list[int]) -> None:
 | [LC 283](https://leetcode.com/problems/move-zeroes/) | Move Zeroes | Easy | 快慢指针原地移动 |
 | [LC 160](https://leetcode.com/problems/intersection-of-two-linked-lists/) | Intersection of Two Linked Lists | Easy | 双指针走完自己的链表 |
 | [LC 234](https://leetcode.com/problems/palindrome-linked-list/) | Palindrome Linked List | Easy | 中点 + 反转 + 对比 |
+| [LC 151](https://leetcode.com/problems/reverse-words-in-a-string/) | Reverse Words in a String | Medium | 整体反转+单词反转 |
+| [剑指 Offer 58-II](https://leetcode.cn/problems/zuo-xuan-zhuan-zi-fu-chuan-lcof/) | 左旋转字符串 | Easy | 三次反转 |
 
 ---
 

@@ -159,6 +159,17 @@ def reconstruct_queue(people: list[list[int]]) -> list[list[int]]:
     return ans
 ```
 
+**这里 `ans.insert(p[1], p)` 隐藏着一个容易被忽略的性能点**：`list.insert(i, x)` 是 O(n) 操作
+（[dynamic-array.md](dynamic-array.md) 讲过原因——插入位置之后的所有元素都要整体后移一位）。
+这题每个人都要 insert 一次，n 个人下来总共是 O(n²)。LeetCode 数据范围 n ≤ 2000，O(n²) 完全跑得动，
+但如果 n 变成 10^5 级别就会超时。
+
+> **一个常见但错误的"优化"**：把 `list` 换成 `collections.deque`。
+> `deque` 的 O(1) **只对两端（`appendleft`/`append`/`popleft`/`pop`）成立**，
+> 对中间位置的 `insert(i, x)` 一样要挪动元素，实测和 `list.insert` 一样是 O(n)、速度也差不多——
+> 换 `deque` 在这道题上完全帮不上忙。真要优化到 O(n log n)，需要用 Fenwick 树/线段树维护"第 k 个空位"，
+> 属于超出这道题本身难度的进阶写法，这里不展开。
+
 ---
 
 ## 六、分发饼干 · [LC 455](https://leetcode.com/problems/assign-cookies/)

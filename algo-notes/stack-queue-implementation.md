@@ -311,7 +311,80 @@ class MyStack:
 
 ---
 
-## 五、复杂度总结
+## 五、栈的经典应用
+
+> 下面三题看起来不一样，但都是同一个模式：**栈里存的是"还没被匹配/抵消掉"的东西，遇到能跟栈顶抵消的新元素就弹栈，否则压栈**。
+
+### 5.1 括号匹配 · [LC 20](https://leetcode.com/problems/valid-parentheses/)
+
+```python
+def is_valid(s: str) -> bool:
+    """遇到左括号入栈；遇到右括号，检查栈顶是不是对应的左括号。"""
+    pairs = {")": "(", "]": "[", "}": "{"}
+    stack: list[str] = []
+    for ch in s:
+        if ch in "([{":
+            stack.append(ch)
+        else:
+            if not stack or stack[-1] != pairs[ch]:
+                return False
+            stack.pop()
+    return not stack  # 栈必须清空，否则说明有多余的左括号
+```
+
+### 5.2 删除相邻重复项 · [LC 1047](https://leetcode.com/problems/remove-all-adjacent-duplicates-in-string/)
+
+```python
+def remove_duplicates(s: str) -> str:
+    """
+    栈顶和当前字符相同就抵消（弹栈），不同就入栈。
+    等价于反复执行"消除一对相邻重复字符"直到不能再消，但只需一次遍历。
+    "abbaca" -> 消掉 "bb" -> "aaca" -> 消掉 "aa" -> "ca"
+    """
+    stack: list[str] = []
+    for ch in s:
+        if stack and stack[-1] == ch:
+            stack.pop()
+        else:
+            stack.append(ch)
+    return "".join(stack)
+```
+
+### 5.3 逆波兰表达式求值 · [LC 150](https://leetcode.com/problems/evaluate-reverse-polish-notation/)
+
+```python
+def eval_rpn(tokens: list[str]) -> int:
+    """
+    遇到数字入栈；遇到运算符，弹出两个数字计算，把结果压回去。
+    逆波兰表达式（后缀表达式）天然适合栈：不需要处理括号和优先级。
+    """
+    stack: list[int] = []
+    ops = {"+", "-", "*", "/"}
+
+    for tok in tokens:
+        if tok in ops:
+            b = stack.pop()  # 注意顺序：先弹出的是右操作数
+            a = stack.pop()
+            if tok == "+":
+                stack.append(a + b)
+            elif tok == "-":
+                stack.append(a - b)
+            elif tok == "*":
+                stack.append(a * b)
+            else:
+                stack.append(int(a / b))  # 向零截断，不是 //（负数除法结果不同）
+        else:
+            stack.append(int(tok))
+
+    return stack[0]
+```
+
+> 队列的经典应用（单调队列求滑动窗口最大值、优先队列做 Top K）篇幅较长，
+> 分别整理在 [monotonic-stack-queue.md](monotonic-stack-queue.md) 和 [heap-priority-queue.md](heap-priority-queue.md) 里。
+
+---
+
+## 六、复杂度总结
 
 | 数据结构 | 实现方式 | push/enqueue | pop/dequeue |
 |----------|---------|:---:|:---:|

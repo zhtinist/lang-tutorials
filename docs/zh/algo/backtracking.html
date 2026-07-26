@@ -355,52 +355,135 @@ class="sourceCode python"><code class="sourceCode python"><span id="cb8-1"><a hr
 <span id="cb8-20"><a href="#cb8-20" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb8-21"><a href="#cb8-21" aria-hidden="true" tabindex="-1"></a>    backtrack(<span class="dv">0</span>, [], target)</span>
 <span id="cb8-22"><a href="#cb8-22" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> ans</span></code></pre></div>
+<h3 id="去重的另一种写法同层用局部-set">去重的另一种写法：同层用局部
+set</h3>
+<blockquote>
+<p>上面 <code>subsets_with_dup</code>/<code>combination_sum2</code>
+的去重都是 <code>i &gt; start and nums[i] == nums[i-1]</code>（排序 +
+跳相邻重复）。 还有一种等价写法：在<strong>每次进入 backtrack
+时新建一个局部
+<code>set</code></strong>，记录”这一层已经试过的值”，命中就跳过。</p>
+</blockquote>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> subsets_with_dup_v2(nums: <span class="bu">list</span>[<span class="bu">int</span>]) <span class="op">-&gt;</span> <span class="bu">list</span>[<span class="bu">list</span>[<span class="bu">int</span>]]:</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">&quot;&quot;&quot;</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="co">    用局部 set 去重，效果等价于 i &gt; start and nums[i] == nums[i-1]。</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="co">    ⚠️ 仍然需要先排序——sort 保证相同的值在数组里是连续一段，</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a><span class="co">    这样&quot;同一层&quot;扫过去才能把它们当成互斥的兄弟分支来去重；</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a><span class="co">    不排序的话，两个相隔很远的相同值会被误判成&quot;不同层&quot;，照样产生重复子集。</span></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a><span class="co">    &quot;&quot;&quot;</span></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>    nums.sort()</span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>    ans: <span class="bu">list</span>[<span class="bu">list</span>[<span class="bu">int</span>]] <span class="op">=</span> []</span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> backtrack(start: <span class="bu">int</span>, path: <span class="bu">list</span>[<span class="bu">int</span>]) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a>        ans.append(path.copy())</span>
+<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a>        used_at_this_level: <span class="bu">set</span>[<span class="bu">int</span>] <span class="op">=</span> <span class="bu">set</span>()  <span class="co"># 关键：每次调用都是全新的局部变量</span></span>
+<span id="cb9-14"><a href="#cb9-14" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(start, <span class="bu">len</span>(nums)):</span>
+<span id="cb9-15"><a href="#cb9-15" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> nums[i] <span class="kw">in</span> used_at_this_level:</span>
+<span id="cb9-16"><a href="#cb9-16" aria-hidden="true" tabindex="-1"></a>                <span class="cf">continue</span></span>
+<span id="cb9-17"><a href="#cb9-17" aria-hidden="true" tabindex="-1"></a>            used_at_this_level.add(nums[i])</span>
+<span id="cb9-18"><a href="#cb9-18" aria-hidden="true" tabindex="-1"></a>            path.append(nums[i])</span>
+<span id="cb9-19"><a href="#cb9-19" aria-hidden="true" tabindex="-1"></a>            backtrack(i <span class="op">+</span> <span class="dv">1</span>, path)</span>
+<span id="cb9-20"><a href="#cb9-20" aria-hidden="true" tabindex="-1"></a>            path.pop()</span>
+<span id="cb9-21"><a href="#cb9-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-22"><a href="#cb9-22" aria-hidden="true" tabindex="-1"></a>    backtrack(<span class="dv">0</span>, [])</span>
+<span id="cb9-23"><a href="#cb9-23" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> ans</span></code></pre></div>
+<p><strong>两个常见的错误写法</strong>（都是把 <code>set</code>
+的生命周期搞错了）：</p>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 错误 1：set 声明在外层（函数级/类成员），所有递归调用共享同一个 set，从不重置。</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="co"># 一旦某个值在任意分支被用过，就在整个搜索过程中被永久拉黑，导致漏解。</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> buggy_shared_set(nums: <span class="bu">list</span>[<span class="bu">int</span>]) <span class="op">-&gt;</span> <span class="bu">list</span>[<span class="bu">list</span>[<span class="bu">int</span>]]:</span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>    nums.sort()</span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>    ans: <span class="bu">list</span>[<span class="bu">list</span>[<span class="bu">int</span>]] <span class="op">=</span> []</span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>    used <span class="op">=</span> <span class="bu">set</span>()  <span class="co"># bug: 应该是每层局部变量，不是整个搜索共享一个</span></span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> backtrack(start: <span class="bu">int</span>, path: <span class="bu">list</span>[<span class="bu">int</span>]) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>        ans.append(path.copy())</span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(start, <span class="bu">len</span>(nums)):</span>
+<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> nums[i] <span class="kw">in</span> used:</span>
+<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a>                <span class="cf">continue</span></span>
+<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a>            used.add(nums[i])</span>
+<span id="cb10-14"><a href="#cb10-14" aria-hidden="true" tabindex="-1"></a>            path.append(nums[i])</span>
+<span id="cb10-15"><a href="#cb10-15" aria-hidden="true" tabindex="-1"></a>            backtrack(i <span class="op">+</span> <span class="dv">1</span>, path)</span>
+<span id="cb10-16"><a href="#cb10-16" aria-hidden="true" tabindex="-1"></a>            path.pop()</span>
+<span id="cb10-17"><a href="#cb10-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-18"><a href="#cb10-18" aria-hidden="true" tabindex="-1"></a>    backtrack(<span class="dv">0</span>, [])</span>
+<span id="cb10-19"><a href="#cb10-19" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> ans  <span class="co"># 例如 nums=[1,2,2,2] 只会得到 3 个子集而不是正确的 8 个</span></span>
+<span id="cb10-20"><a href="#cb10-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-21"><a href="#cb10-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-22"><a href="#cb10-22" aria-hidden="true" tabindex="-1"></a><span class="co"># 错误 2：想到&quot;错误1&quot;的问题后，改成共享一个 set 但在进入 backtrack 时 clear()。</span></span>
+<span id="cb10-23"><a href="#cb10-23" aria-hidden="true" tabindex="-1"></a><span class="co"># 看起来&quot;清空过了&quot;，但子递归调用也会 clear 同一个对象——</span></span>
+<span id="cb10-24"><a href="#cb10-24" aria-hidden="true" tabindex="-1"></a><span class="co"># 子调用返回后，父层循环剩下的迭代已经被清空，去重状态全丢了，结果里出现重复子集。</span></span>
+<span id="cb10-25"><a href="#cb10-25" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> buggy_shared_clear(nums: <span class="bu">list</span>[<span class="bu">int</span>]) <span class="op">-&gt;</span> <span class="bu">list</span>[<span class="bu">list</span>[<span class="bu">int</span>]]:</span>
+<span id="cb10-26"><a href="#cb10-26" aria-hidden="true" tabindex="-1"></a>    nums.sort()</span>
+<span id="cb10-27"><a href="#cb10-27" aria-hidden="true" tabindex="-1"></a>    ans: <span class="bu">list</span>[<span class="bu">list</span>[<span class="bu">int</span>]] <span class="op">=</span> []</span>
+<span id="cb10-28"><a href="#cb10-28" aria-hidden="true" tabindex="-1"></a>    shared <span class="op">=</span> <span class="bu">set</span>()</span>
+<span id="cb10-29"><a href="#cb10-29" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-30"><a href="#cb10-30" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> backtrack(start: <span class="bu">int</span>, path: <span class="bu">list</span>[<span class="bu">int</span>]) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
+<span id="cb10-31"><a href="#cb10-31" aria-hidden="true" tabindex="-1"></a>        ans.append(path.copy())</span>
+<span id="cb10-32"><a href="#cb10-32" aria-hidden="true" tabindex="-1"></a>        shared.clear()  <span class="co"># bug: 清空的是共享对象，子调用会再清一次，污染父层</span></span>
+<span id="cb10-33"><a href="#cb10-33" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(start, <span class="bu">len</span>(nums)):</span>
+<span id="cb10-34"><a href="#cb10-34" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> nums[i] <span class="kw">in</span> shared:</span>
+<span id="cb10-35"><a href="#cb10-35" aria-hidden="true" tabindex="-1"></a>                <span class="cf">continue</span></span>
+<span id="cb10-36"><a href="#cb10-36" aria-hidden="true" tabindex="-1"></a>            shared.add(nums[i])</span>
+<span id="cb10-37"><a href="#cb10-37" aria-hidden="true" tabindex="-1"></a>            path.append(nums[i])</span>
+<span id="cb10-38"><a href="#cb10-38" aria-hidden="true" tabindex="-1"></a>            backtrack(i <span class="op">+</span> <span class="dv">1</span>, path)</span>
+<span id="cb10-39"><a href="#cb10-39" aria-hidden="true" tabindex="-1"></a>            path.pop()</span>
+<span id="cb10-40"><a href="#cb10-40" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-41"><a href="#cb10-41" aria-hidden="true" tabindex="-1"></a>    backtrack(<span class="dv">0</span>, [])</span>
+<span id="cb10-42"><a href="#cb10-42" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> ans  <span class="co"># nums=[1,2,2,2] 会得到重复的 [1,2] [1,2,2] 等，多出一堆重复项</span></span></code></pre></div>
+<p><strong>两种正确写法怎么选</strong>：<code>i &gt; start and nums[i] == nums[i-1]</code>
+不需要额外空间，是首选； 局部 <code>set</code>
+版本更直观但每层都要新建一个 set 对象（哈希开销 + 额外空间），
+在数据量大、递归层数深的时候会比数组版本慢一些——两者结果等价，前者是工程上更优的写法，
+后者更适合刚学这个套路、想先写出”看得懂”的版本时使用。</p>
 <hr />
 <h2 id="四n-皇后-lc-51">四、N 皇后 · <a
 href="https://leetcode.com/problems/n-queens/">LC 51</a></h2>
-<div class="sourceCode" id="cb9"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> solve_n_queens(n: <span class="bu">int</span>) <span class="op">-&gt;</span> <span class="bu">list</span>[<span class="bu">list</span>[<span class="bu">str</span>]]:</span>
-<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">&quot;&quot;&quot;N皇后：返回所有解。&quot;&quot;&quot;</span></span>
-<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>    ans: <span class="bu">list</span>[<span class="bu">list</span>[<span class="bu">str</span>]] <span class="op">=</span> []</span>
-<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>    <span class="co"># 棋盘，&#39;.&#39; 表示空，&#39;Q&#39; 表示皇后</span></span>
-<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>    board <span class="op">=</span> [[<span class="st">&quot;.&quot;</span>] <span class="op">*</span> n <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(n)]</span>
-<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> is_valid(row: <span class="bu">int</span>, col: <span class="bu">int</span>) <span class="op">-&gt;</span> <span class="bu">bool</span>:</span>
-<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>        <span class="co">&quot;&quot;&quot;检查 (row, col) 是否可以放皇后。只需检查上半部分。&quot;&quot;&quot;</span></span>
-<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>        <span class="co"># 检查同列</span></span>
-<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(row):</span>
-<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> board[i][col] <span class="op">==</span> <span class="st">&quot;Q&quot;</span>:</span>
-<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a>                <span class="cf">return</span> <span class="va">False</span></span>
-<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a>        <span class="co"># 检查左上对角线</span></span>
-<span id="cb9-14"><a href="#cb9-14" aria-hidden="true" tabindex="-1"></a>        i, j <span class="op">=</span> row <span class="op">-</span> <span class="dv">1</span>, col <span class="op">-</span> <span class="dv">1</span></span>
-<span id="cb9-15"><a href="#cb9-15" aria-hidden="true" tabindex="-1"></a>        <span class="cf">while</span> i <span class="op">&gt;=</span> <span class="dv">0</span> <span class="kw">and</span> j <span class="op">&gt;=</span> <span class="dv">0</span>:</span>
-<span id="cb9-16"><a href="#cb9-16" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> board[i][j] <span class="op">==</span> <span class="st">&quot;Q&quot;</span>:</span>
-<span id="cb9-17"><a href="#cb9-17" aria-hidden="true" tabindex="-1"></a>                <span class="cf">return</span> <span class="va">False</span></span>
-<span id="cb9-18"><a href="#cb9-18" aria-hidden="true" tabindex="-1"></a>            i <span class="op">-=</span> <span class="dv">1</span></span>
-<span id="cb9-19"><a href="#cb9-19" aria-hidden="true" tabindex="-1"></a>            j <span class="op">-=</span> <span class="dv">1</span></span>
-<span id="cb9-20"><a href="#cb9-20" aria-hidden="true" tabindex="-1"></a>        <span class="co"># 检查右上对角线</span></span>
-<span id="cb9-21"><a href="#cb9-21" aria-hidden="true" tabindex="-1"></a>        i, j <span class="op">=</span> row <span class="op">-</span> <span class="dv">1</span>, col <span class="op">+</span> <span class="dv">1</span></span>
-<span id="cb9-22"><a href="#cb9-22" aria-hidden="true" tabindex="-1"></a>        <span class="cf">while</span> i <span class="op">&gt;=</span> <span class="dv">0</span> <span class="kw">and</span> j <span class="op">&lt;</span> n:</span>
-<span id="cb9-23"><a href="#cb9-23" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> board[i][j] <span class="op">==</span> <span class="st">&quot;Q&quot;</span>:</span>
-<span id="cb9-24"><a href="#cb9-24" aria-hidden="true" tabindex="-1"></a>                <span class="cf">return</span> <span class="va">False</span></span>
-<span id="cb9-25"><a href="#cb9-25" aria-hidden="true" tabindex="-1"></a>            i <span class="op">-=</span> <span class="dv">1</span></span>
-<span id="cb9-26"><a href="#cb9-26" aria-hidden="true" tabindex="-1"></a>            j <span class="op">+=</span> <span class="dv">1</span></span>
-<span id="cb9-27"><a href="#cb9-27" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="va">True</span></span>
-<span id="cb9-28"><a href="#cb9-28" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb9-29"><a href="#cb9-29" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> backtrack(row: <span class="bu">int</span>) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
-<span id="cb9-30"><a href="#cb9-30" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> row <span class="op">==</span> n:</span>
-<span id="cb9-31"><a href="#cb9-31" aria-hidden="true" tabindex="-1"></a>            ans.append([<span class="st">&quot;&quot;</span>.join(r) <span class="cf">for</span> r <span class="kw">in</span> board])</span>
-<span id="cb9-32"><a href="#cb9-32" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span></span>
-<span id="cb9-33"><a href="#cb9-33" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb9-34"><a href="#cb9-34" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> col <span class="kw">in</span> <span class="bu">range</span>(n):</span>
-<span id="cb9-35"><a href="#cb9-35" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> <span class="kw">not</span> is_valid(row, col):</span>
-<span id="cb9-36"><a href="#cb9-36" aria-hidden="true" tabindex="-1"></a>                <span class="cf">continue</span></span>
-<span id="cb9-37"><a href="#cb9-37" aria-hidden="true" tabindex="-1"></a>            board[row][col] <span class="op">=</span> <span class="st">&quot;Q&quot;</span>  <span class="co"># 做选择</span></span>
-<span id="cb9-38"><a href="#cb9-38" aria-hidden="true" tabindex="-1"></a>            backtrack(row <span class="op">+</span> <span class="dv">1</span>)     <span class="co"># 进入下一行</span></span>
-<span id="cb9-39"><a href="#cb9-39" aria-hidden="true" tabindex="-1"></a>            board[row][col] <span class="op">=</span> <span class="st">&quot;.&quot;</span>  <span class="co"># 撤销选择</span></span>
-<span id="cb9-40"><a href="#cb9-40" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb9-41"><a href="#cb9-41" aria-hidden="true" tabindex="-1"></a>    backtrack(<span class="dv">0</span>)</span>
-<span id="cb9-42"><a href="#cb9-42" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> ans</span></code></pre></div>
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> solve_n_queens(n: <span class="bu">int</span>) <span class="op">-&gt;</span> <span class="bu">list</span>[<span class="bu">list</span>[<span class="bu">str</span>]]:</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">&quot;&quot;&quot;N皇后：返回所有解。&quot;&quot;&quot;</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>    ans: <span class="bu">list</span>[<span class="bu">list</span>[<span class="bu">str</span>]] <span class="op">=</span> []</span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>    <span class="co"># 棋盘，&#39;.&#39; 表示空，&#39;Q&#39; 表示皇后</span></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>    board <span class="op">=</span> [[<span class="st">&quot;.&quot;</span>] <span class="op">*</span> n <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(n)]</span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> is_valid(row: <span class="bu">int</span>, col: <span class="bu">int</span>) <span class="op">-&gt;</span> <span class="bu">bool</span>:</span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>        <span class="co">&quot;&quot;&quot;检查 (row, col) 是否可以放皇后。只需检查上半部分。&quot;&quot;&quot;</span></span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a>        <span class="co"># 检查同列</span></span>
+<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(row):</span>
+<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> board[i][col] <span class="op">==</span> <span class="st">&quot;Q&quot;</span>:</span>
+<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a>                <span class="cf">return</span> <span class="va">False</span></span>
+<span id="cb11-13"><a href="#cb11-13" aria-hidden="true" tabindex="-1"></a>        <span class="co"># 检查左上对角线</span></span>
+<span id="cb11-14"><a href="#cb11-14" aria-hidden="true" tabindex="-1"></a>        i, j <span class="op">=</span> row <span class="op">-</span> <span class="dv">1</span>, col <span class="op">-</span> <span class="dv">1</span></span>
+<span id="cb11-15"><a href="#cb11-15" aria-hidden="true" tabindex="-1"></a>        <span class="cf">while</span> i <span class="op">&gt;=</span> <span class="dv">0</span> <span class="kw">and</span> j <span class="op">&gt;=</span> <span class="dv">0</span>:</span>
+<span id="cb11-16"><a href="#cb11-16" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> board[i][j] <span class="op">==</span> <span class="st">&quot;Q&quot;</span>:</span>
+<span id="cb11-17"><a href="#cb11-17" aria-hidden="true" tabindex="-1"></a>                <span class="cf">return</span> <span class="va">False</span></span>
+<span id="cb11-18"><a href="#cb11-18" aria-hidden="true" tabindex="-1"></a>            i <span class="op">-=</span> <span class="dv">1</span></span>
+<span id="cb11-19"><a href="#cb11-19" aria-hidden="true" tabindex="-1"></a>            j <span class="op">-=</span> <span class="dv">1</span></span>
+<span id="cb11-20"><a href="#cb11-20" aria-hidden="true" tabindex="-1"></a>        <span class="co"># 检查右上对角线</span></span>
+<span id="cb11-21"><a href="#cb11-21" aria-hidden="true" tabindex="-1"></a>        i, j <span class="op">=</span> row <span class="op">-</span> <span class="dv">1</span>, col <span class="op">+</span> <span class="dv">1</span></span>
+<span id="cb11-22"><a href="#cb11-22" aria-hidden="true" tabindex="-1"></a>        <span class="cf">while</span> i <span class="op">&gt;=</span> <span class="dv">0</span> <span class="kw">and</span> j <span class="op">&lt;</span> n:</span>
+<span id="cb11-23"><a href="#cb11-23" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> board[i][j] <span class="op">==</span> <span class="st">&quot;Q&quot;</span>:</span>
+<span id="cb11-24"><a href="#cb11-24" aria-hidden="true" tabindex="-1"></a>                <span class="cf">return</span> <span class="va">False</span></span>
+<span id="cb11-25"><a href="#cb11-25" aria-hidden="true" tabindex="-1"></a>            i <span class="op">-=</span> <span class="dv">1</span></span>
+<span id="cb11-26"><a href="#cb11-26" aria-hidden="true" tabindex="-1"></a>            j <span class="op">+=</span> <span class="dv">1</span></span>
+<span id="cb11-27"><a href="#cb11-27" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="va">True</span></span>
+<span id="cb11-28"><a href="#cb11-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-29"><a href="#cb11-29" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> backtrack(row: <span class="bu">int</span>) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
+<span id="cb11-30"><a href="#cb11-30" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> row <span class="op">==</span> n:</span>
+<span id="cb11-31"><a href="#cb11-31" aria-hidden="true" tabindex="-1"></a>            ans.append([<span class="st">&quot;&quot;</span>.join(r) <span class="cf">for</span> r <span class="kw">in</span> board])</span>
+<span id="cb11-32"><a href="#cb11-32" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span></span>
+<span id="cb11-33"><a href="#cb11-33" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-34"><a href="#cb11-34" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> col <span class="kw">in</span> <span class="bu">range</span>(n):</span>
+<span id="cb11-35"><a href="#cb11-35" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> <span class="kw">not</span> is_valid(row, col):</span>
+<span id="cb11-36"><a href="#cb11-36" aria-hidden="true" tabindex="-1"></a>                <span class="cf">continue</span></span>
+<span id="cb11-37"><a href="#cb11-37" aria-hidden="true" tabindex="-1"></a>            board[row][col] <span class="op">=</span> <span class="st">&quot;Q&quot;</span>  <span class="co"># 做选择</span></span>
+<span id="cb11-38"><a href="#cb11-38" aria-hidden="true" tabindex="-1"></a>            backtrack(row <span class="op">+</span> <span class="dv">1</span>)     <span class="co"># 进入下一行</span></span>
+<span id="cb11-39"><a href="#cb11-39" aria-hidden="true" tabindex="-1"></a>            board[row][col] <span class="op">=</span> <span class="st">&quot;.&quot;</span>  <span class="co"># 撤销选择</span></span>
+<span id="cb11-40"><a href="#cb11-40" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-41"><a href="#cb11-41" aria-hidden="true" tabindex="-1"></a>    backtrack(<span class="dv">0</span>)</span>
+<span id="cb11-42"><a href="#cb11-42" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> ans</span></code></pre></div>
 <hr />
 <h2 id="五复杂度分析">五、复杂度分析</h2>
 <table>
