@@ -1,0 +1,1081 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="zh-CN" xml:lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>计算机网络基础与TCP详解</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="stylesheet" href="../../assets/style.css" />
+</head>
+<body>
+<div class="topbar"><div class="wrap"><a class="home" href="../index.html"><span class="logo">📚</span><span class="brand">面向 C/C++ 程序员的其他语言教程</span></a>
+<a href="../python/index.html">Python</a>
+<a href="../java/index.html">Java</a>
+<a href="../go/index.html">Go</a>
+<a href="../algo/index.html">算法笔记</a>
+<a href="../architecture/index.html">架构设计</a>
+<a href="../oodlld/index.html">OOD/LLD</a>
+<a href="../container/index.html">容器对照</a>
+<a href="../cpp/index.html">C++ 教程</a>
+<a href="../baguwen/index.html">面试八股</a>
+<a href="../csbase/index.html" style="color:var(--accent-dark);font-weight:700">计算机基础</a>
+<a href="../javaeco/index.html">Java 生态</a></div></div>
+<div class="wrap">
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#计算机网络基础与tcp详解"
+id="toc-计算机网络基础与tcp详解">计算机网络基础与TCP详解</a>
+<ul>
+<li><a href="#一tcp-和-udp-的区别" id="toc-一tcp-和-udp-的区别">一、TCP
+和 UDP 的区别</a></li>
+<li><a href="#二http-请求方法" id="toc-二http-请求方法">二、HTTP
+请求方法</a></li>
+<li><a href="#三get-和-post-的区别"
+id="toc-三get-和-post-的区别">三、GET 和 POST 的区别</a></li>
+<li><a href="#四http-状态码" id="toc-四http-状态码">四、HTTP
+状态码</a></li>
+<li><a href="#五http-头部字段" id="toc-五http-头部字段">五、HTTP
+头部字段</a></li>
+<li><a href="#六tcp-三次握手" id="toc-六tcp-三次握手">六、TCP
+三次握手</a></li>
+<li><a href="#七tcp-四次挥手" id="toc-七tcp-四次挥手">七、TCP
+四次挥手</a></li>
+<li><a href="#八time_wait-状态" id="toc-八time_wait-状态">八、TIME_WAIT
+状态</a></li>
+<li><a href="#九tcp-如何保证可靠传输"
+id="toc-九tcp-如何保证可靠传输">九、TCP 如何保证可靠传输</a></li>
+<li><a href="#十拥塞控制" id="toc-十拥塞控制">十、拥塞控制</a></li>
+<li><a href="#十一tcp-keepalive-与-http-keep-alive"
+id="toc-十一tcp-keepalive-与-http-keep-alive">十一、TCP Keepalive 与
+HTTP Keep-Alive</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1 id="计算机网络基础与tcp详解">计算机网络基础与TCP详解</h1>
+<p>覆盖传输层 TCP/UDP 的核心区别、HTTP
+协议的请求方法/状态码/头部字段，以及 TCP
+连接管理与可靠性机制的全部细节：三次握手、四次挥手、TIME_WAIT、可靠传输、拥塞控制、Keepalive。</p>
+<h2 id="一tcp-和-udp-的区别">一、TCP 和 UDP 的区别</h2>
+<p>TCP（Transmission Control
+Protocol）是面向连接的可靠传输协议，UDP（User Datagram
+Protocol）是无连接的不可靠传输协议，两者都工作在传输层，但设计目标完全相反：TCP
+用额外的开销换正确性，UDP 用放弃保证换速度。</p>
+<table>
+<colgroup>
+<col style="width: 37%" />
+<col style="width: 31%" />
+<col style="width: 31%" />
+</colgroup>
+<thead>
+<tr>
+<th>维度</th>
+<th>TCP</th>
+<th>UDP</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>连接方式</td>
+<td>三次握手建立连接，四次挥手释放连接</td>
+<td>无连接，直接发送数据报</td>
+</tr>
+<tr>
+<td>可靠性</td>
+<td>通过确认应答、超时重传、校验和确保可靠</td>
+<td>不保证送达，可能丢包</td>
+</tr>
+<tr>
+<td>传输顺序</td>
+<td>序列号保证数据按序到达</td>
+<td>不保证顺序，乱序也不会重排</td>
+</tr>
+<tr>
+<td>传输速度</td>
+<td>较慢（握手、确认、重传都有开销）</td>
+<td>快（没有额外的控制逻辑）</td>
+</tr>
+<tr>
+<td>头部开销</td>
+<td>最小 20 字节（无选项时）</td>
+<td>固定 8 字节</td>
+</tr>
+<tr>
+<td>流量控制</td>
+<td>支持（滑动窗口）</td>
+<td>不支持</td>
+</tr>
+<tr>
+<td>拥塞控制</td>
+<td>支持（慢启动、拥塞避免等算法）</td>
+<td>不支持</td>
+</tr>
+<tr>
+<td>数据边界</td>
+<td>面向字节流，没有消息边界</td>
+<td>面向报文，一次 send 对应一次 recv</td>
+</tr>
+<tr>
+<td>典型应用</td>
+<td>HTTP、文件传输、邮件（SMTP）</td>
+<td>DNS 查询、视频会议、在线游戏、直播</td>
+</tr>
+</tbody>
+</table>
+<p><strong>为什么某些场景故意选 UDP</strong>：DNS
+查询是一问一答的小数据包，用不着连接维护的开销；视频会议、直播这类实时流媒体，丢一帧不如卡一下——TCP
+的重传反而会让画面延迟累积得更严重，这类场景对”实时”的需求高于对”完整”的需求，UDP
+更合适。反过来，文件传输、网页加载对数据完整性要求高，宁可慢一点也不能少字节，选
+TCP。</p>
+<p>需要可靠性又想要 UDP 速度的场景（比如 HTTP/3），做法是在 UDP
+之上用应用层协议（QUIC）自己实现确认、重传、拥塞控制，而不是依赖
+TCP。</p>
+<h2 id="二http-请求方法">二、HTTP 请求方法</h2>
+<p>HTTP/1.1 定义了 8 种方法，此外 PATCH 是 RFC 5789（2010
+年）后补充的扩展方法。</p>
+<table>
+<colgroup>
+<col style="width: 15%" />
+<col style="width: 15%" />
+<col style="width: 21%" />
+<col style="width: 21%" />
+<col style="width: 26%" />
+</colgroup>
+<thead>
+<tr>
+<th>方法</th>
+<th>语义</th>
+<th>安全性</th>
+<th>幂等性</th>
+<th>典型场景</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET</td>
+<td>请求指定资源，参数放在 URL 中</td>
+<td>安全</td>
+<td>幂等</td>
+<td>查询数据、加载页面</td>
+</tr>
+<tr>
+<td>POST</td>
+<td>提交数据，数据放在请求体中</td>
+<td>不安全</td>
+<td>不幂等</td>
+<td>表单提交、创建订单</td>
+</tr>
+<tr>
+<td>PUT</td>
+<td>全量更新资源，客户端提供完整数据</td>
+<td>不安全</td>
+<td>幂等</td>
+<td>覆盖式更新用户信息</td>
+</tr>
+<tr>
+<td>DELETE</td>
+<td>删除指定资源</td>
+<td>不安全</td>
+<td>幂等</td>
+<td>删除文章/用户</td>
+</tr>
+<tr>
+<td>HEAD</td>
+<td>与 GET 相同但只返回响应头，无响应体</td>
+<td>安全</td>
+<td>幂等</td>
+<td>检查资源是否存在、验证链接有效性</td>
+</tr>
+<tr>
+<td>OPTIONS</td>
+<td>查询服务器支持的方法，或做跨域预检</td>
+<td>安全</td>
+<td>幂等</td>
+<td>CORS 预检请求</td>
+</tr>
+<tr>
+<td>TRACE</td>
+<td>回显服务器收到的请求内容，用于调试</td>
+<td>不安全</td>
+<td>幂等</td>
+<td>调试（生产环境通常禁用）</td>
+</tr>
+<tr>
+<td>CONNECT</td>
+<td>建立到目标服务器的隧道</td>
+<td>不安全</td>
+<td>幂等</td>
+<td>HTTPS 代理隧道</td>
+</tr>
+<tr>
+<td>PATCH</td>
+<td>局部更新资源，只提交需要修改的字段</td>
+<td>不安全</td>
+<td>不幂等</td>
+<td>修改用户昵称等单一字段</td>
+</tr>
+</tbody>
+</table>
+<p>这里”安全”（safe）和”幂等”（idempotent）是两个独立的概念，不要混淆：</p>
+<ul>
+<li><strong>安全</strong>指方法本身不会改变服务器上的资源状态，纯粹是只读操作。GET、HEAD、OPTIONS、TRACE
+是安全的。</li>
+<li><strong>幂等</strong>指同一个请求执行一次和执行 N
+次，服务器最终状态是一样的。GET 幂等好理解（查询不会变结果）；DELETE
+也是幂等的——删除一个已经不存在的资源，和删除一次的效果相同（都是”资源不存在”），所以重复调用不会产生额外副作用；PUT
+幂等是因为它总是用相同的完整数据覆盖资源，写十次结果和写一次一样。POST
+和 PATCH 不幂等：连续两次 POST 创建订单接口，会创建出两个订单。</li>
+</ul>
+<p>TRACE 因为会把请求内容原样回显，可能被用来配合 XSS 窃取
+Cookie（Cross-Site Tracing
+攻击），实践中服务器和代理通常直接禁用它。</p>
+<p>版本演进上，HTTP/1.0 只定义了 GET、POST、HEAD 三种方法；HTTP/1.1
+补齐到 8 种；HTTP/2 和 HTTP/3 沿用 HTTP/1.1
+的方法集合，没有新增方法，它们改进的是底层传输机制而非语义层。</p>
+<h2 id="三get-和-post-的区别">三、GET 和 POST 的区别</h2>
+<p>GET 和POST
+都是”请求方法”，但在实践中承担的角色差异很大，核心还是刚才那张方法表里的两行，这里展开对比：</p>
+<table>
+<colgroup>
+<col style="width: 35%" />
+<col style="width: 29%" />
+<col style="width: 35%" />
+</colgroup>
+<thead>
+<tr>
+<th>维度</th>
+<th>GET</th>
+<th>POST</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>参数位置</td>
+<td>拼接在 URL 上（<code>?name=value&amp;...</code>）</td>
+<td>放在请求体里</td>
+</tr>
+<tr>
+<td>长度限制</td>
+<td>受浏览器/服务器 URL 长度限制（约 2~8KB，取决于实现）</td>
+<td>理论上无限制，受服务器配置限制</td>
+</tr>
+<tr>
+<td>可见性</td>
+<td>参数出现在地址栏、浏览器历史、服务器日志中</td>
+<td>不出现在地址栏，但仍是明文（除非 HTTPS）</td>
+</tr>
+<tr>
+<td>缓存</td>
+<td>可被浏览器和代理缓存</td>
+<td>默认不缓存</td>
+</tr>
+<tr>
+<td>幂等性</td>
+<td>幂等</td>
+<td>不幂等</td>
+</tr>
+<tr>
+<td>安全性（safe）</td>
+<td>安全，不修改服务器状态</td>
+<td>不安全，可能修改状态</td>
+</tr>
+<tr>
+<td>编码</td>
+<td>只能是 ASCII，非 ASCII 字符需要 URL 编码</td>
+<td>支持多种编码（<code>multipart/form-data</code>、<code>application/json</code>
+等）</td>
+</tr>
+</tbody>
+</table>
+<p>几个容易被忽视的点：</p>
+<p><strong>GET 参数出现在 URL
+里</strong>意味着它会被写进浏览器历史记录、服务器访问日志、代理缓存，所以绝不能用
+GET 传密码、Token 等敏感信息——即使走 HTTPS，URL
+本身在这些留存点也是明文的。POST
+把参数放进请求体，不会出现在地址栏和日志里，但这不等于”安全”，请求体内容在没有
+HTTPS 的情况下依然是明文，能被抓包工具直接看到。真正的机密性保护来自
+HTTPS 加密，跟用 GET 还是 POST 无关。</p>
+<p><strong>幂等性决定了重试策略</strong>：浏览器对 GET
+请求可以放心地自动重试或做预加载，因为重复执行不会有副作用；对 POST
+请求浏览器会弹出”是否重新提交表单”的确认，因为重复提交可能意味着下单两次。</p>
+<p><strong>在 RESTful API 设计里</strong>，GET 对应读操作、POST
+对应创建操作、PUT 对应更新、DELETE 对应删除，这套约定就是建立在 HTTP
+方法本身的语义（安全性、幂等性）之上的。</p>
+<h2 id="四http-状态码">四、HTTP 状态码</h2>
+<p>状态码按首位数字分为 5 类，语义上代表请求处理的不同阶段和结果。</p>
+<h3 id="xx-信息类">1xx 信息类</h3>
+<table>
+<thead>
+<tr>
+<th>状态码</th>
+<th>名称</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>100</td>
+<td>Continue</td>
+<td>服务器已收到请求头，客户端可以继续发送请求体</td>
+</tr>
+<tr>
+<td>101</td>
+<td>Switching Protocols</td>
+<td>协议切换成功，如从 HTTP 升级到 WebSocket</td>
+</tr>
+</tbody>
+</table>
+<h3 id="xx-成功类">2xx 成功类</h3>
+<table>
+<colgroup>
+<col style="width: 40%" />
+<col style="width: 30%" />
+<col style="width: 30%" />
+</colgroup>
+<thead>
+<tr>
+<th>状态码</th>
+<th>名称</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>200</td>
+<td>OK</td>
+<td>请求已被正确处理，响应体携带结果</td>
+</tr>
+<tr>
+<td>201</td>
+<td>Created</td>
+<td>请求成功且创建了新资源（典型于 POST）</td>
+</tr>
+<tr>
+<td>202</td>
+<td>Accepted</td>
+<td>请求已接受但尚未处理完成（异步任务）</td>
+</tr>
+<tr>
+<td>203</td>
+<td>Non-Authoritative Information</td>
+<td>返回的信息来自缓存副本而非源服务器</td>
+</tr>
+<tr>
+<td>204</td>
+<td>No Content</td>
+<td>处理成功但没有内容返回（典型于 DELETE）</td>
+</tr>
+<tr>
+<td>205</td>
+<td>Reset Content</td>
+<td>要求客户端重置当前文档视图（如清空表单）</td>
+</tr>
+<tr>
+<td>206</td>
+<td>Partial Content</td>
+<td>返回了资源的一部分（配合 Range 请求，用于断点续传）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="xx-重定向类">3xx 重定向类</h3>
+<table>
+<colgroup>
+<col style="width: 40%" />
+<col style="width: 30%" />
+<col style="width: 30%" />
+</colgroup>
+<thead>
+<tr>
+<th>状态码</th>
+<th>名称</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>300</td>
+<td>Multiple Choices</td>
+<td>资源存在多个可选表示，需要客户端选择</td>
+</tr>
+<tr>
+<td>301</td>
+<td>Moved Permanently</td>
+<td>资源永久重定向到新地址，浏览器会缓存该跳转</td>
+</tr>
+<tr>
+<td>302</td>
+<td>Found</td>
+<td>资源临时重定向到新地址，不缓存</td>
+</tr>
+<tr>
+<td>303</td>
+<td>See Other</td>
+<td>强制客户端用 GET 方法访问另一个 URI（常见于 POST 后跳转）</td>
+</tr>
+<tr>
+<td>304</td>
+<td>Not Modified</td>
+<td>资源未修改，客户端可直接使用本地缓存</td>
+</tr>
+<tr>
+<td>305</td>
+<td>Use Proxy</td>
+<td>必须通过指定代理访问资源（已被现代浏览器弃用）</td>
+</tr>
+<tr>
+<td>306</td>
+<td>Unused</td>
+<td>保留但已废弃，被 307/308 取代</td>
+</tr>
+<tr>
+<td>307</td>
+<td>Temporary Redirect</td>
+<td>临时重定向，且要求保持原请求方法（区别于 302）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="xx-客户端错误类">4xx 客户端错误类</h3>
+<table>
+<colgroup>
+<col style="width: 40%" />
+<col style="width: 30%" />
+<col style="width: 30%" />
+</colgroup>
+<thead>
+<tr>
+<th>状态码</th>
+<th>名称</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>400</td>
+<td>Bad Request</td>
+<td>请求存在语法或参数错误</td>
+</tr>
+<tr>
+<td>401</td>
+<td>Unauthorized</td>
+<td>未提供有效身份凭证，需要认证</td>
+</tr>
+<tr>
+<td>402</td>
+<td>Payment Required</td>
+<td>保留状态码，用于需要付费的场景（如部分支付网关）</td>
+</tr>
+<tr>
+<td>403</td>
+<td>Forbidden</td>
+<td>已认证但无权访问该资源</td>
+</tr>
+<tr>
+<td>404</td>
+<td>Not Found</td>
+<td>服务器找不到请求的资源</td>
+</tr>
+<tr>
+<td>405</td>
+<td>Method Not Allowed</td>
+<td>该资源不支持请求所用的 HTTP 方法</td>
+</tr>
+<tr>
+<td>406</td>
+<td>Not Acceptable</td>
+<td>服务器无法提供符合 Accept 头要求的内容格式</td>
+</tr>
+<tr>
+<td>407</td>
+<td>Proxy Authentication Required</td>
+<td>需要先通过代理服务器的身份验证</td>
+</tr>
+<tr>
+<td>408</td>
+<td>Request Timeout</td>
+<td>服务器等待客户端发送请求的时间过长</td>
+</tr>
+<tr>
+<td>409</td>
+<td>Conflict</td>
+<td>请求与服务器当前状态冲突（如并发编辑版本冲突）</td>
+</tr>
+<tr>
+<td>410</td>
+<td>Gone</td>
+<td>资源曾经存在但已被永久删除</td>
+</tr>
+<tr>
+<td>411</td>
+<td>Length Required</td>
+<td>请求缺少必需的 Content-Length 头</td>
+</tr>
+<tr>
+<td>412</td>
+<td>Precondition Failed</td>
+<td>请求头中的前置条件未满足（如 If-Match 校验失败）</td>
+</tr>
+<tr>
+<td>413</td>
+<td>Payload Too Large</td>
+<td>请求体超过服务器允许的大小限制</td>
+</tr>
+<tr>
+<td>414</td>
+<td>URI Too Long</td>
+<td>请求的 URL 超出服务器限制</td>
+</tr>
+<tr>
+<td>415</td>
+<td>Unsupported Media Type</td>
+<td>服务器不支持请求携带的数据格式</td>
+</tr>
+<tr>
+<td>416</td>
+<td>Range Not Satisfiable</td>
+<td>请求的范围超出了资源实际大小</td>
+</tr>
+<tr>
+<td>417</td>
+<td>Expectation Failed</td>
+<td>服务器无法满足请求头中 Expect 字段的要求</td>
+</tr>
+</tbody>
+</table>
+<h3 id="xx-服务器错误类">5xx 服务器错误类</h3>
+<table>
+<colgroup>
+<col style="width: 40%" />
+<col style="width: 30%" />
+<col style="width: 30%" />
+</colgroup>
+<thead>
+<tr>
+<th>状态码</th>
+<th>名称</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>500</td>
+<td>Internal Server Error</td>
+<td>服务器内部错误，无法完成请求（代码异常、数据库崩溃等）</td>
+</tr>
+<tr>
+<td>501</td>
+<td>Not Implemented</td>
+<td>服务器不支持实现请求所需的功能</td>
+</tr>
+<tr>
+<td>502</td>
+<td>Bad Gateway</td>
+<td>网关/代理从上游服务器收到了无效响应</td>
+</tr>
+<tr>
+<td>503</td>
+<td>Service Unavailable</td>
+<td>服务器过载或正在维护，暂时无法处理请求</td>
+</tr>
+<tr>
+<td>504</td>
+<td>Gateway Timeout</td>
+<td>网关/代理等待上游服务器响应超时</td>
+</tr>
+<tr>
+<td>505</td>
+<td>HTTP Version Not Supported</td>
+<td>服务器不支持请求所使用的 HTTP 协议版本</td>
+</tr>
+</tbody>
+</table>
+<p>304 和 404 容易混淆：304
+表示”资源没变，请继续用你本地那份”，这是缓存机制的一部分（配合协商缓存使用，见
+<code>network-http-advanced.md</code>）；404
+表示”资源根本不存在”，两者语义完全不同。502 和 504
+都发生在有反向代理/网关的架构里：502
+是上游返回了一个网关看不懂或无效的响应（比如后端进程崩溃、连接被拒绝），504
+是网关压根没在超时时间内等到上游的响应（后端处理太慢）。</p>
+<h2 id="五http-头部字段">五、HTTP 头部字段</h2>
+<p>头部字段按作用范围分为四类。</p>
+<h3 id="请求字段">请求字段</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>字段</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Host</td>
+<td>指定目标域名和端口，HTTP/1.1 必需字段，用于同一 IP
+上区分多个虚拟主机</td>
+</tr>
+<tr>
+<td>User-Agent</td>
+<td>标识客户端类型（浏览器、操作系统），服务器可据此返回适配内容</td>
+</tr>
+<tr>
+<td>Accept</td>
+<td>声明客户端可接受的响应内容类型（MIME 类型），如
+<code>application/json</code></td>
+</tr>
+<tr>
+<td>Authorization</td>
+<td>携带身份认证凭证，如 <code>Bearer &lt;token&gt;</code></td>
+</tr>
+<tr>
+<td>Cookie</td>
+<td>携带此前服务器通过 Set-Cookie 下发的会话信息</td>
+</tr>
+</tbody>
+</table>
+<h3 id="响应字段">响应字段</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>字段</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Server</td>
+<td>标识服务器软件及版本，生产环境通常隐藏以减少信息泄露</td>
+</tr>
+<tr>
+<td>Set-Cookie</td>
+<td>让客户端存储 Cookie，可附加 HttpOnly（禁止 JS 读取）、Secure（仅
+HTTPS 下发送）等属性</td>
+</tr>
+<tr>
+<td>Location</td>
+<td>重定向的目标地址，配合 3xx 状态码使用</td>
+</tr>
+<tr>
+<td>WWW-Authenticate</td>
+<td>告知客户端应使用的认证方式，配合 401 状态码使用</td>
+</tr>
+</tbody>
+</table>
+<h3 id="通用字段">通用字段</h3>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Cache-Control</td>
+<td>控制缓存行为，如 <code>max-age=3600</code> 表示缓存 1 小时有效</td>
+</tr>
+<tr>
+<td>Connection</td>
+<td>管理 TCP 连接的复用方式，HTTP/1.1 默认 <code>keep-alive</code></td>
+</tr>
+<tr>
+<td>Date</td>
+<td>报文生成的日期时间（GMT 格式）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="实体字段">实体字段</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>字段</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Content-Type</td>
+<td>声明消息体的媒体类型，如
+<code>text/html</code>、<code>application/json</code></td>
+</tr>
+<tr>
+<td>Content-Length</td>
+<td>消息体的字节数，用于判断响应是否接收完整</td>
+</tr>
+<tr>
+<td>Content-Encoding</td>
+<td>消息体的压缩编码方式，如 gzip、deflate</td>
+</tr>
+<tr>
+<td>Last-Modified</td>
+<td>资源最后一次修改的时间，配合协商缓存使用</td>
+</tr>
+</tbody>
+</table>
+<p>这四类字段的划分逻辑是：请求字段只出现在请求报文里、描述客户端自身特性；响应字段只出现在响应报文里、描述服务端特性；通用字段两边都能用、控制传输层面的行为（连接管理、缓存策略）；实体字段描述的是消息体本身的元信息（类型、大小、编码），不管这个消息体是出现在请求还是响应中。</p>
+<h2 id="六tcp-三次握手">六、TCP 三次握手</h2>
+<p>三次握手的目的是在正式传输数据之前，让客户端和服务器互相确认”我能发、你能收，你能发、我能收”，同时同步双方的初始序列号（ISN，Initial
+Sequence Number）。</p>
+<pre><code>客户端(Client)                                服务器(Server)
+    |                                              |
+    |   CLOSED                              LISTEN |
+    |                                              |
+    |------ 第一次握手: SYN=1, seq=x -------------&gt;|
+    |   SYN-SENT                                   |
+    |                                     SYN-RCVD  |
+    |&lt;---- 第二次握手: SYN=1,ACK=1, ------------- --|
+    |            seq=y, ack=x+1                    |
+    |                                               |
+    |------ 第三次握手: ACK=1, --------------------&gt;|
+    |            seq=x+1, ack=y+1                  |
+    |   ESTABLISHED                    ESTABLISHED  |
+    |                                               |</code></pre>
+<p><strong>第一次握手</strong>：客户端随机生成一个初始序列号
+<code>x</code>，将 SYN 标志位置为 1，发送 SYN
+报文（不携带数据，但会消耗一个序号），自身状态从 <code>CLOSED</code>
+变为 <code>SYN-SENT</code>。</p>
+<p><strong>第二次握手</strong>：服务器收到 SYN
+报文后，随机生成自己的初始序列号 <code>y</code>，将 SYN 和 ACK
+标志位都置为 1，确认号（ack）设为 <code>x + 1</code>（表示”你的 x
+号字节我已确认收到，下次请从 x+1 开始发”），发送这个 SYN-ACK
+报文，自身状态从 <code>LISTEN</code> 变为 <code>SYN-RCVD</code>。</p>
+<p><strong>第三次握手</strong>：客户端收到 SYN-ACK 后，序号设为
+<code>x + 1</code>，确认号设为 <code>y + 1</code>，将 ACK 标志位置为
+1，发送这个 ACK 报文（此时可以顺带携带业务数据），自身状态从
+<code>SYN-SENT</code> 变为 <code>ESTABLISHED</code>。服务器收到这个 ACK
+后，状态从 <code>SYN-RCVD</code> 变为
+<code>ESTABLISHED</code>。至此双方都确认连接建立完成，可以开始正常的数据传输。</p>
+<table>
+<thead>
+<tr>
+<th>端点</th>
+<th>初始状态</th>
+<th>第 1 次握手后</th>
+<th>第 2 次握手后</th>
+<th>第 3 次握手后</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>客户端</td>
+<td>CLOSED</td>
+<td>SYN-SENT</td>
+<td>SYN-SENT</td>
+<td>ESTABLISHED</td>
+</tr>
+<tr>
+<td>服务器</td>
+<td>LISTEN</td>
+<td>LISTEN</td>
+<td>SYN-RCVD</td>
+<td>ESTABLISHED</td>
+</tr>
+</tbody>
+</table>
+<h3
+id="为什么必须是三次不能是两次或四次">为什么必须是三次，不能是两次或四次</h3>
+<p><strong>两次握手不够</strong>：如果只握手两次（客户端发 SYN，服务器回
+SYN-ACK
+就直接认为连接建立），会有一个经典问题——已经失效的历史连接请求可能造成服务器资源浪费。设想这样一个场景：客户端发出第一个
+SYN
+报文，但因为网络拥塞被卡在某个中间节点，迟迟到不了服务器；客户端等待超时后，重新发送了第二个
+SYN，这次正常完成两次握手、数据传完、连接正常释放。过了一段时间，那个滞留在网络里的第一个”旧”
+SYN
+终于姗姗来迟到达了服务器。如果只需要两次握手就能建立连接，服务器会误以为这是一个新的连接请求，回复
+SYN-ACK
+并进入等待客户端发数据的状态——但客户端根本不知道这个连接的存在，永远不会给它发数据，服务器就会白白占用资源空等下去。三次握手加了这一步验证：服务器发出
+SYN-ACK 后，必须等到客户端的第三次 ACK
+才真正建立连接；对于这个迟到的旧连接，客户端收到服务器的 SYN-ACK
+后会因为不认识这个连接而直接丢弃或回复 RST，服务器等不到第三次
+ACK，超时后自行放弃这个半连接，不会产生资源浪费。</p>
+<p><strong>三次握手同步了双方的初始序列号</strong>：TCP
+是全双工的，两个方向的数据流各自独立编号，因此双方都需要各自生成并让对方确认自己的
+ISN。第一次握手客户端把 <code>x</code> 告诉服务器，第二次握手服务器确认
+<code>x</code> 的同时把自己的 <code>y</code>
+告诉客户端，第三次握手客户端确认
+<code>y</code>——正好三次握手就能让双方都完成”我的 ISN
+你收到了”的双向确认，这是保证后续数据按序号正确排列、去重的前提。</p>
+<p><strong>四次握手是多余的</strong>：三次握手已经完成了双向的”发送/接收能力确认”外加”双向
+ISN
+同步”，这两件事三次交互就能覆盖，第四次握手不会带来额外的可靠性收益，只会多引入一个
+RTT 的建连延迟，没有必要。</p>
+<h2 id="七tcp-四次挥手">七、TCP 四次挥手</h2>
+<p>挥手比握手多一次，本质原因是 TCP
+连接是全双工的，两个方向的关闭是独立的——挥手不是”同时关闭两个方向”，而是”先关一个方向，再关另一个方向”，中间服务器那侧可能还有数据没发完。</p>
+<pre><code>客户端(Client)                                服务器(Server)
+    |   ESTABLISHED                    ESTABLISHED  |
+    |                                               |
+    |------ 第一次挥手: FIN=1, seq=u --------------&gt;|
+    |   FIN-WAIT-1                                  |
+    |                                    CLOSE-WAIT  |
+    |&lt;---- 第二次挥手: ACK=1, ---------------------  |
+    |            seq=v, ack=u+1                    |
+    |   FIN-WAIT-2                                  |
+    |            (服务器可能仍在发送剩余数据)         |
+    |                                               |
+    |&lt;---- 第三次挥手: FIN=1,ACK=1, ----------------|
+    |            seq=w, ack=u+1                    |
+    |   TIME-WAIT                          LAST-ACK  |
+    |                                               |
+    |------ 第四次挥手: ACK=1, --------------------&gt;|
+    |            seq=u+1, ack=w+1                  |
+    |   (等待 2MSL)                          CLOSED  |
+    |                                               |
+    |   CLOSED                                      |</code></pre>
+<p><strong>第一次挥手</strong>：客户端（主动关闭方）数据发送完毕，发送
+FIN=1、seq=u 的报文段，表示”我这边没有数据要发了”，自身状态从
+<code>ESTABLISHED</code> 变为
+<code>FIN-WAIT-1</code>。这个状态下客户端仍然可以接收服务器发来的数据。</p>
+<p><strong>第二次挥手</strong>：服务器收到 FIN 后，立即回复一个
+ACK=1、seq=v、ack=u+1 的确认报文，自身状态从 <code>ESTABLISHED</code>
+变为 <code>CLOSE-WAIT</code>。客户端收到这个 ACK 后，状态从
+<code>FIN-WAIT-1</code> 变为
+<code>FIN-WAIT-2</code>。此时，客户端到服务器方向的连接已经关闭，但服务器到客户端方向可能还有数据没发完。</p>
+<p><strong>第三次挥手</strong>：服务器把自己剩余的数据发送完毕后，才发送
+FIN=1、ACK=1、seq=w、ack=u+1
+的报文段，表示”我这边现在也发完了”，自身状态从 <code>CLOSE-WAIT</code>
+变为 <code>LAST-ACK</code>。</p>
+<p><strong>第四次挥手</strong>：客户端收到服务器的 FIN 后，回复
+ACK=1、seq=u+1、ack=w+1 的确认报文，自身状态从 <code>FIN-WAIT-2</code>
+变为 <code>TIME-WAIT</code>，并等待 2MSL（Maximum Segment
+Lifetime，报文最大生存时间）后才真正进入
+<code>CLOSED</code>。服务器收到这个最终的 ACK 后，直接进入
+<code>CLOSED</code> 状态。</p>
+<h3 id="为什么是四次而不是三次">为什么是四次而不是三次</h3>
+<p>第二次挥手（服务器对客户端 FIN 的 ACK）和第三次挥手（服务器自己的
+FIN）没法合并成一次，原因是服务器收到客户端的 FIN
+时，往往还有数据没发送完——它必须先应答对方”你的关闭请求我收到了”（第二次挥手），但不能立刻宣布自己也关闭（那意味着第三次挥手要等所有数据发完才能发出）。这中间的时间差，正是
+<code>CLOSE-WAIT</code> 状态存在的意义。如果强行把 ACK 和 FIN
+合并成一次挥手，服务器就必须在收到对方 FIN
+的瞬间同时确定自己也没有数据要发了，这在实际场景里往往做不到，所以 TCP
+挥手天然是四次而非三次（除非服务器凑巧在收到 FIN
+时也刚好没有数据要发，此时 ACK 和 FIN
+可以捎带在一起发送，退化成三次挥手，但这是特例不是常规流程）。</p>
+<p>第四次挥手也是必须的：如果没有这最后的 ACK，服务器发出 FIN
+后无法知道对方是否收到，一旦这个 FIN
+丢失且没有重传确认机制，服务器会永远停留在 <code>LAST-ACK</code>
+状态，无法正常释放连接。</p>
+<h2 id="八time_wait-状态">八、TIME_WAIT 状态</h2>
+<p>TIME_WAIT 是主动关闭连接的一方，在完成四次挥手的最后一步（发出最终
+ACK）之后所停留的状态，会持续 2MSL 的时长（Linux 默认对应 60
+秒左右）才真正转为 CLOSED。</p>
+<h3 id="作用">作用</h3>
+<p><strong>确保最后一个 ACK 能可靠送达</strong>：如果这个最终 ACK
+在网络中丢失，被动关闭方（服务器）会因为收不到确认而重传它的 FIN
+报文。如果客户端发完 ACK 立刻退出、不保留任何状态，就无法响应这个重传的
+FIN，服务器就会一直等不到确认、长期滞留在 LAST-ACK。TIME_WAIT
+期间客户端仍然”在场”，能够重新应答收到的重传 FIN，重新发一次 ACK。</p>
+<p><strong>清除网络中滞留的旧数据包</strong>：网络里可能还有这条连接之前发出、尚未到达或者被路由延误的数据包。2MSL
+的等待时间足以让这些滞留包因为超过其最大生存时间而被网络丢弃，避免它们在这条连接关闭之后，被一个使用相同四元组（源
+IP、源端口、目的 IP、目的端口）的新连接误收，造成数据错乱。</p>
+<p><strong>给内核充分的时间清理连接资源</strong>：包括端口、缓冲区、连接跟踪表项等，等
+TIME_WAIT 结束后才彻底释放。</p>
+<h3 id="为什么是-2-倍-msl-而不是-1-倍">为什么是 2 倍 MSL 而不是 1
+倍</h3>
+<p>第一个 MSL 保证客户端发出的最后那个 ACK 有充分时间到达服务器；第二个
+MSL 用来覆盖”如果那个 ACK 丢了、服务器重传 FIN”这种情况——重传的 FIN
+也需要一个 MSL 的时间抵达客户端。两个 MSL
+加起来，覆盖了”最坏情况下一来一回都要重试一次”的时间窗口。</p>
+<h3 id="如果没有-time_wait-会怎样">如果没有 TIME_WAIT 会怎样</h3>
+<p>主动关闭方一发完最后的 ACK
+就立刻释放连接、复用端口，可能导致两个问题：一是服务器那边的 FIN
+万一丢失需要重传时，客户端已经不认识这个连接了，服务器可能长期卡在
+LAST-ACK
+无法正常关闭；二是如果本地端口很快被一个新连接复用，网络中滞留的旧连接数据包可能会被新连接错误地当作自己的数据接收，造成数据污染。</p>
+<h3 id="time_wait-过多的危害及应对">TIME_WAIT 过多的危害及应对</h3>
+<p>一台机器的可用临时端口大约只有 2.8 万个左右（默认范围通常是
+32768~60999），如果某台服务器频繁发起大量短连接且都是主动关闭方，会在短时间内堆积大量
+TIME_WAIT 状态占用端口，导致新连接无法分配到可用端口而创建失败；同时每个
+TIME_WAIT 连接都占用一定的内核内存，数量过多也会拖累系统整体性能。</p>
+<p>常见的解决办法：</p>
+<pre><code># 内核参数调整
+net.ipv4.tcp_tw_reuse = 1            # 允许将处于 TIME_WAIT 的端口重新用于新连接
+net.ipv4.tcp_max_tw_buckets = 262144 # 提高 TIME_WAIT 数量上限
+net.ipv4.tcp_fin_timeout = 60        # 控制 FIN_WAIT_2 的超时时间</code></pre>
+<ul>
+<li>应用层用 <code>SO_REUSEADDR</code> 选项让新的 socket 可以绑定处于
+TIME_WAIT 的地址端口。</li>
+<li>尽量使用长连接（连接池）代替频繁的短连接，从源头减少挥手次数。</li>
+<li>用负载均衡把连接压力分散到多台服务器实例上。</li>
+</ul>
+<p>Linux 默认 2MSL 约 60 秒，Windows 默认更长（约 240
+秒），不同操作系统的取值不完全一致，但原理相同。</p>
+<h2 id="九tcp-如何保证可靠传输">九、TCP 如何保证可靠传输</h2>
+<p>TCP
+的”可靠”体现在保证数据不丢失、不重复、按序到达、且没有传输错误。这是靠多个机制协同实现的：</p>
+<p><strong>序列号（Sequence Number）</strong>：TCP
+把应用层交下来的数据看作一串连续的字节流，给每个字节编上逻辑序号；建立连接时双方各自协商出一个初始序列号（ISN），此后每个报文段的头部都携带”该报文段第一个字节的序号”。有了序列号，接收方就能把乱序到达的报文段重新排序、识别出哪些字节缺失（触发重传）、也能识别重复到达的报文段并丢弃。</p>
+<p><strong>确认应答（ACK）</strong>：接收方每收到数据就回一个带确认号的
+ACK，确认号表示”这个序号之前的所有字节我都收到了”，这是一种累积确认机制。发送方靠这个确认号判断哪些数据已经安全送达，还没被确认的数据就留在重传队列里。</p>
+<p><strong>超时重传（Timeout
+Retransmission）</strong>：发送每个报文段时都会启动一个重传计时器（RTO，Retransmission
+Timeout），如果在计时器到期前收到了对应的 ACK
+就撤销计时器；如果计时器超时仍未收到确认，就判定该报文段丢失并重新发送。RTO
+的具体数值不是固定的，是基于对网络往返时延（RTT）的动态测量计算出来的。</p>
+<p><strong>快速重传（Fast
+Retransmit）</strong>：接收方一旦收到了序号不连续、比期望值大的失序报文段，会立即回复一个重复的
+ACK（确认号仍是它期望收到的那个缺失字节）。发送方一旦连续收到 3
+个或以上相同的重复
+ACK，就直接重传对应报文段，不用等超时计时器走完，缩短了恢复时间。</p>
+<p><strong>校验和（Checksum）</strong>：TCP
+报文段的头部和数据部分会一起计算出一个校验和字段。接收方收到后重新计算一遍并比对，如果结果不一致就说明传输过程中出现了比特错误，直接丢弃该报文段（等同于没收到,依赖发送方的超时重传机制来补救）。</p>
+<p><strong>连接管理</strong>：三次握手确保双方在真正传数据之前，已经确认彼此的收发能力正常并同步好了初始序列号；四次挥手确保双方各自的数据都发送完毕才断开连接。这为可靠传输提供了一个”双方状态已知”的前提。</p>
+<p><strong>流量控制（滑动窗口）</strong>：接收方通过报文段头部的窗口字段（接收窗口
+rwnd）告诉发送方自己还有多少缓冲空间，发送方据此调整发送速率，避免把接收方的缓冲区冲爆导致丢包。</p>
+<p><strong>拥塞控制</strong>：发送方还要考虑整个网络路径的承载能力，通过维护一个拥塞窗口（cwnd）动态调整发送速率，详见下一节。</p>
+<p>这几类机制的分工可以这样理解：可靠传输本身（序列号、ACK、重传、校验和）处理的是”已经发生的错误”，是端到端的事后补救；流量控制处理的是接收端来不及处理的问题，是发送方和接收方之间点对点的事前预防；拥塞控制处理的是整个网络路径承载力的问题，是发送方对网络全局状况的事前自适应。三者相互支撑：流量控制和拥塞控制通过减少丢包，减轻了重传机制的负担；而重传机制依赖的信号（ACK、重复
+ACK、超时）本身就是拥塞控制算法据以调整窗口的输入。</p>
+<h2 id="十拥塞控制">十、拥塞控制</h2>
+<p>拥塞控制是发送方根据对网络拥塞状况的估计，动态调整自己发送速率的一套机制，核心变量是拥塞窗口
+cwnd。它和流量控制经常被放在一起比较，但控制的对象完全不同：</p>
+<table>
+<colgroup>
+<col style="width: 23%" />
+<col style="width: 38%" />
+<col style="width: 38%" />
+</colgroup>
+<thead>
+<tr>
+<th>维度</th>
+<th>拥塞控制</th>
+<th>流量控制</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>防止对象</td>
+<td>压垮网络（路由器、链路）</td>
+<td>压垮接收方的缓冲区</td>
+</tr>
+<tr>
+<td>控制变量</td>
+<td>拥塞窗口 cwnd</td>
+<td>接收窗口 rwnd</td>
+</tr>
+<tr>
+<td>判断依据</td>
+<td>丢包、时延增大等网络反馈信号</td>
+<td>接收方主动上报的剩余缓冲空间</td>
+</tr>
+</tbody>
+</table>
+<p>实际发送方一次能发出去的数据量，取两者中更小的那个：</p>
+<pre><code>实际发送窗口 = min(cwnd, rwnd)</code></pre>
+<p>拥塞控制包含四个经典阶段（合称拥塞控制算法）：</p>
+<p><strong>慢启动（Slow
+Start）</strong>：连接刚建立，或者发生了超时重传（判定为严重拥塞）之后，cwnd
+从一个较小值开始（通常是 1~10 个 MSS），此后每收到一个 ACK 就把 cwnd
+增加 1 个 MSS——效果是每经过一个 RTT，cwnd
+大约翻一倍,呈指数增长。这个阶段持续到 cwnd 达到
+ssthresh（慢启动门限）为止。</p>
+<p><strong>拥塞避免（Congestion Avoidance）</strong>：一旦 cwnd 达到
+ssthresh，算法从指数增长切换为线性增长——每经过一个 RTT，cwnd 只增加 1 个
+MSS，而不是翻倍。这个阶段的目的是在窗口已经比较大、接近网络容量上限时更谨慎地试探，避免猛增导致拥塞。这个阶段持续到检测到丢包为止。</p>
+<p><strong>快重传（Fast
+Retransmit）</strong>：接收方一旦收到失序报文段就立刻发重复
+ACK，发送方连续收到 3 个或以上重复 ACK
+时，不必等待超时计时器,直接重传丢失的报文段——这通常意味着只是单个报文段丢失，而不是严重的网络拥塞。</p>
+<p><strong>快恢复（Fast Recovery）</strong>：执行完快重传之后，发送方把
+ssthresh 设为当前 cwnd 的一半，同时把 cwnd 也直接降到这个新 ssthresh
+附近（而不是像超时那样退回到很小的初始值重新慢启动），然后按拥塞避免的线性规则继续增长。这样处理的好处是,网络其实还有相当的承载能力时,不需要把发送速率打回原形,能更快恢复到较高的吞吐量。</p>
+<p>这四个阶段的衔接逻辑：慢启动指数增长到 ssthresh →
+切换到拥塞避免线性增长 → 检测到丢包（重复 ACK 触发快重传 +
+快恢复，或超时触发重新慢启动）→ 循环。</p>
+<p>现代 Linux 系统默认使用的拥塞控制算法是
+CUBIC（基于三次方程曲线调整窗口增长速度,更适应高带宽高延迟网络）；Google
+提出的 BBR
+算法则是另一条路线,不依赖丢包作为拥塞信号,而是直接建模带宽和往返时延来决定发送速率,在丢包率较高但带宽充足的网络里（如移动网络）比传统基于丢包的算法表现更好。</p>
+<h2 id="十一tcp-keepalive-与-http-keep-alive">十一、TCP Keepalive 与
+HTTP Keep-Alive</h2>
+<p>这两个名字很像的机制，工作在完全不同的协议层，目的也不同。</p>
+<table>
+<colgroup>
+<col style="width: 15%" />
+<col style="width: 40%" />
+<col style="width: 45%" />
+</colgroup>
+<thead>
+<tr>
+<th>维度</th>
+<th>TCP Keepalive</th>
+<th>HTTP Keep-Alive</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>所属层次</td>
+<td>传输层（TCP协议本身）</td>
+<td>应用层（HTTP协议特性）</td>
+</tr>
+<tr>
+<td>目的</td>
+<td>探测长期空闲的连接对端是否还存活</td>
+<td>让一个 TCP 连接承载多个 HTTP 请求/响应，避免反复握手</td>
+</tr>
+<tr>
+<td>管理方</td>
+<td>操作系统内核</td>
+<td>HTTP 客户端和服务器程序</td>
+</tr>
+<tr>
+<td>触发时机</td>
+<td>连接长时间（通常是几小时量级）没有数据交互</td>
+<td>一次 HTTP 请求/响应完成之后</td>
+</tr>
+<tr>
+<td>控制方式</td>
+<td>内核参数、socket 选项（如 <code>SO_KEEPALIVE</code>）</td>
+<td>HTTP <code>Connection</code> 请求头、服务器配置</td>
+</tr>
+<tr>
+<td>传输内容</td>
+<td>空的探测包（纯 ACK 段）</td>
+<td>真实的 HTTP 请求和响应数据</td>
+</tr>
+</tbody>
+</table>
+<p><strong>TCP Keepalive</strong>
+对应用程序完全透明：当一条连接闲置超过设定阈值,内核会自动发出探测包,如果对端仍然存活会回应
+ACK；如果连续几次探测都得不到回应,内核判定对端已经不可达,关闭这条连接并释放资源。它解决的问题是”这条连接看起来还开着,但对面到底还在不在”。</p>
+<p><strong>HTTP Keep-Alive</strong>
+是应用层主动决定”这次响应发完了,先别关 TCP
+连接,留着给下一个请求用”，通过 <code>Connection: keep-alive</code>
+头声明。它省掉的是每次请求都重新走一遍三次握手（以及 HTTPS 下的 TLS
+握手）的开销，这个连接通常在几秒到几分钟的量级后就会被主动关闭（由服务器的超时配置决定）,时间尺度远比
+TCP Keepalive 短。</p>
+<p>两者是分层配合的关系：HTTP Keep-Alive
+负责应用层面”连接复用”的日常调度，时间尺度短；TCP Keepalive
+是传输层的兜底保险，只在连接真的长时间空闲、又没有走正常关闭流程时才会介入探测，时间尺度长得多——正常情况下
+HTTP 层的超时机制会先于 TCP Keepalive 生效，把连接关掉。</p>
+<p><a href="index.html">返回索引</a></p>
+</div>
+</body>
+</html>

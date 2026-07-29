@@ -102,7 +102,9 @@
 <a href="../oodlld/index.html">OOD/LLD</a>
 <a href="../container/index.html">容器对照</a>
 <a href="../cpp/index.html" style="color:var(--accent-dark);font-weight:700">C++ 教程</a>
-<a href="../baguwen/index.html">面试八股</a></div></div>
+<a href="../baguwen/index.html">面试八股</a>
+<a href="../csbase/index.html">计算机基础</a>
+<a href="../javaeco/index.html">Java 生态</a></div></div>
 <div class="wrap">
 <nav id="TOC" role="doc-toc">
 <ul>
@@ -125,14 +127,19 @@ id="toc-六多态与虚函数机制vtable-vptr">六、多态与虚函数机制:v
 vptr</a></li>
 <li><a href="#七纯虚函数与抽象类overridefinal"
 id="toc-七纯虚函数与抽象类overridefinal">七、纯虚函数与抽象类、<code>override</code>/<code>final</code></a></li>
+<li><a href="#八重载与重写的区别"
+id="toc-八重载与重写的区别">八、重载与重写的区别</a></li>
+<li><a href="#九深拷贝与浅拷贝"
+id="toc-九深拷贝与浅拷贝">九、深拷贝与浅拷贝</a></li>
+<li><a href="#十单例模式的实现"
+id="toc-十单例模式的实现">十、单例模式的实现</a></li>
 </ul></li>
 </ul>
 </nav>
 <h1 id="面向对象编程">面向对象编程</h1>
 <p>本章覆盖 C++
-面向对象的核心机制:类定义与访问控制、各种构造函数、析构函数、<code>this</code>
-指针、静态成员、<code>friend</code>、继承(单继承/多继承/虚继承)、多态的底层实现(vtable/vptr)、抽象类,以及
-<code>override</code>/<code>final</code>。</p>
+面向对象的核心机制:类定义与访问控制、各种构造函数(含继承构造)、析构函数、<code>this</code>
+指针、静态成员、<code>friend</code>、继承(单继承/多继承/虚继承)、多态的底层实现(vtable/vptr)、抽象类、<code>override</code>/<code>final</code>,以及重载与重写的辨析、深拷贝与浅拷贝、单例模式的实现演进。</p>
 <h2 id="一类的定义与访问控制">一、类的定义与访问控制</h2>
 <div class="sourceCode" id="cb1"><pre
 class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;iostream&gt;</span></span>
@@ -232,54 +239,93 @@ class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb4-1"><a href="#c
 <li><code>explicit</code> 修饰单参数构造函数可以阻止隐式类型转换,详见第
 5 章。</li>
 </ul>
+<p><strong>拷贝构造函数的参数为什么必须是
+<code>const T&amp;</code>,不能按值传递</strong>:如果按值传递,调用拷贝构造函数本身就需要先拷贝一次实参来构造这个形参——而构造这个形参又要再调用一次拷贝构造函数,无限递归,编译器会直接拒绝这种声明。用
+<code>const</code>
+引用则一次性解决两个问题:不产生任何额外拷贝;同时能绑定非 const
+左值、const 左值、以及临时对象(右值),且向调用方承诺不会修改源对象。</p>
+<p><strong>编译器什么时候不生成默认构造函数</strong>:只要类里手动定义了任意一个构造函数(哪怕只是一个参数化构造函数),编译器就不再自动合成无参默认构造函数;如果仍然需要一个无参版本,必须显式写
+<code>ClassName() = default;</code>。</p>
+<p><strong>继承构造函数</strong>(C++11):派生类如果只是想直接复用基类的构造函数集合,不需要逐个手写转发,可以用
+<code>using</code> 声明一次性引入:</p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Base <span class="op">{</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span><span class="op">:</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    Base<span class="op">(</span><span class="dt">int</span> x<span class="op">)</span> <span class="op">:</span> <span class="va">x_</span><span class="op">(</span>x<span class="op">)</span> <span class="op">{}</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="kw">protected</span><span class="op">:</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> <span class="va">x_</span><span class="op">;</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Derived <span class="op">:</span> <span class="kw">public</span> Base <span class="op">{</span></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span><span class="op">:</span></span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">using</span> Base<span class="op">::</span>Base<span class="op">;</span>   <span class="co">// 继承构造函数:Derived(int) 直接复用 Base(int) 的实现</span></span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>Derived d<span class="op">(</span><span class="dv">42</span><span class="op">);</span>   <span class="co">// 等价于隐式定义了 Derived(int x) : Base(x) {}</span></span></code></pre></div>
+<p>这只是省去了手写透传构造函数的模板代码,派生类新增的成员如果需要额外初始化,仍要另外处理(继承来的构造函数不会初始化派生类自己新增的非静态成员,只会走它们的默认初始化)。</p>
 <h2 id="三析构函数">三、析构函数</h2>
 <p>析构函数(<code>~ClassName()</code>)在对象生命周期结束时自动调用,负责释放资源(见上例);基类析构函数如果可能被多态删除(通过基类指针
 <code>delete</code>),<strong>必须声明为
 <code>virtual</code></strong>,否则只会调用基类析构函数,派生类的资源被泄漏(第
 5 章会展开对象生命周期管理的细节)。</p>
+<p><strong>构造函数为什么不能是虚函数</strong>:虚函数调用依赖对象已经就绪的
+vptr(见第六节),而 vptr
+本身正是在构造函数执行过程中才被设置起来的——构造函数的职责是”把对象建出来”,虚函数机制的前提是”对象已经存在”,两者在时序上互相矛盾,语言干脆禁止构造函数声明为
+<code>virtual</code>。析构函数则相反,越是可能被多态删除的基类,越应该把析构函数声明为虚。</p>
+<p><strong>在构造函数或析构函数体内调用虚函数会怎样</strong>:语法上可以通过编译,但不会表现出多态。构造期间,对象的动态类型还停留在”当前正在执行构造函数的这一层”,vptr
+指向的是当前类的 vtable,而不是最终派生类的
+vtable,所以调用到的永远是当前类自己的版本;析构期间同理,一旦派生类的析构函数已经执行完毕、开始执行基类析构函数,vptr
+又会退回指向基类的
+vtable。这不是”没实现好”,而是刻意的设计——对象在构造/析构的这一层完成之前,其派生类那部分状态要么还没初始化、要么已经析构完毕,允许多态调用到一个状态不完整的派生类版本反而更危险。</p>
+<p><strong>析构函数里能不能抛异常</strong>:能通过编译,但极度危险,实践中应当避免。如果这次析构恰好发生在另一个异常引发的栈展开(stack
+unwinding)过程中,析构函数内部再抛出第二个异常会导致 C++
+运行时无法决定该传播哪一个异常,直接调用 <code>std::terminate</code>
+终止整个程序,不会被任何上层 <code>catch</code>
+捕获。因此析构函数内部涉及的所有操作(包括调用可能抛异常的函数)都应该用
+<code>try/catch</code> 吞掉,绝不允许异常穿出析构函数边界。</p>
 <h2 id="四this-指针静态成员friend">四、<code>this</code>
 指针、静态成员、<code>friend</code></h2>
-<div class="sourceCode" id="cb6"><pre
-class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;iostream&gt;</span></span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Counter <span class="op">{</span></span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span><span class="op">:</span></span>
-<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>    Counter<span class="op">()</span> <span class="op">{</span> <span class="op">++</span><span class="va">count_</span><span class="op">;</span> <span class="op">}</span>                  <span class="co">// 每构造一个对象,静态成员 +1</span></span>
-<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">~</span>Counter<span class="op">()</span> <span class="op">{</span> <span class="op">--</span><span class="va">count_</span><span class="op">;</span> <span class="op">}</span></span>
-<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>    Counter<span class="op">&amp;</span> setValue<span class="op">(</span><span class="dt">int</span> v<span class="op">)</span> <span class="op">{</span>                 <span class="co">// 返回 *this 引用,支持链式调用</span></span>
-<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>        <span class="va">value_</span> <span class="op">=</span> v<span class="op">;</span></span>
-<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="op">*</span><span class="kw">this</span><span class="op">;</span>                           <span class="co">// this 是指向当前对象的指针,*this 是对象本身</span></span>
-<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>    Counter<span class="op">&amp;</span> add<span class="op">(</span><span class="dt">int</span> v<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>        <span class="va">value_</span> <span class="op">+=</span> v<span class="op">;</span></span>
-<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="op">*</span><span class="kw">this</span><span class="op">;</span></span>
-<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> value<span class="op">()</span> <span class="at">const</span> <span class="op">{</span> <span class="cf">return</span> <span class="va">value_</span><span class="op">;</span> <span class="op">}</span></span>
-<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a>    <span class="at">static</span> <span class="dt">int</span> count<span class="op">()</span> <span class="op">{</span> <span class="cf">return</span> <span class="va">count_</span><span class="op">;</span> <span class="op">}</span>      <span class="co">// 静态成员函数:不依赖具体对象,只能访问静态成员</span></span>
-<span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a>    <span class="kw">friend</span> <span class="dt">void</span> dump<span class="op">(</span><span class="at">const</span> Counter<span class="op">&amp;</span> c<span class="op">);</span>          <span class="co">// 友元函数声明:能访问 private 成员</span></span>
-<span id="cb6-21"><a href="#cb6-21" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-22"><a href="#cb6-22" aria-hidden="true" tabindex="-1"></a><span class="kw">private</span><span class="op">:</span></span>
-<span id="cb6-23"><a href="#cb6-23" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> <span class="va">value_</span> <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
-<span id="cb6-24"><a href="#cb6-24" aria-hidden="true" tabindex="-1"></a>    <span class="at">static</span> <span class="dt">int</span> <span class="va">count_</span><span class="op">;</span>                            <span class="co">// 静态成员变量声明:所有对象共享一份</span></span>
-<span id="cb6-25"><a href="#cb6-25" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
-<span id="cb6-26"><a href="#cb6-26" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-27"><a href="#cb6-27" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> Counter<span class="op">::</span><span class="va">count_</span> <span class="op">=</span> <span class="dv">0</span><span class="op">;</span>                           <span class="co">// 静态成员变量的定义(在类外分配存储,必须写一次)</span></span>
-<span id="cb6-28"><a href="#cb6-28" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-29"><a href="#cb6-29" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> dump<span class="op">(</span><span class="at">const</span> Counter<span class="op">&amp;</span> c<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb6-30"><a href="#cb6-30" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;value_=&quot;</span> <span class="op">&lt;&lt;</span> c<span class="op">.</span><span class="va">value_</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span>     <span class="co">// friend 可以访问 private 成员</span></span>
-<span id="cb6-31"><a href="#cb6-31" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="cb6-32"><a href="#cb6-32" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-33"><a href="#cb6-33" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> main<span class="op">()</span> <span class="op">{</span></span>
-<span id="cb6-34"><a href="#cb6-34" aria-hidden="true" tabindex="-1"></a>    Counter a<span class="op">,</span> b<span class="op">;</span></span>
-<span id="cb6-35"><a href="#cb6-35" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;count=&quot;</span> <span class="op">&lt;&lt;</span> Counter<span class="op">::</span>count<span class="op">()</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="co">// 2</span></span>
-<span id="cb6-36"><a href="#cb6-36" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-37"><a href="#cb6-37" aria-hidden="true" tabindex="-1"></a>    a<span class="op">.</span>setValue<span class="op">(</span><span class="dv">10</span><span class="op">).</span>add<span class="op">(</span><span class="dv">5</span><span class="op">).</span>add<span class="op">(</span><span class="dv">1</span><span class="op">);</span>                       <span class="co">// 链式调用,依赖 *this 的引用返回</span></span>
-<span id="cb6-38"><a href="#cb6-38" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;a.value=&quot;</span> <span class="op">&lt;&lt;</span> a<span class="op">.</span>value<span class="op">()</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span>        <span class="co">// 16</span></span>
-<span id="cb6-39"><a href="#cb6-39" aria-hidden="true" tabindex="-1"></a>    dump<span class="op">(</span>a<span class="op">);</span></span>
-<span id="cb6-40"><a href="#cb6-40" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;iostream&gt;</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Counter <span class="op">{</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span><span class="op">:</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>    Counter<span class="op">()</span> <span class="op">{</span> <span class="op">++</span><span class="va">count_</span><span class="op">;</span> <span class="op">}</span>                  <span class="co">// 每构造一个对象,静态成员 +1</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">~</span>Counter<span class="op">()</span> <span class="op">{</span> <span class="op">--</span><span class="va">count_</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>    Counter<span class="op">&amp;</span> setValue<span class="op">(</span><span class="dt">int</span> v<span class="op">)</span> <span class="op">{</span>                 <span class="co">// 返回 *this 引用,支持链式调用</span></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>        <span class="va">value_</span> <span class="op">=</span> v<span class="op">;</span></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="op">*</span><span class="kw">this</span><span class="op">;</span>                           <span class="co">// this 是指向当前对象的指针,*this 是对象本身</span></span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>    Counter<span class="op">&amp;</span> add<span class="op">(</span><span class="dt">int</span> v<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>        <span class="va">value_</span> <span class="op">+=</span> v<span class="op">;</span></span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="op">*</span><span class="kw">this</span><span class="op">;</span></span>
+<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> value<span class="op">()</span> <span class="at">const</span> <span class="op">{</span> <span class="cf">return</span> <span class="va">value_</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a>    <span class="at">static</span> <span class="dt">int</span> count<span class="op">()</span> <span class="op">{</span> <span class="cf">return</span> <span class="va">count_</span><span class="op">;</span> <span class="op">}</span>      <span class="co">// 静态成员函数:不依赖具体对象,只能访问静态成员</span></span>
+<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a>    <span class="kw">friend</span> <span class="dt">void</span> dump<span class="op">(</span><span class="at">const</span> Counter<span class="op">&amp;</span> c<span class="op">);</span>          <span class="co">// 友元函数声明:能访问 private 成员</span></span>
+<span id="cb7-21"><a href="#cb7-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-22"><a href="#cb7-22" aria-hidden="true" tabindex="-1"></a><span class="kw">private</span><span class="op">:</span></span>
+<span id="cb7-23"><a href="#cb7-23" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> <span class="va">value_</span> <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb7-24"><a href="#cb7-24" aria-hidden="true" tabindex="-1"></a>    <span class="at">static</span> <span class="dt">int</span> <span class="va">count_</span><span class="op">;</span>                            <span class="co">// 静态成员变量声明:所有对象共享一份</span></span>
+<span id="cb7-25"><a href="#cb7-25" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb7-26"><a href="#cb7-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-27"><a href="#cb7-27" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> Counter<span class="op">::</span><span class="va">count_</span> <span class="op">=</span> <span class="dv">0</span><span class="op">;</span>                           <span class="co">// 静态成员变量的定义(在类外分配存储,必须写一次)</span></span>
+<span id="cb7-28"><a href="#cb7-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-29"><a href="#cb7-29" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> dump<span class="op">(</span><span class="at">const</span> Counter<span class="op">&amp;</span> c<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb7-30"><a href="#cb7-30" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;value_=&quot;</span> <span class="op">&lt;&lt;</span> c<span class="op">.</span><span class="va">value_</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span>     <span class="co">// friend 可以访问 private 成员</span></span>
+<span id="cb7-31"><a href="#cb7-31" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb7-32"><a href="#cb7-32" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-33"><a href="#cb7-33" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb7-34"><a href="#cb7-34" aria-hidden="true" tabindex="-1"></a>    Counter a<span class="op">,</span> b<span class="op">;</span></span>
+<span id="cb7-35"><a href="#cb7-35" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;count=&quot;</span> <span class="op">&lt;&lt;</span> Counter<span class="op">::</span>count<span class="op">()</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="co">// 2</span></span>
+<span id="cb7-36"><a href="#cb7-36" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-37"><a href="#cb7-37" aria-hidden="true" tabindex="-1"></a>    a<span class="op">.</span>setValue<span class="op">(</span><span class="dv">10</span><span class="op">).</span>add<span class="op">(</span><span class="dv">5</span><span class="op">).</span>add<span class="op">(</span><span class="dv">1</span><span class="op">);</span>                       <span class="co">// 链式调用,依赖 *this 的引用返回</span></span>
+<span id="cb7-38"><a href="#cb7-38" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;a.value=&quot;</span> <span class="op">&lt;&lt;</span> a<span class="op">.</span>value<span class="op">()</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span>        <span class="co">// 16</span></span>
+<span id="cb7-39"><a href="#cb7-39" aria-hidden="true" tabindex="-1"></a>    dump<span class="op">(</span>a<span class="op">);</span></span>
+<span id="cb7-40"><a href="#cb7-40" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <pre><code>count=2
 a.value=16
 value_=16</code></pre>
@@ -295,49 +341,75 @@ value_=16</code></pre>
 <code>private</code>/<code>protected</code> 成员,应谨慎使用(过多 friend
 会削弱封装性)。</li>
 </ul>
+<p><code>this</code>
+本质上只是编译器隐式传给每个非静态成员函数的第一个参数——调用
+<code>obj.func(x)</code>,编译器实际生成的代码等价于
+<code>func(&amp;obj, x)</code>,<code>this</code>
+就是这个隐含的对象地址实参,不是存储在对象内部的字段,也没有任何特殊运行时机制。类型上要区分两种情况:普通成员函数里
+<code>this</code> 的类型是
+<code>ClassName* const</code>——指针本身不可变(不能让 <code>this</code>
+指向别的对象),但指向的对象可以修改;const 成员函数里 <code>this</code>
+的类型是
+<code>const ClassName* const</code>——指针和指向的对象都不可变,这也是
+const 成员函数不能修改非 <code>mutable</code>
+成员的根本原因。<code>this</code> 的存储位置取决于调用约定:x64/ARM
+平台通常通过寄存器传递,只有函数体内需要真正取 <code>this</code>
+的地址时,编译器才会把它溢出到栈上。</p>
+<p><strong>静态成员函数为什么没有
+<code>this</code>,也不能访问非静态成员</strong>:静态成员函数属于类本身而非任何具体对象,调用形式是
+<code>ClassName::staticFunc()</code>,不依赖任何对象实例,编译器自然无法为它准备一个对象地址;没有对象地址,也就无法定位任何一个具体对象的非静态成员在内存中的偏移位置,这两条限制是同一个原因的两个表现。</p>
+<p><strong>为什么不能直接用 <code>this</code> 构造一个
+<code>shared_ptr</code></strong>:<code>this</code>
+是裸指针,不携带任何生命周期信息。如果在类内部写
+<code>std::shared_ptr&lt;T&gt;(this)</code>,会创建一个和外部已有的
+<code>shared_ptr</code>
+完全独立的新控制块,两个控制块各自认为自己是唯一所有者,最终对同一个对象各自触发一次析构,造成双重释放。正确做法是让类继承
+<code>std::enable_shared_from_this&lt;T&gt;</code>,再调用
+<code>shared_from_this()</code> 获取共享同一控制块的
+<code>shared_ptr</code>(第 9 章展开)。</p>
 <h2 id="五继承单继承-多继承-虚继承与菱形问题">五、继承:单继承 / 多继承 /
 虚继承与菱形问题</h2>
-<div class="sourceCode" id="cb8"><pre
-class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;iostream&gt;</span></span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Animal <span class="op">{</span></span>
-<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span><span class="op">:</span></span>
-<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>    Animal<span class="op">(</span><span class="bu">std::</span>string name<span class="op">)</span> <span class="op">:</span> <span class="va">name_</span><span class="op">(</span>name<span class="op">)</span> <span class="op">{}</span></span>
-<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">virtual</span> <span class="op">~</span>Animal<span class="op">()</span> <span class="op">{</span> <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;~Animal &quot;</span> <span class="op">&lt;&lt;</span> <span class="va">name_</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="op">}</span> <span class="co">// 基类析构应为 virtual</span></span>
-<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">virtual</span> <span class="bu">std::</span>string sound<span class="op">()</span> <span class="at">const</span> <span class="op">{</span> <span class="cf">return</span> <span class="st">&quot;...&quot;</span><span class="op">;</span> <span class="op">}</span>              <span class="co">// 虚函数,可被派生类覆盖</span></span>
-<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">void</span> describe<span class="op">()</span> <span class="at">const</span> <span class="op">{</span> <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="va">name_</span> <span class="op">&lt;&lt;</span> <span class="st">&quot; says &quot;</span> <span class="op">&lt;&lt;</span> sound<span class="op">()</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="op">}</span></span>
-<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a><span class="kw">protected</span><span class="op">:</span></span>
-<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>string <span class="va">name_</span><span class="op">;</span></span>
-<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
-<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-13"><a href="#cb8-13" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Dog <span class="op">:</span> <span class="kw">public</span> Animal <span class="op">{</span>             <span class="co">// 单继承,public 继承</span></span>
-<span id="cb8-14"><a href="#cb8-14" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span><span class="op">:</span></span>
-<span id="cb8-15"><a href="#cb8-15" aria-hidden="true" tabindex="-1"></a>    Dog<span class="op">(</span><span class="bu">std::</span>string name<span class="op">)</span> <span class="op">:</span> Animal<span class="op">(</span>name<span class="op">)</span> <span class="op">{}</span></span>
-<span id="cb8-16"><a href="#cb8-16" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>string sound<span class="op">()</span> <span class="at">const</span> <span class="kw">override</span> <span class="op">{</span> <span class="cf">return</span> <span class="st">&quot;Woof&quot;</span><span class="op">;</span> <span class="op">}</span> <span class="co">// override 显式声明覆盖基类虚函数</span></span>
-<span id="cb8-17"><a href="#cb8-17" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
-<span id="cb8-18"><a href="#cb8-18" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-19"><a href="#cb8-19" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Flyable <span class="op">{</span></span>
-<span id="cb8-20"><a href="#cb8-20" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span><span class="op">:</span></span>
-<span id="cb8-21"><a href="#cb8-21" aria-hidden="true" tabindex="-1"></a>    <span class="kw">virtual</span> <span class="dt">void</span> fly<span class="op">()</span> <span class="at">const</span> <span class="op">{</span> <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;flying...</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="op">}</span></span>
-<span id="cb8-22"><a href="#cb8-22" aria-hidden="true" tabindex="-1"></a>    <span class="kw">virtual</span> <span class="op">~</span>Flyable<span class="op">()</span> <span class="op">=</span> <span class="cf">default</span><span class="op">;</span></span>
-<span id="cb8-23"><a href="#cb8-23" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
-<span id="cb8-24"><a href="#cb8-24" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-25"><a href="#cb8-25" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> FlyingDog <span class="op">:</span> <span class="kw">public</span> Dog<span class="op">,</span> <span class="kw">public</span> Flyable <span class="op">{</span>  <span class="co">// 多继承:同时继承 Dog 和 Flyable</span></span>
-<span id="cb8-26"><a href="#cb8-26" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span><span class="op">:</span></span>
-<span id="cb8-27"><a href="#cb8-27" aria-hidden="true" tabindex="-1"></a>    FlyingDog<span class="op">(</span><span class="bu">std::</span>string name<span class="op">)</span> <span class="op">:</span> Dog<span class="op">(</span>name<span class="op">)</span> <span class="op">{}</span></span>
-<span id="cb8-28"><a href="#cb8-28" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
-<span id="cb8-29"><a href="#cb8-29" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-30"><a href="#cb8-30" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> main<span class="op">()</span> <span class="op">{</span></span>
-<span id="cb8-31"><a href="#cb8-31" aria-hidden="true" tabindex="-1"></a>    Dog d<span class="op">(</span><span class="st">&quot;Rex&quot;</span><span class="op">);</span></span>
-<span id="cb8-32"><a href="#cb8-32" aria-hidden="true" tabindex="-1"></a>    d<span class="op">.</span>describe<span class="op">();</span>                       <span class="co">// Rex says Woof</span></span>
-<span id="cb8-33"><a href="#cb8-33" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-34"><a href="#cb8-34" aria-hidden="true" tabindex="-1"></a>    Animal<span class="op">*</span> ap <span class="op">=</span> <span class="op">&amp;</span>d<span class="op">;</span>                     <span class="co">// 基类指针指向派生类对象</span></span>
-<span id="cb8-35"><a href="#cb8-35" aria-hidden="true" tabindex="-1"></a>    ap<span class="op">-&gt;</span>describe<span class="op">();</span>                      <span class="co">// 仍输出 Woof —— 多态:sound() 走的是 Dog::sound</span></span>
-<span id="cb8-36"><a href="#cb8-36" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-37"><a href="#cb8-37" aria-hidden="true" tabindex="-1"></a>    FlyingDog fd<span class="op">(</span><span class="st">&quot;Buddy&quot;</span><span class="op">);</span></span>
-<span id="cb8-38"><a href="#cb8-38" aria-hidden="true" tabindex="-1"></a>    fd<span class="op">.</span>describe<span class="op">();</span></span>
-<span id="cb8-39"><a href="#cb8-39" aria-hidden="true" tabindex="-1"></a>    fd<span class="op">.</span>fly<span class="op">();</span></span>
-<span id="cb8-40"><a href="#cb8-40" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;iostream&gt;</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Animal <span class="op">{</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span><span class="op">:</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>    Animal<span class="op">(</span><span class="bu">std::</span>string name<span class="op">)</span> <span class="op">:</span> <span class="va">name_</span><span class="op">(</span>name<span class="op">)</span> <span class="op">{}</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">virtual</span> <span class="op">~</span>Animal<span class="op">()</span> <span class="op">{</span> <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;~Animal &quot;</span> <span class="op">&lt;&lt;</span> <span class="va">name_</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="op">}</span> <span class="co">// 基类析构应为 virtual</span></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">virtual</span> <span class="bu">std::</span>string sound<span class="op">()</span> <span class="at">const</span> <span class="op">{</span> <span class="cf">return</span> <span class="st">&quot;...&quot;</span><span class="op">;</span> <span class="op">}</span>              <span class="co">// 虚函数,可被派生类覆盖</span></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">void</span> describe<span class="op">()</span> <span class="at">const</span> <span class="op">{</span> <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="va">name_</span> <span class="op">&lt;&lt;</span> <span class="st">&quot; says &quot;</span> <span class="op">&lt;&lt;</span> sound<span class="op">()</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a><span class="kw">protected</span><span class="op">:</span></span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>string <span class="va">name_</span><span class="op">;</span></span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Dog <span class="op">:</span> <span class="kw">public</span> Animal <span class="op">{</span>             <span class="co">// 单继承,public 继承</span></span>
+<span id="cb9-14"><a href="#cb9-14" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span><span class="op">:</span></span>
+<span id="cb9-15"><a href="#cb9-15" aria-hidden="true" tabindex="-1"></a>    Dog<span class="op">(</span><span class="bu">std::</span>string name<span class="op">)</span> <span class="op">:</span> Animal<span class="op">(</span>name<span class="op">)</span> <span class="op">{}</span></span>
+<span id="cb9-16"><a href="#cb9-16" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>string sound<span class="op">()</span> <span class="at">const</span> <span class="kw">override</span> <span class="op">{</span> <span class="cf">return</span> <span class="st">&quot;Woof&quot;</span><span class="op">;</span> <span class="op">}</span> <span class="co">// override 显式声明覆盖基类虚函数</span></span>
+<span id="cb9-17"><a href="#cb9-17" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb9-18"><a href="#cb9-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-19"><a href="#cb9-19" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Flyable <span class="op">{</span></span>
+<span id="cb9-20"><a href="#cb9-20" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span><span class="op">:</span></span>
+<span id="cb9-21"><a href="#cb9-21" aria-hidden="true" tabindex="-1"></a>    <span class="kw">virtual</span> <span class="dt">void</span> fly<span class="op">()</span> <span class="at">const</span> <span class="op">{</span> <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;flying...</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb9-22"><a href="#cb9-22" aria-hidden="true" tabindex="-1"></a>    <span class="kw">virtual</span> <span class="op">~</span>Flyable<span class="op">()</span> <span class="op">=</span> <span class="cf">default</span><span class="op">;</span></span>
+<span id="cb9-23"><a href="#cb9-23" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb9-24"><a href="#cb9-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-25"><a href="#cb9-25" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> FlyingDog <span class="op">:</span> <span class="kw">public</span> Dog<span class="op">,</span> <span class="kw">public</span> Flyable <span class="op">{</span>  <span class="co">// 多继承:同时继承 Dog 和 Flyable</span></span>
+<span id="cb9-26"><a href="#cb9-26" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span><span class="op">:</span></span>
+<span id="cb9-27"><a href="#cb9-27" aria-hidden="true" tabindex="-1"></a>    FlyingDog<span class="op">(</span><span class="bu">std::</span>string name<span class="op">)</span> <span class="op">:</span> Dog<span class="op">(</span>name<span class="op">)</span> <span class="op">{}</span></span>
+<span id="cb9-28"><a href="#cb9-28" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb9-29"><a href="#cb9-29" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-30"><a href="#cb9-30" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb9-31"><a href="#cb9-31" aria-hidden="true" tabindex="-1"></a>    Dog d<span class="op">(</span><span class="st">&quot;Rex&quot;</span><span class="op">);</span></span>
+<span id="cb9-32"><a href="#cb9-32" aria-hidden="true" tabindex="-1"></a>    d<span class="op">.</span>describe<span class="op">();</span>                       <span class="co">// Rex says Woof</span></span>
+<span id="cb9-33"><a href="#cb9-33" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-34"><a href="#cb9-34" aria-hidden="true" tabindex="-1"></a>    Animal<span class="op">*</span> ap <span class="op">=</span> <span class="op">&amp;</span>d<span class="op">;</span>                     <span class="co">// 基类指针指向派生类对象</span></span>
+<span id="cb9-35"><a href="#cb9-35" aria-hidden="true" tabindex="-1"></a>    ap<span class="op">-&gt;</span>describe<span class="op">();</span>                      <span class="co">// 仍输出 Woof —— 多态:sound() 走的是 Dog::sound</span></span>
+<span id="cb9-36"><a href="#cb9-36" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-37"><a href="#cb9-37" aria-hidden="true" tabindex="-1"></a>    FlyingDog fd<span class="op">(</span><span class="st">&quot;Buddy&quot;</span><span class="op">);</span></span>
+<span id="cb9-38"><a href="#cb9-38" aria-hidden="true" tabindex="-1"></a>    fd<span class="op">.</span>describe<span class="op">();</span></span>
+<span id="cb9-39"><a href="#cb9-39" aria-hidden="true" tabindex="-1"></a>    fd<span class="op">.</span>fly<span class="op">();</span></span>
+<span id="cb9-40"><a href="#cb9-40" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <pre><code>Rex says Woof
 Rex says Woof
 Buddy says Woof
@@ -349,97 +421,135 @@ flying...
 <code>Base</code>,<code>Diamond : Left, Right</code>
 会在内存里包含<strong>两份</strong> <code>Base</code>
 子对象,访问共同基类的成员产生二义性:</p>
-<div class="sourceCode" id="cb10"><pre
-class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Base <span class="op">{</span> <span class="kw">public</span><span class="op">:</span> <span class="dt">int</span> value <span class="op">=</span> <span class="dv">1</span><span class="op">;</span> <span class="op">};</span></span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Left <span class="op">:</span> <span class="kw">public</span> Base <span class="op">{};</span></span>
-<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Right <span class="op">:</span> <span class="kw">public</span> Base <span class="op">{};</span></span>
-<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Diamond <span class="op">:</span> <span class="kw">public</span> Left<span class="op">,</span> <span class="kw">public</span> Right <span class="op">{};</span> <span class="co">// 非虚继承:Diamond 里有两份 Base 子对象</span></span>
-<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> main<span class="op">()</span> <span class="op">{</span> Diamond d<span class="op">;</span> <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> d<span class="op">.</span>value <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="op">}</span> <span class="co">// 编译错误:二义性</span></span></code></pre></div>
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Base <span class="op">{</span> <span class="kw">public</span><span class="op">:</span> <span class="dt">int</span> value <span class="op">=</span> <span class="dv">1</span><span class="op">;</span> <span class="op">};</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Left <span class="op">:</span> <span class="kw">public</span> Base <span class="op">{};</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Right <span class="op">:</span> <span class="kw">public</span> Base <span class="op">{};</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Diamond <span class="op">:</span> <span class="kw">public</span> Left<span class="op">,</span> <span class="kw">public</span> Right <span class="op">{};</span> <span class="co">// 非虚继承:Diamond 里有两份 Base 子对象</span></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> main<span class="op">()</span> <span class="op">{</span> Diamond d<span class="op">;</span> <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> d<span class="op">.</span>value <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="op">}</span> <span class="co">// 编译错误:二义性</span></span></code></pre></div>
 <pre><code>error: non-static member &#39;value&#39; found in multiple base-class subobjects of type &#39;Base&#39;:
     class Diamond -&gt; Left -&gt; Base
     class Diamond -&gt; Right -&gt; Base</code></pre>
 <p>解决方法是<strong>虚继承</strong>(<code>virtual public Base</code>),让
 <code>Left</code>、<code>Right</code> 共享同一份 <code>Base</code>
 子对象:</p>
-<div class="sourceCode" id="cb12"><pre
-class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Base <span class="op">{</span> <span class="kw">public</span><span class="op">:</span> <span class="dt">int</span> value <span class="op">=</span> <span class="dv">1</span><span class="op">;</span> <span class="op">};</span></span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Left <span class="op">:</span> <span class="kw">virtual</span> <span class="kw">public</span> Base <span class="op">{};</span>    <span class="co">// 虚继承:Left 和 Right 共享同一份 Base 子对象</span></span>
-<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Right <span class="op">:</span> <span class="kw">virtual</span> <span class="kw">public</span> Base <span class="op">{};</span></span>
-<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Diamond <span class="op">:</span> <span class="kw">public</span> Left<span class="op">,</span> <span class="kw">public</span> Right <span class="op">{};</span></span>
-<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> main<span class="op">()</span> <span class="op">{</span></span>
-<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>    Diamond d<span class="op">;</span></span>
-<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>    d<span class="op">.</span>value <span class="op">=</span> <span class="dv">99</span><span class="op">;</span>               <span class="co">// 不再二义:只有一份 Base 子对象</span></span>
-<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> d<span class="op">.</span>value <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span></span>
-<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;sizeof(Diamond)=&quot;</span> <span class="op">&lt;&lt;</span> <span class="kw">sizeof</span><span class="op">(</span>Diamond<span class="op">)</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="co">// 因虚基类指针变大</span></span>
-<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Base <span class="op">{</span> <span class="kw">public</span><span class="op">:</span> <span class="dt">int</span> value <span class="op">=</span> <span class="dv">1</span><span class="op">;</span> <span class="op">};</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Left <span class="op">:</span> <span class="kw">virtual</span> <span class="kw">public</span> Base <span class="op">{};</span>    <span class="co">// 虚继承:Left 和 Right 共享同一份 Base 子对象</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Right <span class="op">:</span> <span class="kw">virtual</span> <span class="kw">public</span> Base <span class="op">{};</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Diamond <span class="op">:</span> <span class="kw">public</span> Left<span class="op">,</span> <span class="kw">public</span> Right <span class="op">{};</span></span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>    Diamond d<span class="op">;</span></span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>    d<span class="op">.</span>value <span class="op">=</span> <span class="dv">99</span><span class="op">;</span>               <span class="co">// 不再二义:只有一份 Base 子对象</span></span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> d<span class="op">.</span>value <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span></span>
+<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;sizeof(Diamond)=&quot;</span> <span class="op">&lt;&lt;</span> <span class="kw">sizeof</span><span class="op">(</span>Diamond<span class="op">)</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="co">// 因虚基类指针变大</span></span>
+<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <pre><code>99
 sizeof(Diamond)=24</code></pre>
 <p>虚继承的代价是每个虚继承分支都要多存一个指向共享基类子对象的指针(虚基类表指针),对象体积变大,构造顺序也更复杂(最终派生类负责初始化虚基类)。实践中应尽量用组合替代多继承,菱形继承是
 C++ 里公认的复杂度重灾区,能不用就不用。</p>
+<p><strong>为什么虚基类必须由最终派生类直接初始化</strong>:普通继承下,每一层派生类的构造函数只负责初始化自己直接基类的那一份子对象,层层转发。但虚继承下
+<code>Base</code> 全局只有一份共享子对象,如果 <code>Left</code> 和
+<code>Right</code>
+的构造函数都各自尝试初始化它,就会出现同一块内存被初始化两次的冲突。C++
+标准的规定是:虚基类必须由<strong>最终派生类</strong>的构造函数直接负责初始化,中间层(<code>Left</code>、<code>Right</code>)构造函数初始化列表里对
+<code>Base</code> 的初始化请求会被编译器直接忽略。这意味着即使
+<code>Base</code> 隔着两层继承关系,<code>Diamond</code>
+的构造函数也必须显式调用 <code>Base</code> 的构造函数,不能指望
+<code>Left</code>/<code>Right</code> 代劳:</p>
+<div class="sourceCode" id="cb15"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Base <span class="op">{</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span><span class="op">:</span></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>    Base<span class="op">(</span><span class="dt">int</span> v<span class="op">)</span> <span class="op">:</span> value<span class="op">(</span>v<span class="op">)</span> <span class="op">{}</span></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> value<span class="op">;</span></span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Left <span class="op">:</span> <span class="kw">virtual</span> <span class="kw">public</span> Base <span class="op">{</span></span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span><span class="op">:</span></span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>    Left<span class="op">()</span> <span class="op">:</span> Base<span class="op">(</span><span class="dv">0</span><span class="op">)</span> <span class="op">{}</span>       <span class="co">// 虚继承下这里对 Base 的初始化会被忽略</span></span>
+<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Right <span class="op">:</span> <span class="kw">virtual</span> <span class="kw">public</span> Base <span class="op">{</span></span>
+<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span><span class="op">:</span></span>
+<span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a>    Right<span class="op">()</span> <span class="op">:</span> Base<span class="op">(</span><span class="dv">0</span><span class="op">)</span> <span class="op">{}</span>      <span class="co">// 同样被忽略</span></span>
+<span id="cb15-13"><a href="#cb15-13" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb15-14"><a href="#cb15-14" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Diamond <span class="op">:</span> <span class="kw">public</span> Left<span class="op">,</span> <span class="kw">public</span> Right <span class="op">{</span></span>
+<span id="cb15-15"><a href="#cb15-15" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span><span class="op">:</span></span>
+<span id="cb15-16"><a href="#cb15-16" aria-hidden="true" tabindex="-1"></a>    Diamond<span class="op">()</span> <span class="op">:</span> Base<span class="op">(</span><span class="dv">99</span><span class="op">),</span> Left<span class="op">(),</span> Right<span class="op">()</span> <span class="op">{}</span>  <span class="co">// 真正生效的是这里的 Base(99)</span></span>
+<span id="cb15-17"><a href="#cb15-17" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<p><code>Diamond</code> 构造出来后 <code>value</code> 是 99,而不是
+<code>Left</code>/<code>Right</code> 各自尝试设置的
+0——只有最终派生类构造函数里显式给出的初始化实参才会生效。</p>
 <h2 id="六多态与虚函数机制vtable-vptr">六、多态与虚函数机制:vtable /
 vptr</h2>
 <p>一个类只要声明了至少一个 <code>virtual</code>
 函数,编译器就会给每个对象隐式插入一个指针(vptr),指向该类的虚函数表(vtable,每个类一张,不是每个对象一张):</p>
-<div class="sourceCode" id="cb14"><pre
-class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;iostream&gt;</span></span>
-<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> NoVirtual <span class="op">{</span></span>
-<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> x<span class="op">;</span></span>
-<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
-<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> WithVirtual <span class="op">{</span></span>
-<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> x<span class="op">;</span></span>
-<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">virtual</span> <span class="dt">void</span> foo<span class="op">()</span> <span class="op">{}</span></span>
-<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
-<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> main<span class="op">()</span> <span class="op">{</span></span>
-<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;sizeof(NoVirtual)=&quot;</span> <span class="op">&lt;&lt;</span> <span class="kw">sizeof</span><span class="op">(</span>NoVirtual<span class="op">)</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span>     <span class="co">// 4:只有一个 int</span></span>
-<span id="cb14-14"><a href="#cb14-14" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;sizeof(WithVirtual)=&quot;</span> <span class="op">&lt;&lt;</span> <span class="kw">sizeof</span><span class="op">(</span>WithVirtual<span class="op">)</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="co">// 16:多了 8 字节的隐藏 vptr(含对齐)</span></span>
-<span id="cb14-15"><a href="#cb14-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb16"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;iostream&gt;</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> NoVirtual <span class="op">{</span></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> x<span class="op">;</span></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> WithVirtual <span class="op">{</span></span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> x<span class="op">;</span></span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">virtual</span> <span class="dt">void</span> foo<span class="op">()</span> <span class="op">{}</span></span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;sizeof(NoVirtual)=&quot;</span> <span class="op">&lt;&lt;</span> <span class="kw">sizeof</span><span class="op">(</span>NoVirtual<span class="op">)</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span>     <span class="co">// 4:只有一个 int</span></span>
+<span id="cb16-14"><a href="#cb16-14" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;sizeof(WithVirtual)=&quot;</span> <span class="op">&lt;&lt;</span> <span class="kw">sizeof</span><span class="op">(</span>WithVirtual<span class="op">)</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="co">// 16:多了 8 字节的隐藏 vptr(含对齐)</span></span>
+<span id="cb16-15"><a href="#cb16-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <pre><code>sizeof(NoVirtual)=4
 sizeof(WithVirtual)=16</code></pre>
 <p>调用虚函数(<code>ap-&gt;describe()</code> 内部的
 <code>sound()</code>)时,编译器生成的代码是”先通过对象的 vptr 找到该类的
 vtable,再按固定偏移取出函数指针并调用”——这就是”运行时多态”的实现原理:调用哪个函数体,取决于对象<strong>实际类型</strong>的
 vtable,而不是指针/引用的静态类型。这也是虚函数调用比普通函数调用多一次间接寻址、无法内联的原因。</p>
+<p><strong>多继承下 vtable 怎么处理</strong>:第五节
+<code>FlyingDog : public Dog, public Flyable</code>
+这类多继承对象,通常需要<strong>多个
+vptr</strong>——每一条独立的继承链各自对应一份 vptr 和一张 vtable。通过
+<code>Dog*</code> 调用虚函数走的是 <code>Dog</code> 这条链的 vptr,通过
+<code>Flyable*</code> 调用走的是 <code>Flyable</code> 那条链的
+vptr,编译器在做基类指针转换(比如 <code>FlyingDog*</code> 转
+<code>Flyable*</code>)时会自动调整指针数值,使其指向正确的子对象起始位置,这也是多继承下裸指针数值转换前后可能不同的原因。</p>
 <h2
 id="七纯虚函数与抽象类overridefinal">七、纯虚函数与抽象类、<code>override</code>/<code>final</code></h2>
-<div class="sourceCode" id="cb16"><pre
-class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;iostream&gt;</span></span>
-<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;memory&gt;</span></span>
-<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Shape <span class="op">{</span></span>
-<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span><span class="op">:</span></span>
-<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">virtual</span> <span class="op">~</span>Shape<span class="op">()</span> <span class="op">=</span> <span class="cf">default</span><span class="op">;</span></span>
-<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">virtual</span> <span class="dt">double</span> area<span class="op">()</span> <span class="at">const</span> <span class="op">=</span> <span class="dv">0</span><span class="op">;</span>    <span class="co">// 纯虚函数,没有函数体(=0),使 Shape 成为抽象类</span></span>
-<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">void</span> report<span class="op">()</span> <span class="at">const</span> <span class="op">{</span> <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;面积: &quot;</span> <span class="op">&lt;&lt;</span> area<span class="op">()</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="op">}</span></span>
-<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
-<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Circle <span class="kw">final</span> <span class="op">:</span> <span class="kw">public</span> Shape <span class="op">{</span>     <span class="co">// final 修饰类:禁止再被继承</span></span>
-<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">double</span> <span class="va">r_</span><span class="op">;</span></span>
-<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span><span class="op">:</span></span>
-<span id="cb16-14"><a href="#cb16-14" aria-hidden="true" tabindex="-1"></a>    <span class="kw">explicit</span> Circle<span class="op">(</span><span class="dt">double</span> r<span class="op">)</span> <span class="op">:</span> <span class="va">r_</span><span class="op">(</span>r<span class="op">)</span> <span class="op">{}</span></span>
-<span id="cb16-15"><a href="#cb16-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">double</span> area<span class="op">()</span> <span class="at">const</span> <span class="kw">override</span> <span class="kw">final</span> <span class="op">{</span> <span class="cf">return</span> <span class="fl">3.14159</span> <span class="op">*</span> <span class="va">r_</span> <span class="op">*</span> <span class="va">r_</span><span class="op">;</span> <span class="op">}</span> <span class="co">// final 修饰函数:禁止子类再覆盖</span></span>
-<span id="cb16-16"><a href="#cb16-16" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
-<span id="cb16-17"><a href="#cb16-17" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-18"><a href="#cb16-18" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Square <span class="op">:</span> <span class="kw">public</span> Shape <span class="op">{</span></span>
-<span id="cb16-19"><a href="#cb16-19" aria-hidden="true" tabindex="-1"></a>    <span class="dt">double</span> <span class="va">s_</span><span class="op">;</span></span>
-<span id="cb16-20"><a href="#cb16-20" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span><span class="op">:</span></span>
-<span id="cb16-21"><a href="#cb16-21" aria-hidden="true" tabindex="-1"></a>    <span class="kw">explicit</span> Square<span class="op">(</span><span class="dt">double</span> s<span class="op">)</span> <span class="op">:</span> <span class="va">s_</span><span class="op">(</span>s<span class="op">)</span> <span class="op">{}</span></span>
-<span id="cb16-22"><a href="#cb16-22" aria-hidden="true" tabindex="-1"></a>    <span class="dt">double</span> area<span class="op">()</span> <span class="at">const</span> <span class="kw">override</span> <span class="op">{</span> <span class="cf">return</span> <span class="va">s_</span> <span class="op">*</span> <span class="va">s_</span><span class="op">;</span> <span class="op">}</span></span>
-<span id="cb16-23"><a href="#cb16-23" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
-<span id="cb16-24"><a href="#cb16-24" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-25"><a href="#cb16-25" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> main<span class="op">()</span> <span class="op">{</span></span>
-<span id="cb16-26"><a href="#cb16-26" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Shape s;                     // 编译错误:不能实例化抽象类</span></span>
-<span id="cb16-27"><a href="#cb16-27" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-28"><a href="#cb16-28" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>unique_ptr<span class="op">&lt;</span>Shape<span class="op">&gt;</span> shapes<span class="op">[]</span> <span class="op">=</span> <span class="op">{</span></span>
-<span id="cb16-29"><a href="#cb16-29" aria-hidden="true" tabindex="-1"></a>        <span class="bu">std::</span>make_unique<span class="op">&lt;</span>Circle<span class="op">&gt;(</span><span class="fl">2.0</span><span class="op">),</span></span>
-<span id="cb16-30"><a href="#cb16-30" aria-hidden="true" tabindex="-1"></a>        <span class="bu">std::</span>make_unique<span class="op">&lt;</span>Square<span class="op">&gt;(</span><span class="fl">3.0</span><span class="op">),</span></span>
-<span id="cb16-31"><a href="#cb16-31" aria-hidden="true" tabindex="-1"></a>    <span class="op">};</span></span>
-<span id="cb16-32"><a href="#cb16-32" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="kw">auto</span><span class="op">&amp;</span> s <span class="op">:</span> shapes<span class="op">)</span> s<span class="op">-&gt;</span>report<span class="op">();</span> <span class="co">// 多态调用:运行时根据实际类型走 vtable 派发</span></span>
-<span id="cb16-33"><a href="#cb16-33" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb18"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;iostream&gt;</span></span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;memory&gt;</span></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Shape <span class="op">{</span></span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span><span class="op">:</span></span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">virtual</span> <span class="op">~</span>Shape<span class="op">()</span> <span class="op">=</span> <span class="cf">default</span><span class="op">;</span></span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">virtual</span> <span class="dt">double</span> area<span class="op">()</span> <span class="at">const</span> <span class="op">=</span> <span class="dv">0</span><span class="op">;</span>    <span class="co">// 纯虚函数,没有函数体(=0),使 Shape 成为抽象类</span></span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">void</span> report<span class="op">()</span> <span class="at">const</span> <span class="op">{</span> <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;面积: &quot;</span> <span class="op">&lt;&lt;</span> area<span class="op">()</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Circle <span class="kw">final</span> <span class="op">:</span> <span class="kw">public</span> Shape <span class="op">{</span>     <span class="co">// final 修饰类:禁止再被继承</span></span>
+<span id="cb18-12"><a href="#cb18-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">double</span> <span class="va">r_</span><span class="op">;</span></span>
+<span id="cb18-13"><a href="#cb18-13" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span><span class="op">:</span></span>
+<span id="cb18-14"><a href="#cb18-14" aria-hidden="true" tabindex="-1"></a>    <span class="kw">explicit</span> Circle<span class="op">(</span><span class="dt">double</span> r<span class="op">)</span> <span class="op">:</span> <span class="va">r_</span><span class="op">(</span>r<span class="op">)</span> <span class="op">{}</span></span>
+<span id="cb18-15"><a href="#cb18-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">double</span> area<span class="op">()</span> <span class="at">const</span> <span class="kw">override</span> <span class="kw">final</span> <span class="op">{</span> <span class="cf">return</span> <span class="fl">3.14159</span> <span class="op">*</span> <span class="va">r_</span> <span class="op">*</span> <span class="va">r_</span><span class="op">;</span> <span class="op">}</span> <span class="co">// final 修饰函数:禁止子类再覆盖</span></span>
+<span id="cb18-16"><a href="#cb18-16" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb18-17"><a href="#cb18-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-18"><a href="#cb18-18" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Square <span class="op">:</span> <span class="kw">public</span> Shape <span class="op">{</span></span>
+<span id="cb18-19"><a href="#cb18-19" aria-hidden="true" tabindex="-1"></a>    <span class="dt">double</span> <span class="va">s_</span><span class="op">;</span></span>
+<span id="cb18-20"><a href="#cb18-20" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span><span class="op">:</span></span>
+<span id="cb18-21"><a href="#cb18-21" aria-hidden="true" tabindex="-1"></a>    <span class="kw">explicit</span> Square<span class="op">(</span><span class="dt">double</span> s<span class="op">)</span> <span class="op">:</span> <span class="va">s_</span><span class="op">(</span>s<span class="op">)</span> <span class="op">{}</span></span>
+<span id="cb18-22"><a href="#cb18-22" aria-hidden="true" tabindex="-1"></a>    <span class="dt">double</span> area<span class="op">()</span> <span class="at">const</span> <span class="kw">override</span> <span class="op">{</span> <span class="cf">return</span> <span class="va">s_</span> <span class="op">*</span> <span class="va">s_</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb18-23"><a href="#cb18-23" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb18-24"><a href="#cb18-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-25"><a href="#cb18-25" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb18-26"><a href="#cb18-26" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Shape s;                     // 编译错误:不能实例化抽象类</span></span>
+<span id="cb18-27"><a href="#cb18-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-28"><a href="#cb18-28" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>unique_ptr<span class="op">&lt;</span>Shape<span class="op">&gt;</span> shapes<span class="op">[]</span> <span class="op">=</span> <span class="op">{</span></span>
+<span id="cb18-29"><a href="#cb18-29" aria-hidden="true" tabindex="-1"></a>        <span class="bu">std::</span>make_unique<span class="op">&lt;</span>Circle<span class="op">&gt;(</span><span class="fl">2.0</span><span class="op">),</span></span>
+<span id="cb18-30"><a href="#cb18-30" aria-hidden="true" tabindex="-1"></a>        <span class="bu">std::</span>make_unique<span class="op">&lt;</span>Square<span class="op">&gt;(</span><span class="fl">3.0</span><span class="op">),</span></span>
+<span id="cb18-31"><a href="#cb18-31" aria-hidden="true" tabindex="-1"></a>    <span class="op">};</span></span>
+<span id="cb18-32"><a href="#cb18-32" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="kw">auto</span><span class="op">&amp;</span> s <span class="op">:</span> shapes<span class="op">)</span> s<span class="op">-&gt;</span>report<span class="op">();</span> <span class="co">// 多态调用:运行时根据实际类型走 vtable 派发</span></span>
+<span id="cb18-33"><a href="#cb18-33" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <pre><code>面积: 12.5664
 面积: 9</code></pre>
 <p>含有纯虚函数(<code>= 0</code>)的类是<strong>抽象类</strong>,不能直接实例化:</p>
@@ -449,13 +559,202 @@ note: unimplemented pure virtual method &#39;area&#39; in &#39;Shape&#39;</code>
 <p><code>override</code>
 显式声明”这是对基类虚函数的覆盖”,编译器会核对签名是否真的匹配基类虚函数,拼写错误或签名不一致会在编译期报错而不是悄悄变成一个新的、不参与多态的普通函数——应对所有覆盖基类虚函数的地方都加上。<code>final</code>
 可以修饰虚函数(禁止子类再覆盖)或修饰类(禁止被继承),违反规则会编译报错:</p>
-<div class="sourceCode" id="cb19"><pre
-class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> A <span class="op">{</span> <span class="kw">public</span><span class="op">:</span> <span class="kw">virtual</span> <span class="dt">void</span> f<span class="op">()</span> <span class="kw">final</span> <span class="op">{}</span> <span class="op">};</span></span>
-<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> B <span class="op">:</span> <span class="kw">public</span> A <span class="op">{</span> <span class="kw">public</span><span class="op">:</span> <span class="dt">void</span> f<span class="op">()</span> <span class="kw">override</span> <span class="op">{}</span> <span class="op">};</span> <span class="co">// 试图覆盖 final 函数</span></span></code></pre></div>
+<div class="sourceCode" id="cb21"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> A <span class="op">{</span> <span class="kw">public</span><span class="op">:</span> <span class="kw">virtual</span> <span class="dt">void</span> f<span class="op">()</span> <span class="kw">final</span> <span class="op">{}</span> <span class="op">};</span></span>
+<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> B <span class="op">:</span> <span class="kw">public</span> A <span class="op">{</span> <span class="kw">public</span><span class="op">:</span> <span class="dt">void</span> f<span class="op">()</span> <span class="kw">override</span> <span class="op">{}</span> <span class="op">};</span> <span class="co">// 试图覆盖 final 函数</span></span></code></pre></div>
 <pre><code>error: declaration of &#39;f&#39; overrides a &#39;final&#39; function
     void f() override {}
          ^
 note: overridden virtual function is here</code></pre>
+<p><strong>纯虚函数能否有函数体</strong>:能。<code>= 0</code>
+只表示”派生类必须重写它才能实例化”,不表示”基类完全不能提供实现”。基类可以在类外给纯虚函数补一份默认实现,派生类通过
+<code>Base::f()</code>
+显式调用它,把这份实现当作自己重写逻辑的一部分来复用——常见于析构函数:纯虚析构函数可以让类变成抽象类且仍然必须提供函数体,因为析构链路要求每一层都能被正常调用到。</p>
+<p><strong><code>final</code> 在 C++11
+之前怎么实现、为什么现在不用了</strong>:C++11 前没有 <code>final</code>
+关键字,只能靠一套
+hack:利用虚继承规则——虚基类必须由最终派生类直接初始化(第五节)。做法是定义一个构造函数为
+private
+的辅助类,让目标类虚继承这个辅助类并声明为其友元,目标类自己能构造(作为友元可访问
+private
+构造函数),但如果有人试图再继承目标类,新的最终派生类需要直接调用辅助类的私有构造函数,却因为不是友元而访问不到,编译失败。这套方案依赖复杂的继承和访问控制组合,可读性和维护成本都很差,<code>final</code>
+出现之后完全没有必要再用,仅作历史了解。</p>
+<p><strong><code>final</code>
+除了防止继承,还有什么实际收益</strong>:编译器确认一个类是
+<code>final</code>,或者某个虚函数被标记 <code>final</code>
+之后,能够确定不会再有派生类重写它,从而做<strong>去虚拟化(devirtualization)</strong>——把原本需要经过
+vptr
+间接跳转的虚函数调用,在编译期直接确定调用目标,改写成普通的直接调用,甚至进一步内联。热路径上频繁调用的小虚函数标注
+<code>final</code>
+能带来实测可见的性能提升,这也是”组合优于继承”之外,<code>final</code>
+值得主动使用的一个工程理由。</p>
+<h2 id="八重载与重写的区别">八、重载与重写的区别</h2>
+<p><strong>重载(Overload)</strong>发生在同一作用域内(同一个类,或同一个命名空间),多个函数同名但参数列表不同(类型、个数、顺序任一不同即可),编译器在<strong>编译期</strong>根据实参类型直接决定调用哪个版本,属于静态绑定。<strong>不能仅凭返回值类型区分重载</strong>——调用点编译器只能看到传入的实参,看不到调用方打算怎么处理返回值(甚至可能根本不使用),无法据此消歧。</p>
+<p><strong>重写(Override)</strong>要求同时满足三个条件:存在继承关系、基类函数声明为
+<code>virtual</code>、派生类函数签名(函数名、参数列表、const
+修饰)与基类完全一致。满足这三点后,通过基类指针或引用调用该函数,运行时依据对象的<strong>实际类型</strong>通过
+vtable 决定调用哪个版本,属于动态绑定(见第六节)。</p>
+<p>容易被混淆的第三种情况是<strong>隐藏(hiding)</strong>:派生类定义了和基类同名的函数,但只要基类该函数不是
+<code>virtual</code>,或者参数列表不同,就不构成重写,而是把基类的同名函数<strong>遮蔽</strong>掉了。通过派生类对象或指针调用只能看到派生类版本,基类版本被藏起来(仍可通过
+<code>Base::func()</code>
+显式调用)。这是实际开发中常见的坑——很多人以为派生类定义了同名函数就自动构成重写,实际上没有
+<code>virtual</code>、或者签名对不上,就完全没有多态这回事,通过基类指针调用永远只会调到基类版本。这正是
+C++11 引入 <code>override</code>
+关键字的原因:写在派生类函数声明后,让编译器检查签名是否真的匹配基类的虚函数,一旦函数名拼错或参数类型写错,编译器直接报错,而不是悄悄退化成一次隐藏。</p>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr>
+<th>维度</th>
+<th>重载</th>
+<th>重写</th>
+<th>隐藏</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>作用域</td>
+<td>同一类或同一命名空间</td>
+<td>存在继承关系的基类与派生类之间</td>
+<td>存在继承关系的基类与派生类之间</td>
+</tr>
+<tr>
+<td>触发条件</td>
+<td>函数名相同,参数列表不同</td>
+<td>基类函数为 virtual,派生类签名完全一致</td>
+<td>基类函数非 virtual,或签名不一致</td>
+</tr>
+<tr>
+<td>绑定时机</td>
+<td>编译期(静态绑定)</td>
+<td>运行期(动态绑定,通过 vtable)</td>
+<td>编译期(静态绑定,按静态类型查名)</td>
+</tr>
+<tr>
+<td>能否靠返回值区分</td>
+<td>不能</td>
+<td>不适用(要求返回值一致,协变返回类型是唯一例外)</td>
+<td>不适用</td>
+</tr>
+</tbody>
+</table>
+<p>重写的返回类型必须严格一致,唯一的例外是<strong>协变返回类型(covariant
+return type)</strong>:如果基类虚函数返回
+<code>Base*</code>,派生类重写时允许返回
+<code>Derived*</code>(<code>Derived</code> 是 <code>Base</code>
+的子类)。重载和重写是不同维度的概念,可以同时存在于一个类里——某个重载版本恰好是从基类继承来的虚函数被重写了,互不冲突。</p>
+<h2 id="九深拷贝与浅拷贝">九、深拷贝与浅拷贝</h2>
+<p>编译器在没有自定义拷贝构造函数和拷贝赋值运算符时,会自动生成执行<strong>浅拷贝</strong>的版本——逐个成员按值复制(memberwise
+copy)。对 <code>int</code>、<code>double</code>
+这类值类型成员没有问题,但对指针成员,复制的是<strong>地址本身</strong>:拷贝之后两个对象的指针成员指向同一块堆内存,而这两个对象的生命周期是独立的、析构顺序不受控制,这就埋下了三类具体问题:</p>
+<ul>
+<li><strong>双重释放</strong>:两个对象各自析构时都对同一块内存执行
+<code>delete</code>,第二次 <code>delete</code>
+是未定义行为,实践中通常直接崩溃。</li>
+<li><strong>悬垂指针</strong>:先析构的那个对象释放了内存后,另一个对象的指针成员就变成了指向已释放内存的悬垂指针。</li>
+<li><strong>意外的相互影响</strong>:通过一个对象修改了共享内存的内容,另一个对象读到的数据也随之改变,即便调用方完全没有操作过第二个对象。</li>
+</ul>
+<p>下面这段代码用 <code>-fsanitize=address</code>
+实测复现了浅拷贝导致的双重释放:</p>
+<div class="sourceCode" id="cb23"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> ShallowBuffer <span class="op">{</span></span>
+<span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span><span class="op">:</span></span>
+<span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a>    ShallowBuffer<span class="op">(</span><span class="at">const</span> <span class="dt">char</span><span class="op">*</span> s<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb23-4"><a href="#cb23-4" aria-hidden="true" tabindex="-1"></a>        <span class="va">len_</span> <span class="op">=</span> strlen<span class="op">(</span>s<span class="op">)</span> <span class="op">+</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb23-5"><a href="#cb23-5" aria-hidden="true" tabindex="-1"></a>        <span class="va">data_</span> <span class="op">=</span> <span class="kw">new</span> <span class="dt">char</span><span class="op">[</span><span class="va">len_</span><span class="op">];</span></span>
+<span id="cb23-6"><a href="#cb23-6" aria-hidden="true" tabindex="-1"></a>        memcpy<span class="op">(</span><span class="va">data_</span><span class="op">,</span> s<span class="op">,</span> <span class="va">len_</span><span class="op">);</span></span>
+<span id="cb23-7"><a href="#cb23-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb23-8"><a href="#cb23-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">~</span>ShallowBuffer<span class="op">()</span> <span class="op">{</span> <span class="kw">delete</span><span class="op">[]</span> <span class="va">data_</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb23-9"><a href="#cb23-9" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 未自定义拷贝构造/赋值运算符 -&gt; 编译器生成浅拷贝,只复制指针值</span></span>
+<span id="cb23-10"><a href="#cb23-10" aria-hidden="true" tabindex="-1"></a><span class="kw">private</span><span class="op">:</span></span>
+<span id="cb23-11"><a href="#cb23-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">char</span><span class="op">*</span> <span class="va">data_</span><span class="op">;</span></span>
+<span id="cb23-12"><a href="#cb23-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">size_t</span> <span class="va">len_</span><span class="op">;</span></span>
+<span id="cb23-13"><a href="#cb23-13" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb23-14"><a href="#cb23-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-15"><a href="#cb23-15" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> triggerDoubleFree<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb23-16"><a href="#cb23-16" aria-hidden="true" tabindex="-1"></a>    ShallowBuffer a<span class="op">(</span><span class="st">&quot;hello&quot;</span><span class="op">);</span></span>
+<span id="cb23-17"><a href="#cb23-17" aria-hidden="true" tabindex="-1"></a>    ShallowBuffer b <span class="op">=</span> a<span class="op">;</span>   <span class="co">// 浅拷贝:b.data_ 和 a.data_ 指向同一块堆内存</span></span>
+<span id="cb23-18"><a href="#cb23-18" aria-hidden="true" tabindex="-1"></a><span class="op">}</span>   <span class="co">// 作用域结束时,a、b 的析构函数都会对同一个指针执行 delete[] -&gt; 双重释放</span></span></code></pre></div>
+<pre><code>==ERROR: AddressSanitizer: attempting double-free on 0x...
+    #0 ... operator delete[]
+    #1 ... ShallowBuffer::~ShallowBuffer()   &lt;- 第二次析构
+SUMMARY: AddressSanitizer: double-free ... in ShallowBuffer::~ShallowBuffer()</code></pre>
+<p><strong>深拷贝</strong>为指针成员重新分配一块独立内存,并复制原内存的内容,拷贝之后两个对象各自持有独立的堆内存。正确实现深拷贝需要同时手写拷贝构造函数、拷贝赋值运算符、析构函数三者——这就是
+C++ 里的 <strong>Rule of Three</strong>:只要析构函数里有
+<code>delete</code>,就必须同时手写拷贝构造和拷贝赋值,反之亦然:</p>
+<div class="sourceCode" id="cb25"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> DeepBuffer <span class="op">{</span></span>
+<span id="cb25-2"><a href="#cb25-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span><span class="op">:</span></span>
+<span id="cb25-3"><a href="#cb25-3" aria-hidden="true" tabindex="-1"></a>    DeepBuffer<span class="op">(</span><span class="at">const</span> <span class="dt">char</span><span class="op">*</span> s<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb25-4"><a href="#cb25-4" aria-hidden="true" tabindex="-1"></a>        <span class="va">len_</span> <span class="op">=</span> strlen<span class="op">(</span>s<span class="op">)</span> <span class="op">+</span> <span class="dv">1</span><span class="op">;</span></span>
+<span id="cb25-5"><a href="#cb25-5" aria-hidden="true" tabindex="-1"></a>        <span class="va">data_</span> <span class="op">=</span> <span class="kw">new</span> <span class="dt">char</span><span class="op">[</span><span class="va">len_</span><span class="op">];</span></span>
+<span id="cb25-6"><a href="#cb25-6" aria-hidden="true" tabindex="-1"></a>        memcpy<span class="op">(</span><span class="va">data_</span><span class="op">,</span> s<span class="op">,</span> <span class="va">len_</span><span class="op">);</span></span>
+<span id="cb25-7"><a href="#cb25-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb25-8"><a href="#cb25-8" aria-hidden="true" tabindex="-1"></a>    DeepBuffer<span class="op">(</span><span class="at">const</span> DeepBuffer<span class="op">&amp;</span> other<span class="op">)</span> <span class="op">:</span> <span class="va">len_</span><span class="op">(</span>other<span class="op">.</span><span class="va">len_</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb25-9"><a href="#cb25-9" aria-hidden="true" tabindex="-1"></a>        <span class="va">data_</span> <span class="op">=</span> <span class="kw">new</span> <span class="dt">char</span><span class="op">[</span><span class="va">len_</span><span class="op">];</span></span>
+<span id="cb25-10"><a href="#cb25-10" aria-hidden="true" tabindex="-1"></a>        memcpy<span class="op">(</span><span class="va">data_</span><span class="op">,</span> other<span class="op">.</span><span class="va">data_</span><span class="op">,</span> <span class="va">len_</span><span class="op">);</span></span>
+<span id="cb25-11"><a href="#cb25-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb25-12"><a href="#cb25-12" aria-hidden="true" tabindex="-1"></a>    DeepBuffer<span class="op">&amp;</span> <span class="kw">operator</span><span class="op">=(</span><span class="at">const</span> DeepBuffer<span class="op">&amp;</span> other<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb25-13"><a href="#cb25-13" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span><span class="kw">this</span> <span class="op">==</span> <span class="op">&amp;</span>other<span class="op">)</span> <span class="cf">return</span> <span class="op">*</span><span class="kw">this</span><span class="op">;</span>   <span class="co">// 防止自赋值先释放后读取</span></span>
+<span id="cb25-14"><a href="#cb25-14" aria-hidden="true" tabindex="-1"></a>        <span class="kw">delete</span><span class="op">[]</span> <span class="va">data_</span><span class="op">;</span></span>
+<span id="cb25-15"><a href="#cb25-15" aria-hidden="true" tabindex="-1"></a>        <span class="va">len_</span> <span class="op">=</span> other<span class="op">.</span><span class="va">len_</span><span class="op">;</span></span>
+<span id="cb25-16"><a href="#cb25-16" aria-hidden="true" tabindex="-1"></a>        <span class="va">data_</span> <span class="op">=</span> <span class="kw">new</span> <span class="dt">char</span><span class="op">[</span><span class="va">len_</span><span class="op">];</span></span>
+<span id="cb25-17"><a href="#cb25-17" aria-hidden="true" tabindex="-1"></a>        memcpy<span class="op">(</span><span class="va">data_</span><span class="op">,</span> other<span class="op">.</span><span class="va">data_</span><span class="op">,</span> <span class="va">len_</span><span class="op">);</span></span>
+<span id="cb25-18"><a href="#cb25-18" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="op">*</span><span class="kw">this</span><span class="op">;</span></span>
+<span id="cb25-19"><a href="#cb25-19" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb25-20"><a href="#cb25-20" aria-hidden="true" tabindex="-1"></a>    <span class="op">~</span>DeepBuffer<span class="op">()</span> <span class="op">{</span> <span class="kw">delete</span><span class="op">[]</span> <span class="va">data_</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb25-21"><a href="#cb25-21" aria-hidden="true" tabindex="-1"></a><span class="kw">private</span><span class="op">:</span></span>
+<span id="cb25-22"><a href="#cb25-22" aria-hidden="true" tabindex="-1"></a>    <span class="dt">char</span><span class="op">*</span> <span class="va">data_</span><span class="op">;</span></span>
+<span id="cb25-23"><a href="#cb25-23" aria-hidden="true" tabindex="-1"></a>    <span class="dt">size_t</span> <span class="va">len_</span><span class="op">;</span></span>
+<span id="cb25-24"><a href="#cb25-24" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<p><strong>判断标准</strong>很直接:只要类里有裸指针且这个指针指向的内存是这个类自己
+<code>new</code> 出来的,就必须写深拷贝;等价地说,只要析构函数里有
+<code>delete</code>,就一定要配套写拷贝构造函数和拷贝赋值运算符。STL
+容器是值语义,<code>push_back</code>
+一个自定义对象会触发它的拷贝构造函数——如果这个类持有裸指针却没实现深拷贝,容器内部的副本和外部原对象共享同一块内存,一旦容器扩容触发旧元素析构、释放这块内存,容器里”新”的那份对象的指针就变成悬垂指针。</p>
+<p>移动语义(第二节)是介于浅拷贝和共享、深拷贝之间的第三种选择——既不共享资源,也不复制资源,而是直接”偷”走源对象的指针,再把源对象自己的指针置空,开销从深拷贝的
+O(n) 降到 O(1)。现代 C++ 更实用的替代方案是直接用
+<code>unique_ptr</code>/<code>shared_ptr</code>
+管理动态分配的资源,从根本上避免手写深拷贝——<code>unique_ptr</code>
+直接禁止拷贝,彻底杜绝共享问题;<code>shared_ptr</code>
+用引用计数管理共享生命周期,最后一个引用销毁时才真正释放(第 9
+章详细展开)。写时复制(COW)曾是另一种折中方案——拷贝时先共享内存,只有某一方真正要修改数据、且发现引用计数大于
+1 时才现场深拷贝一份,但多线程下维护引用计数需要原子操作,开销可观,C++11
+后标准库已放弃 COW,<code>std::string</code> 的拷贝就是普通深拷贝。</p>
+<h2 id="十单例模式的实现">十、单例模式的实现</h2>
+<p>单例模式要保证一个类只有一个实例并提供全局访问点:构造函数私有化,显式删除拷贝构造和拷贝赋值(防止绕过访问点复制出第二个实例),再通过一个静态方法返回唯一实例。四种实现方式是逐步演进的,每一步都是为了修掉上一版本的一个具体缺陷。</p>
+<p><strong>饿汉式</strong>在程序启动阶段就创建好实例(静态成员变量,<code>main</code>
+执行前完成初始化)。天然线程安全,但如果单例本身很重、且可能根本用不到,就浪费了启动时间;更麻烦的是多个饿汉式单例之间的初始化顺序未定义(Static
+Initialization Order Fiasco),如果单例 A 依赖单例 B,而 B
+恰好还没初始化完,就会出问题。</p>
+<p><strong>懒汉式</strong>延迟到第一次调用 <code>getInstance()</code>
+时才创建,解决了饿汉式浪费资源的问题,但多线程环境下两个线程可能同时判断出实例为空,各自创建了一个实例,线程不安全。</p>
+<p><strong>双检锁(DCLP)</strong>在懒汉式基础上加锁:第一次不加锁的检查避免每次调用都要经历加锁开销,加锁后的第二次检查避免多个线程排队等锁时重复创建。但在
+C++11 之前,<code>instance = new Singleton()</code>
+语义上分”分配内存、调用构造函数、赋值给指针”三步,编译器或 CPU
+可能把顺序重排成”分配内存、赋值指针、调用构造函数”,导致另一个线程在构造函数还没执行完时就看到非空指针并直接返回未构造完成的对象。</p>
+<p><strong>Magic Static</strong>(C++11 起推荐)利用函数内局部
+<code>static</code> 变量,标准明确规定其初始化过程必须是线程安全的:</p>
+<div class="sourceCode" id="cb26"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Singleton <span class="op">{</span></span>
+<span id="cb26-2"><a href="#cb26-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span><span class="op">:</span></span>
+<span id="cb26-3"><a href="#cb26-3" aria-hidden="true" tabindex="-1"></a>    <span class="at">static</span> Singleton<span class="op">&amp;</span> getInstance<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb26-4"><a href="#cb26-4" aria-hidden="true" tabindex="-1"></a>        <span class="at">static</span> Singleton instance<span class="op">;</span>   <span class="co">// C++11 保证:多线程首次并发调用时只有一个真正执行构造</span></span>
+<span id="cb26-5"><a href="#cb26-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> instance<span class="op">;</span></span>
+<span id="cb26-6"><a href="#cb26-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb26-7"><a href="#cb26-7" aria-hidden="true" tabindex="-1"></a>    Singleton<span class="op">(</span><span class="at">const</span> Singleton<span class="op">&amp;)</span> <span class="op">=</span> <span class="kw">delete</span><span class="op">;</span></span>
+<span id="cb26-8"><a href="#cb26-8" aria-hidden="true" tabindex="-1"></a>    Singleton<span class="op">&amp;</span> <span class="kw">operator</span><span class="op">=(</span><span class="at">const</span> Singleton<span class="op">&amp;)</span> <span class="op">=</span> <span class="kw">delete</span><span class="op">;</span></span>
+<span id="cb26-9"><a href="#cb26-9" aria-hidden="true" tabindex="-1"></a><span class="kw">private</span><span class="op">:</span></span>
+<span id="cb26-10"><a href="#cb26-10" aria-hidden="true" tabindex="-1"></a>    Singleton<span class="op">()</span> <span class="op">=</span> <span class="cf">default</span><span class="op">;</span></span>
+<span id="cb26-11"><a href="#cb26-11" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<p>这个方案没有手动锁、没有裸指针管理、没有内存泄漏风险(程序结束时局部
+static 对象自动析构),线程安全完全交给编译器,是目前公认的最优解。</p>
+<p><strong>单例模式的取舍</strong>:单例本质上是一种全局状态,会带来单元测试困难(全局状态难以在测试用例间隔离重置)、隐藏依赖关系(调用方代码里看不出自己依赖了它)等副作用,能用依赖注入替代时通常优先选依赖注入。真正适合单例的场景是那些天然全局唯一、生命周期贯穿整个程序的对象:日志器、全局配置管理器、线程池、连接池。</p>
 <hr />
 <p><a href="index.html">← 返回索引</a></p>
 </div>

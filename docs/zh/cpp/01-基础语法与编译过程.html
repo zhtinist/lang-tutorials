@@ -102,7 +102,9 @@
 <a href="../oodlld/index.html">OOD/LLD</a>
 <a href="../container/index.html">容器对照</a>
 <a href="../cpp/index.html" style="color:var(--accent-dark);font-weight:700">C++ 教程</a>
-<a href="../baguwen/index.html">面试八股</a></div></div>
+<a href="../baguwen/index.html">面试八股</a>
+<a href="../csbase/index.html">计算机基础</a>
+<a href="../javaeco/index.html">Java 生态</a></div></div>
 <div class="wrap">
 <nav id="TOC" role="doc-toc">
 <ul>
@@ -125,6 +127,24 @@ id="toc-五输入输出流-cincout">五、输入输出流
 <code>cin</code>/<code>cout</code></a></li>
 <li><a href="#六编译期常见坑"
 id="toc-六编译期常见坑">六、编译期常见坑</a></li>
+<li><a href="#七struct-与-classstruct-与-union-的边界"
+id="toc-七struct-与-classstruct-与-union-的边界">七、struct 与
+class、struct 与 union 的边界</a></li>
+<li><a href="#八静态存储static-关键字与变量的作用域生命周期"
+id="toc-八静态存储static-关键字与变量的作用域生命周期">八、静态存储:static
+关键字与变量的作用域、生命周期</a></li>
+<li><a href="#九extern-c-与语言链接"
+id="toc-九extern-c-与语言链接">九、extern “C” 与语言链接</a></li>
+<li><a href="#十inline-函数与-define-宏的区别"
+id="toc-十inline-函数与-define-宏的区别">十、inline 函数与 #define
+宏的区别</a></li>
+<li><a href="#十一sizeof-与-strlen-的区别"
+id="toc-十一sizeof-与-strlen-的区别">十一、sizeof 与 strlen
+的区别</a></li>
+<li><a href="#十二浮点数比较的陷阱"
+id="toc-十二浮点数比较的陷阱">十二、浮点数比较的陷阱</a></li>
+<li><a href="#十三c-四种类型转换" id="toc-十三c-四种类型转换">十三、C++
+四种类型转换</a></li>
 </ul></li>
 </ul>
 </nav>
@@ -380,6 +400,423 @@ class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb22-1"><a href="#
 定义、模板定义、<code>constexpr</code> 变量本身就隐含
 <code>inline</code> 语义,因此可以放心写在头文件里被多次包含而不违反
 ODR。</p>
+<h2 id="七struct-与-classstruct-与-union-的边界">七、struct 与
+class、struct 与 union 的边界</h2>
+<p><code>struct</code> 和 <code>class</code>
+在语法能力上完全等价——都可以有构造/析构函数、虚函数、继承、模板参数、访问控制修饰符;<a
+href="04-面向对象编程.html#一类的定义与访问控制">第 4
+章</a>已经指出两者在语言层面<strong>唯一</strong>的区别是两处默认行为:成员默认访问权限(struct
+是 public,class 是
+private)和默认继承权限(<code>struct Derived : Base</code> 默认 public
+继承,<code>class Derived : Base</code> 默认 private 继承)。</p>
+<p>此外还有一处容易忽略的纯语法规定:模板参数声明只能写
+<code>template&lt;class T&gt;</code> 或
+<code>template&lt;typename T&gt;</code>,写成
+<code>template&lt;struct T&gt;</code>
+编译器不会理解成”声明一个模板类型参数”,而是按”先前向声明一个 struct 类型
+T,再拿它当非类型模板参数”解析,进而报出令人费解的错误——这条限制和
+struct/class 的语义无关,纯粹是语言语法的历史遗留:</p>
+<pre><code>$ g++ -std=c++20 -c bad_template.cpp
+error: non-type template parameter has incomplete type &#39;struct T&#39;
+note: forward declaration of &#39;T&#39;</code></pre>
+<p>工程惯例上(编译器不强制):struct
+用于纯数据聚合——没有不变量需要维护、所有成员天然
+public,典型场景是配置项、坐标点、网络协议包头;class
+用于有封装需求的类型,内部状态需要通过接口维护不变量。struct 里写 private
+成员和虚函数完全合法,编译器不会阻止,但这会让读者困惑——语义上”纯数据”和”多态/行为扩展”是冲突的,实际项目里很少见到
+struct 参与继承体系。</p>
+<p>顺带一提 <strong>POD(Plain Old Data)</strong>
+的判定标准:没有虚函数、没有用户定义的构造/析构、所有成员 public、可以用
+<code>memcpy</code> 安全拷贝,内存布局与 C
+完全兼容。这与关键字本身无关——struct 因为默认
+public、语义上暗示”纯数据”,天然容易写成 POD,但 class
+只要满足同样的条件一样是 POD。用 <code>extern "C"</code>
+做混合编程时(见下一节),共享的结构体定义必须保持 C
+兼容——只能有成员变量,不能有成员函数和继承,这也是为什么跨语言公共头文件里的结构体几乎总是”纯数据”
+struct。</p>
+<p><strong>struct 与 union 的差异</strong> 不只是”内存共享 vs
+独立存储”这一层。struct 本质上就是 class(只是默认
+public),拥有完整的面向对象能力;union
+的能力被语法明确限制死了——不能作为基类被继承,也不能继承别的类或
+struct,不能有虚函数:</p>
+<div class="sourceCode" id="cb25"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a><span class="kw">union</span> UV <span class="op">{</span> <span class="kw">virtual</span> <span class="dt">void</span> f<span class="op">()</span> <span class="op">{}</span> <span class="op">};</span>   <span class="co">// 不允许</span></span>
+<span id="cb25-2"><a href="#cb25-2" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> Base <span class="op">{};</span></span>
+<span id="cb25-3"><a href="#cb25-3" aria-hidden="true" tabindex="-1"></a><span class="kw">union</span> UB <span class="op">:</span> Base <span class="op">{};</span>                  <span class="co">// 不允许</span></span>
+<span id="cb25-4"><a href="#cb25-4" aria-hidden="true" tabindex="-1"></a><span class="kw">union</span> UC <span class="op">{</span> <span class="dt">int</span> a<span class="op">;</span> <span class="op">};</span></span>
+<span id="cb25-5"><a href="#cb25-5" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> D <span class="op">:</span> UC <span class="op">{};</span>                    <span class="co">// 不允许</span></span></code></pre></div>
+<pre><code>error: unions cannot have virtual functions
+error: unions cannot have base classes
+error: unions cannot be base classes</code></pre>
+<p>根源在于 union
+的核心语义是”所有成员共享同一段内存,同一时刻只有一个成员有效”——虚函数依赖的
+vptr、继承依赖的基类子对象,都要求对象内部有稳定的、按类型区分的独立布局,这和”共享同一段内存”直接矛盾。但
+union 仍然可以有构造函数、析构函数和普通成员函数,访问控制
+<code>private</code>/<code>protected</code> 也和 struct/class
+一样正常起作用(这点常被误传为”union 成员强制 public”,实测并非如此——union
+默认成员是 public,但显式声明 private
+完全合法,外部访问会被正确拒绝)。</p>
+<p>C++11 之前 union 只能存放 POD 类型;C++11 放开限制,允许存放
+<code>std::string</code> 这类非 POD
+类型,但编译器不会自动为它调用构造/析构——因为 union
+并不知道当前哪个成员是”活跃”的。开发者必须自己用 placement new
+显式构造、手动调用析构函数:</p>
+<div class="sourceCode" id="cb27"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a><span class="kw">union</span> U <span class="op">{</span></span>
+<span id="cb27-2"><a href="#cb27-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> i<span class="op">;</span></span>
+<span id="cb27-3"><a href="#cb27-3" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>string s<span class="op">;</span></span>
+<span id="cb27-4"><a href="#cb27-4" aria-hidden="true" tabindex="-1"></a>    U<span class="op">()</span> <span class="op">:</span> i<span class="op">(</span><span class="dv">0</span><span class="op">)</span> <span class="op">{}</span></span>
+<span id="cb27-5"><a href="#cb27-5" aria-hidden="true" tabindex="-1"></a>    <span class="op">~</span>U<span class="op">()</span> <span class="op">{}</span>                          <span class="co">// 不知道当前活跃的是 i 还是 s,不能在这里自动析构 s</span></span>
+<span id="cb27-6"><a href="#cb27-6" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb27-7"><a href="#cb27-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb27-8"><a href="#cb27-8" aria-hidden="true" tabindex="-1"></a>U u<span class="op">;</span></span>
+<span id="cb27-9"><a href="#cb27-9" aria-hidden="true" tabindex="-1"></a><span class="kw">new</span> <span class="op">(&amp;</span>u<span class="op">.</span>s<span class="op">)</span> <span class="bu">std::</span>string<span class="op">(</span><span class="st">&quot;hello&quot;</span><span class="op">);</span>     <span class="co">// placement new 显式构造</span></span>
+<span id="cb27-10"><a href="#cb27-10" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> u<span class="op">.</span>s <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span></span>
+<span id="cb27-11"><a href="#cb27-11" aria-hidden="true" tabindex="-1"></a>u<span class="op">.</span>s<span class="op">.~</span>basic_string<span class="op">();</span>                  <span class="co">// 用完必须手动析构,否则内存泄漏</span></span></code></pre></div>
+<pre><code>hello</code></pre>
+<p>漏掉手动析构就是内存泄漏(活跃成员是 string
+却没调用它的析构函数),析构了不该析构的成员则是未定义行为。现代 C++
+更推荐用 <strong><code>std::variant</code>(C++17)</strong> 替代原生
+union:内部维护一个 tag
+跟踪当前活跃的类型,自动管理构造/析构,访问了错误的类型会抛异常而不是产生未定义行为。原生
+union 仍然保留的场景是二进制协议解析(把一块 buffer
+按不同字段类型解释,比如网络包头、硬件寄存器)和极致的内存节省(嵌入式场景)。</p>
+<h2
+id="八静态存储static-关键字与变量的作用域生命周期">八、静态存储:static
+关键字与变量的作用域、生命周期</h2>
+<p><code>static</code>
+修饰不同实体时,解决的都是同一个问题的不同侧面——“这份存储活多久、谁能看见它”,与
+<code>const</code>
+控制”能不能被修改”完全正交,两者可以同时使用:<code>static const int X = 42;</code>
+既是类范围内共享的一份,又是只读的。</p>
+<p><strong>static 的四种用法</strong>:</p>
+<ol type="1">
+<li><strong>局部静态变量</strong>:生命周期延长到程序结束,但作用域仍限于函数内部;只在第一次执行到该定义语句时初始化一次,之后的调用跳过初始化、沿用上次的值。</li>
+<li><strong>文件作用域
+static</strong>:把符号限制为内部链接,其他翻译单元无法通过
+<code>extern</code> 访问,实现”文件级私有”。</li>
+<li><strong>类的静态成员变量</strong>:属于类本身而非任何一个对象,所有对象共享同一份存储,必须在类外定义一次(C++17
+起可以用 <code>inline static</code> 在类内直接定义)。</li>
+<li><strong>类的静态成员函数</strong>:没有隐式的 <code>this</code>
+参数,不能访问非静态成员,可以直接用 <code>类名::函数名()</code>
+调用而无需实例。</li>
+</ol>
+<div class="sourceCode" id="cb29"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> counter<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb29-2"><a href="#cb29-2" aria-hidden="true" tabindex="-1"></a>    <span class="at">static</span> <span class="dt">int</span> n <span class="op">=</span> <span class="dv">0</span><span class="op">;</span>   <span class="co">// 只在第一次执行到这里时初始化</span></span>
+<span id="cb29-3"><a href="#cb29-3" aria-hidden="true" tabindex="-1"></a>    <span class="op">++</span>n<span class="op">;</span></span>
+<span id="cb29-4"><a href="#cb29-4" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;n=&quot;</span> <span class="op">&lt;&lt;</span> n <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span></span>
+<span id="cb29-5"><a href="#cb29-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb29-6"><a href="#cb29-6" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> main<span class="op">()</span> <span class="op">{</span> counter<span class="op">();</span> counter<span class="op">();</span> counter<span class="op">();</span> <span class="op">}</span></span></code></pre></div>
+<pre><code>n=1
+n=2
+n=3</code></pre>
+<p><strong>局部变量、全局变量、静态局部变量的差异</strong>
+要从作用域和链接性两个维度理解(存储位置和四大内存分区已在<a
+href="02-变量类型与内存布局.html#六四大内存分区栈-堆-全局静态区-常量区">第
+2 章</a>讲过,这里不重复):</p>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr>
+<th>维度</th>
+<th>局部变量</th>
+<th>全局变量</th>
+<th>静态局部变量</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>作用域</td>
+<td>定义它的代码块内</td>
+<td>整个翻译单元(加 <code>extern</code> 可跨文件)</td>
+<td>定义它的函数内部,外部完全不可见</td>
+</tr>
+<tr>
+<td>生命周期</td>
+<td>跟随栈帧创建/销毁</td>
+<td>贯穿整个程序运行期</td>
+<td>贯穿整个程序运行期</td>
+</tr>
+<tr>
+<td>链接性</td>
+<td>无(每次调用都是新对象)</td>
+<td>默认外部链接;加 <code>static</code> 后变成内部链接</td>
+<td>无链接性,只能通过函数内部访问</td>
+</tr>
+<tr>
+<td>初始化时机</td>
+<td>每次执行到定义语句</td>
+<td>程序启动时</td>
+<td>仅第一次执行到定义语句</td>
+</tr>
+</tbody>
+</table>
+<p><strong>static 修饰全局变量改变的是链接性,和 static
+修饰局部变量改变生命周期是两回事</strong>,不要混为一谈:不加
+<code>static</code> 的全局变量具有外部链接,可以被其他翻译单元
+<code>extern</code> 访问;加了 <code>static</code>
+后只在当前文件内可见,用于避免跨文件命名冲突。局部变量与全局变量同名时,函数内部的局部变量会遮蔽同名全局变量,可以用
+<code>::globalVar</code>
+显式访问被遮蔽的全局变量,但更好的做法是从一开始就避免同名。</p>
+<p><strong>跨翻译单元的初始化顺序</strong>是一个经典陷阱:同一翻译单元内,全局/静态变量按定义顺序初始化;不同
+<code>.cpp</code> 文件之间的初始化顺序未定义(Static Initialization Order
+Fiasco)。如果 A 文件的全局对象初始化依赖 B 文件的全局对象,可能在 B
+还未初始化时就被使用,而这类 bug
+只在特定链接顺序下才会复现,非常难排查。规避方法是用函数内局部
+<code>static</code> 变量替代跨文件的全局对象(Construct On First Use
+惯用法)——谁先调用谁触发初始化,顺序由调用链天然决定,不再依赖不确定的静态初始化顺序。</p>
+<p><strong>静态局部变量初始化的线程安全性</strong>:C++11
+标准保证静态局部变量的初始化过程是线程安全的(“magic
+statics”)——如果多个线程同时第一次执行到该定义语句,编译器插入的同步逻辑保证只有一个线程真正执行初始化,其余线程阻塞等待。这是
+Meyers 单例(函数内 <code>static</code> 局部变量)在 C++11
+之后天然线程安全的理论基础(详见<a href="04-面向对象编程.html">第 4
+章单例模式</a>)。初始化完成之后的读写不受这层保护,并发修改仍需要额外同步。</p>
+<h2 id="九extern-c-与语言链接">九、extern “C” 与语言链接</h2>
+<p><code>extern "C"</code> 告诉 C++
+编译器:对被它包裹的函数声明不做<strong>名称修饰(Name
+Mangling)</strong>,链接时直接用原始函数名作为符号。</p>
+<p>根源在于 C++
+支持函数重载,同一个函数名可以对应多个参数不同的版本,编译器必须把参数类型编码进符号名才能让链接器区分它们:</p>
+<div class="sourceCode" id="cb31"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> foo<span class="op">(</span><span class="dt">int</span><span class="op">)</span> <span class="op">{}</span></span>
+<span id="cb31-2"><a href="#cb31-2" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> foo<span class="op">(</span><span class="dt">double</span><span class="op">)</span> <span class="op">{}</span></span></code></pre></div>
+<pre><code>$ g++ -std=c++20 -c mangle.cpp -o mangle.o &amp;&amp; nm mangle.o | grep foo
+0000000000000010 T __Z3food
+0000000000000000 T __Z3fooi</code></pre>
+<p><code>_Z3fooi</code>/<code>_Z3food</code> 是 Itanium C++ ABI
+编码后的符号名(macOS
+上符号前还会多加一个下划线),参数类型被编码进了符号本身。C
+语言没有重载,一个函数名只对应一个函数,符号名就是函数名本身,不需要这层编码——这也解释了
+C 为什么不支持重载:没有名称修饰机制去区分同名函数。</p>
+<p>问题出在混合编程时:C++ 代码调用 C 库函数,C++
+编译器会对调用做名称修饰、去找修饰后的符号,但 C
+库导出的符号是未修饰的原始名,两边对不上,链接器报 “undefined
+reference”。<code>extern "C"</code> 的作用就是让编译器对这些声明按 C
+的规则处理,这样 C++ 里生成的符号引用能和 C
+库里的符号匹配上。除了名称修饰,<code>extern "C"</code> 通常也意味着采用
+C
+的调用约定,确保参数压栈方式、栈清理责任等二进制层面的细节完全兼容。</p>
+<p>写跨语言通用头文件的标准写法是用 <code>__cplusplus</code> 宏保护:</p>
+<div class="sourceCode" id="cb33"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a><span class="co">// extc.h</span></span>
+<span id="cb33-2"><a href="#cb33-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#ifdef __cplusplus</span></span>
+<span id="cb33-3"><a href="#cb33-3" aria-hidden="true" tabindex="-1"></a><span class="at">extern</span> <span class="st">&quot;C&quot;</span> <span class="op">{</span></span>
+<span id="cb33-4"><a href="#cb33-4" aria-hidden="true" tabindex="-1"></a><span class="pp">#endif</span></span>
+<span id="cb33-5"><a href="#cb33-5" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> add_c<span class="op">(</span><span class="dt">int</span> a<span class="op">,</span> <span class="dt">int</span> b<span class="op">);</span></span>
+<span id="cb33-6"><a href="#cb33-6" aria-hidden="true" tabindex="-1"></a><span class="pp">#ifdef __cplusplus</span></span>
+<span id="cb33-7"><a href="#cb33-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb33-8"><a href="#cb33-8" aria-hidden="true" tabindex="-1"></a><span class="pp">#endif</span></span></code></pre></div>
+<div class="sourceCode" id="cb34"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a><span class="co">// extc.c</span></span>
+<span id="cb34-2"><a href="#cb34-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&quot;extc.h&quot;</span></span>
+<span id="cb34-3"><a href="#cb34-3" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> add_c<span class="op">(</span><span class="dt">int</span> a<span class="op">,</span> <span class="dt">int</span> b<span class="op">)</span> <span class="op">{</span> <span class="cf">return</span> a <span class="op">+</span> b<span class="op">;</span> <span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb35"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a><span class="co">// extc_main.cpp</span></span>
+<span id="cb35-2"><a href="#cb35-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;iostream&gt;</span></span>
+<span id="cb35-3"><a href="#cb35-3" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&quot;extc.h&quot;</span></span>
+<span id="cb35-4"><a href="#cb35-4" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> main<span class="op">()</span> <span class="op">{</span> <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> add_c<span class="op">(</span><span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">)</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="op">}</span></span></code></pre></div>
+<pre><code>$ gcc -c extc.c -o extc.o
+$ g++ -std=c++20 -c extc_main.cpp -o extc_main.o
+$ g++ extc.o extc_main.o -o extc_out &amp;&amp; ./extc_out
+5</code></pre>
+<p>C 编译器看不到 <code>__cplusplus</code>(未定义),直接跳过
+<code>extern "C"</code> 部分,按普通声明处理;C++ 编译器能看到并正确地按 C
+链接规则处理这些声明——这就是 <code>extc.c</code> 用 <code>gcc</code>
+编译、<code>extc_main.cpp</code> 用 <code>g++</code>
+编译,两个目标文件却能正常链接到一起的原因。</p>
+<p>几个边界问题:<code>extern "C"</code>
+<strong>不能</strong>修饰类的成员函数——成员函数隐含 <code>this</code>
+参数、依赖 C++ 对象模型,没法套用 C 的调用约定;想让 C 代码调用 C++
+类的功能,通常做法是写一层 <code>extern "C"</code>
+的包装函数,内部创建对象、调用成员函数,对外只暴露纯 C
+接口。<code>extern "C"</code>
+的函数也<strong>不能重载</strong>——不做名称修饰意味着符号名就是函数名本身,两个同名的
+<code>extern "C"</code>
+函数即使参数不同,链接器也会报重复定义。典型应用场景有三类:C++ 调用 C
+库(glibc、SQLite、libpng 等)时在其头文件声明前加
+<code>extern "C"</code>;C++ 库需要被 C 程序调用时用它导出接口;Python/Lua
+等语言的 FFI 通常是 C 风格接口,C++
+写扩展模块时必须用它导出入口函数。</p>
+<h2 id="十inline-函数与-define-宏的区别">十、inline 函数与 #define
+宏的区别</h2>
+<p><code>inline</code> 在 <a
+href="03-函数与引用.html#三内联函数-inline">第 3 章</a>
+和本章第六节都已出现,但两处讨论的都是”函数调用开销”和”ODR”这两个角度。<code>inline</code>
+函数和 <code>#define</code>
+宏真正的本质区别在于<strong>处理阶段</strong>:宏在<strong>预处理阶段</strong>做纯文本替换,编译器还未介入,因此不做类型检查、不遵守作用域规则、无法调试;<code>inline</code>
+函数是在<strong>编译阶段</strong>处理的真正函数,有完整的类型检查,遵守命名空间和类的作用域,参数按正常的函数调用规则只求值一次。</p>
+<p>宏最经典的坑是<strong>多次求值</strong>——因为宏只是文本替换,参数在展开后的文本里出现几次就被求值几次:</p>
+<div class="sourceCode" id="cb37"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb37-1"><a href="#cb37-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#define SQUARE</span><span class="op">(</span>x<span class="op">)</span><span class="pp"> </span><span class="op">((</span>x<span class="op">)</span><span class="pp"> </span><span class="op">*</span><span class="pp"> </span><span class="op">(</span>x<span class="op">))</span></span>
+<span id="cb37-2"><a href="#cb37-2" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> a <span class="op">=</span> <span class="dv">5</span><span class="op">;</span></span>
+<span id="cb37-3"><a href="#cb37-3" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> r <span class="op">=</span> SQUARE<span class="op">(</span>a<span class="op">++);</span>   <span class="co">// 展开为 ((a++) * (a++)),a 的自增发生了两次</span></span></code></pre></div>
+<pre><code>r=30 a=7</code></pre>
+<p><code>a</code> 从 5 开始,两次 <code>a++</code>
+各自先取值再自增,<code>r</code> 拿到的是两次不同求值结果的乘积而非
+<code>5*5</code>,<code>a</code>
+也被自增了两次而非一次——这是未定义行为(标准并不保证具体的求值顺序和次数造成的结果),不同编译器/优化级别可能得到不同数值,不能依赖任何具体表现。<code>inline</code>
+函数不会有这个问题,因为参数在传入函数体之前就已经求值完毕,函数体内只使用求值结果一次。</p>
+<p>宏没有类型概念,也不受作用域约束——一旦 <code>#define</code>
+就全局生效,容易和其他代码里的同名标识符冲突。<code>inline</code>
+函数遵守正常的语义分析流程:类型检查、重载决议、模板实例化,处在声明它的命名空间/类作用域内,不会污染全局命名空间。</p>
+<p>但宏有三项 <code>inline</code>
+函数做不到的能力,只有预处理器才能提供:<strong>条件编译</strong>(<code>#ifdef</code>/<code>#ifndef</code>)、<strong>字符串化</strong>(<code>#</code>
+运算符把参数原样转成字符串字面量,如
+<code>#define STR(x) #x</code>,<code>STR(hello)</code> 得到
+<code>"hello"</code>)、<strong>记号拼接</strong>(<code>##</code>
+运算符把两个记号拼接成一个新标识符,如
+<code>#define CONCAT(a,b) a##b</code>,<code>CONCAT(var,1)</code> 得到
+<code>var1</code>)。这些能力在日志宏、断言宏、代码生成场景仍然常用,是宏在现代
+C++ 里没有被完全淘汰的原因。现代 C++ 用 <code>constexpr</code>
+替代宏定义的编译期常量,用 <code>inline</code>
+函数或模板替代宏函数,但条件编译、平台适配、依赖
+<code>__FILE__</code>/<code>__LINE__</code>
+的日志宏这几类场景,宏仍然不可替代。</p>
+<h2 id="十一sizeof-与-strlen-的区别">十一、sizeof 与 strlen 的区别</h2>
+<p><code>sizeof</code>
+是<strong>编译期运算符</strong>,依据的是类型信息,返回一个类型或变量占用的字节数(对
+C 风格字符串而言,<code>sizeof</code> 数组包含末尾的
+<code>'\0'</code>)。<code>strlen</code>(声明于
+<code>&lt;cstring&gt;</code>)是<strong>运行时函数</strong>,依据的是内存内容,从起始地址逐字节扫描,直到遇到第一个
+<code>'\0'</code> 为止,返回的字符个数不包含这个结尾符。</p>
+<div class="sourceCode" id="cb39"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb39-1"><a href="#cb39-1" aria-hidden="true" tabindex="-1"></a><span class="dt">char</span> arr<span class="op">[]</span> <span class="op">=</span> <span class="st">&quot;hello&quot;</span><span class="op">;</span></span>
+<span id="cb39-2"><a href="#cb39-2" aria-hidden="true" tabindex="-1"></a><span class="dt">char</span><span class="op">*</span> ptr  <span class="op">=</span> arr<span class="op">;</span></span>
+<span id="cb39-3"><a href="#cb39-3" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="kw">sizeof</span><span class="op">(</span>arr<span class="op">)</span> <span class="op">&lt;&lt;</span> <span class="st">&quot; &quot;</span> <span class="op">&lt;&lt;</span> strlen<span class="op">(</span>arr<span class="op">)</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span>   <span class="co">// 6 5:数组类型 char[6] 含 &#39;\0&#39;,内容扫描不含</span></span>
+<span id="cb39-4"><a href="#cb39-4" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="kw">sizeof</span><span class="op">(</span>ptr<span class="op">)</span> <span class="op">&lt;&lt;</span> <span class="st">&quot; &quot;</span> <span class="op">&lt;&lt;</span> strlen<span class="op">(</span>ptr<span class="op">)</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span>    <span class="co">// 8 5:sizeof 只看指针类型,与内容无关</span></span>
+<span id="cb39-5"><a href="#cb39-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb39-6"><a href="#cb39-6" aria-hidden="true" tabindex="-1"></a><span class="dt">char</span> s<span class="op">[]</span> <span class="op">=</span> <span class="op">{</span><span class="ch">&#39;a&#39;</span><span class="op">,</span> <span class="ch">&#39;</span><span class="sc">\0</span><span class="ch">&#39;</span><span class="op">,</span> <span class="ch">&#39;b&#39;</span><span class="op">,</span> <span class="ch">&#39;c&#39;</span><span class="op">};</span></span>
+<span id="cb39-7"><a href="#cb39-7" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="kw">sizeof</span><span class="op">(</span>s<span class="op">)</span> <span class="op">&lt;&lt;</span> <span class="st">&quot; &quot;</span> <span class="op">&lt;&lt;</span> strlen<span class="op">(</span>s<span class="op">)</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span>        <span class="co">// 4 1:strlen 碰到第一个 &#39;\0&#39; 就停</span></span></code></pre></div>
+<pre><code>sizeof(arr)=6 strlen(arr)=5
+sizeof(ptr)=8 strlen(ptr)=5
+sizeof(s)=4 strlen(s)=1</code></pre>
+<p>数组作为函数参数传递时会退化为指针(见<a
+href="02-变量类型与内存布局.html#五数组与指针的关系">第 2
+章数组与指针的关系</a>),函数内部对形参调用 <code>sizeof</code>
+得到的是指针大小而非数组大小,如果需要在函数内知道数组长度,必须额外传参数,或者用模板对数组引用做推导以在编译期取得长度。</p>
+<p><code>strlen</code> 的 O(n)
+复杂度有一个容易被忽视的实际影响:如果在循环条件里直接写
+<code>i &lt; strlen(s)</code>,每轮迭代都会重新扫描整个字符串,一个本应是
+O(n) 的循环会退化成 O(n²);正确做法是提前把长度缓存到局部变量里。C++
+标准里 <code>sizeof</code>
+的结果始终是编译期常量,可以用于模板参数和数组声明这类要求常量表达式的位置——C++
+不支持 C99 引入的变长数组(VLA),因此 C++ 里 <code>sizeof</code>
+永远是编译期可求值的。如果用
+<code>std::string</code>,<code>.size()</code>/<code>.length()</code> 是
+O(1)——string 内部维护了长度字段,只有处理 C
+风格字符串(<code>char*</code>)时才真正需要 <code>strlen</code>。</p>
+<h2 id="十二浮点数比较的陷阱">十二、浮点数比较的陷阱</h2>
+<p>浮点数不能直接用 <code>==</code> 比较,根源在 IEEE 754
+的<strong>表示方式</strong>,而不是”计算出了误差”这么简单:二进制浮点数无法精确表示所有十进制小数。<code>0.1</code>
+转成二进制是 <code>0.0001100110011...</code>(<code>0011</code>
+无限循环),存储时必须在有效位处截断——这就是误差的来源:不是运算算错了,而是这个数字本身就没法用有限的二进制位精确表示。</p>
+<div class="sourceCode" id="cb41"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb41-1"><a href="#cb41-1" aria-hidden="true" tabindex="-1"></a><span class="dt">double</span> a <span class="op">=</span> <span class="fl">0.1</span> <span class="op">+</span> <span class="fl">0.2</span><span class="op">;</span></span>
+<span id="cb41-2"><a href="#cb41-2" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="bu">std::</span>setprecision<span class="op">(</span><span class="dv">20</span><span class="op">)</span> <span class="op">&lt;&lt;</span> a <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span></span>
+<span id="cb41-3"><a href="#cb41-3" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="op">(</span>a <span class="op">==</span> <span class="fl">0.3</span><span class="op">)</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span></span></code></pre></div>
+<pre><code>0.30000000000000004441
+false</code></pre>
+<p>正确的比较方式是设定一个误差容忍度(epsilon),判断两数之差是否落在容忍范围内,常见的有三种策略:</p>
+<ul>
+<li><strong>绝对误差</strong>:<code>|a - b| &lt; epsilon</code>。简单直接,但
+epsilon
+是固定值——对数值很大的场景不够精确,对接近零的数又显得过于宽松。适合数值范围已知且相对固定的场景。</li>
+<li><strong>相对误差</strong>:<code>|a - b| / max(|a|, |b|) &lt; epsilon</code>。按比例衡量误差,对大数和小数都相对公平,但当
+a、b 都接近 0 时,除以一个接近 0
+的分母会让结果失真。适合数值跨度大的科学计算场景。</li>
+<li><strong>混合方法</strong>:先用绝对误差处理接近 0
+的边界情况,再对一般情况用相对误差,实际项目里最常见。</li>
+</ul>
+<p>epsilon 该取多大没有万能答案:<code>float</code> 大约 7
+位有效数字,绝对误差通常取 <code>1e-5</code> 到
+<code>1e-6</code>;<code>double</code> 大约 15 位有效数字,取
+<code>1e-9</code> 到 <code>1e-12</code>;若采用相对误差,一般取
+<code>std::numeric_limits&lt;float&gt;::epsilon()</code>(约
+<code>1.19e-7</code>)的若干倍作为起点,具体值要结合业务对精度的实际要求来定。</p>
+<p>另一处经过实测确认的陷阱是”大数吸收小数”:</p>
+<div class="sourceCode" id="cb43"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb43-1"><a href="#cb43-1" aria-hidden="true" tabindex="-1"></a><span class="dt">double</span> huge <span class="op">=</span> <span class="fl">1e20</span><span class="op">;</span></span>
+<span id="cb43-2"><a href="#cb43-2" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="op">((</span>huge <span class="op">+</span> <span class="fl">1.0</span><span class="op">)</span> <span class="op">==</span> huge<span class="op">)</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span>   <span class="co">// true,尾数精度不够表示这个差值</span></span></code></pre></div>
+<pre><code>true</code></pre>
+<p>其余常见坑还包括:循环中反复累加一个小数,误差会随迭代次数逐渐累积;两个相近的大数相减,有效数字会急剧减少(抵消现象);浮点加法不满足结合律,<code>(a + b) + c</code>
+不一定等于 <code>a + (b + c)</code>。极少数场景下可以直接用
+<code>==</code> 比较浮点数:比较能被精确表示的整数值(如
+<code>3.0 == 3.0</code>)、检查是否等于字面量赋值的特定值、或两个值来自同一次赋值且未经过任何运算——一旦经过加减乘除,就不应再用
+<code>==</code>。</p>
+<p><code>NaN</code>(Not a Number,表示无效运算结果,如
+<code>0.0/0.0</code>、<code>sqrt(-1)</code>)有一条特殊规则:它与任何值比较(包括自身)都返回
+<code>false</code>:</p>
+<div class="sourceCode" id="cb45"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb45-1"><a href="#cb45-1" aria-hidden="true" tabindex="-1"></a><span class="dt">double</span> nanv <span class="op">=</span> <span class="bu">std::</span>nan<span class="op">(</span><span class="st">&quot;&quot;</span><span class="op">);</span></span>
+<span id="cb45-2"><a href="#cb45-2" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="op">(</span>nanv <span class="op">==</span> nanv<span class="op">)</span> <span class="op">&lt;&lt;</span> <span class="st">&quot; &quot;</span> <span class="op">&lt;&lt;</span> <span class="op">(</span>nanv <span class="op">!=</span> nanv<span class="op">)</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span></span></code></pre></div>
+<pre><code>false true</code></pre>
+<p>可以用 <code>x != x</code> 判断一个值是否为
+NaN,但更推荐使用语义明确的 <code>std::isnan(x)</code>。</p>
+<h2 id="十三c-四种类型转换">十三、C++ 四种类型转换</h2>
+<p>C++ 用四个具名转换运算符替代 C 风格的
+<code>(type)value</code>,核心目的是让<strong>转换意图在代码里显式化</strong>,让编译器有机会在编译期检查出错误用法。C
+风格转换是一把功能不受限的工具,它实际执行的可能是这四种转换里的任意一种,读代码的人和编译器都无法从记号本身判断意图,出错也难以定位。</p>
+<ul>
+<li><strong><code>static_cast</code></strong>:编译期完成,用途最广,不做任何运行时检查。</li>
+<li><strong><code>dynamic_cast</code></strong>:运行期完成,专用于含虚函数的继承体系中的安全向下转换,失败时指针转换返回
+<code>nullptr</code>、引用转换抛 <code>std::bad_cast</code>。</li>
+<li><strong><code>const_cast</code></strong>:功能单一,只用于增减
+<code>const</code>/<code>volatile</code> 属性。</li>
+<li><strong><code>reinterpret_cast</code></strong>:最危险,对一段内存的比特位做重新解释,不做任何检查或转换计算。</li>
+</ul>
+<p><code>static_cast</code> 能处理基础类型间的转换、<code>void*</code>
+转具体指针类型、继承体系中的向上转换(基类指针指向派生类对象,这个方向总是安全的)以及向下转换(这个方向不做运行时检查,如果实际对象类型不匹配是未定义行为)。</p>
+<p><code>dynamic_cast</code> 依赖
+RTTI(运行时类型信息)在运行期检查对象的实际类型:</p>
+<div class="sourceCode" id="cb47"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb47-1"><a href="#cb47-1" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> Base <span class="op">{</span> <span class="kw">virtual</span> <span class="op">~</span>Base<span class="op">()</span> <span class="op">=</span> <span class="cf">default</span><span class="op">;</span> <span class="op">};</span></span>
+<span id="cb47-2"><a href="#cb47-2" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> Derived <span class="op">:</span> Base <span class="op">{</span> <span class="dt">int</span> x <span class="op">=</span> <span class="dv">42</span><span class="op">;</span> <span class="op">};</span></span>
+<span id="cb47-3"><a href="#cb47-3" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> Other <span class="op">:</span> Base <span class="op">{};</span></span>
+<span id="cb47-4"><a href="#cb47-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb47-5"><a href="#cb47-5" aria-hidden="true" tabindex="-1"></a>Base<span class="op">*</span> b1 <span class="op">=</span> <span class="kw">new</span> Derived<span class="op">();</span></span>
+<span id="cb47-6"><a href="#cb47-6" aria-hidden="true" tabindex="-1"></a>Derived<span class="op">*</span> d1 <span class="op">=</span> <span class="kw">dynamic_cast</span><span class="op">&lt;</span>Derived<span class="op">*&gt;(</span>b1<span class="op">);</span>   <span class="co">// 类型匹配,转换成功</span></span>
+<span id="cb47-7"><a href="#cb47-7" aria-hidden="true" tabindex="-1"></a>Base<span class="op">*</span> b2 <span class="op">=</span> <span class="kw">new</span> Other<span class="op">();</span></span>
+<span id="cb47-8"><a href="#cb47-8" aria-hidden="true" tabindex="-1"></a>Derived<span class="op">*</span> d2 <span class="op">=</span> <span class="kw">dynamic_cast</span><span class="op">&lt;</span>Derived<span class="op">*&gt;(</span>b2<span class="op">);</span>   <span class="co">// 类型不匹配,返回 nullptr</span></span></code></pre></div>
+<pre><code>dynamic_cast success: true x=42
+dynamic_cast wrong type (nullptr): true</code></pre>
+<p>代价是运行时开销以及要求目标类含有虚函数(需要 vtable 才能查询
+RTTI)。</p>
+<p><code>const_cast</code> 的合法用途是去掉”底层 const”——一个本身不是
+const 的对象被一个 const 引用/指针指着,需要把它传给参数类型是非 const
+的旧接口时,可以用 <code>const_cast</code>
+去掉这层修饰后再修改,这种情况下修改是安全的:</p>
+<div class="sourceCode" id="cb49"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb49-1"><a href="#cb49-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> v <span class="op">=</span> <span class="dv">10</span><span class="op">;</span></span>
+<span id="cb49-2"><a href="#cb49-2" aria-hidden="true" tabindex="-1"></a><span class="at">const</span> <span class="dt">int</span><span class="op">&amp;</span> cref <span class="op">=</span> v<span class="op">;</span></span>
+<span id="cb49-3"><a href="#cb49-3" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span><span class="op">&amp;</span> ref2 <span class="op">=</span> <span class="kw">const_cast</span><span class="op">&lt;</span><span class="dt">int</span><span class="op">&amp;&gt;(</span>cref<span class="op">);</span></span>
+<span id="cb49-4"><a href="#cb49-4" aria-hidden="true" tabindex="-1"></a>ref2 <span class="op">=</span> <span class="dv">99</span><span class="op">;</span></span></code></pre></div>
+<pre><code>v after const_cast modify=99</code></pre>
+<p>但如果被去 const 的对象本身就是以 <code>const</code>
+声明的,再通过它修改就是未定义行为——编译器可能已经把这个值当作编译期常量折叠处理,修改不会生效甚至导致更隐蔽的问题。</p>
+<p><code>reinterpret_cast</code>
+是四种里最底层的,纯粹把一块内存的比特位当作另一种类型来解释,不做任何转换计算,常见于指针与整数的相互转换、不相关指针类型之间的强制转换。绝大多数应用层代码用不到它,只有驱动开发、序列化、底层内存管理这类场景才需要。</p>
+<p>一处容易被忽略的区别:<code>static_cast</code>
+在<strong>多重继承</strong>场景下会调整指针的实际数值——因为基类子对象在派生类对象内的偏移可能不为零,<code>static_cast</code>
+知道这层布局关系并做相应调整:</p>
+<div class="sourceCode" id="cb51"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb51-1"><a href="#cb51-1" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> A <span class="op">{</span> <span class="dt">int</span> a <span class="op">=</span> <span class="dv">1</span><span class="op">;</span> <span class="op">};</span></span>
+<span id="cb51-2"><a href="#cb51-2" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> B <span class="op">{</span> <span class="dt">int</span> b <span class="op">=</span> <span class="dv">2</span><span class="op">;</span> <span class="op">};</span></span>
+<span id="cb51-3"><a href="#cb51-3" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> C <span class="op">:</span> A<span class="op">,</span> B <span class="op">{</span> <span class="dt">int</span> c <span class="op">=</span> <span class="dv">3</span><span class="op">;</span> <span class="op">};</span></span>
+<span id="cb51-4"><a href="#cb51-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb51-5"><a href="#cb51-5" aria-hidden="true" tabindex="-1"></a>C obj<span class="op">;</span></span>
+<span id="cb51-6"><a href="#cb51-6" aria-hidden="true" tabindex="-1"></a>C<span class="op">*</span> pc <span class="op">=</span> <span class="op">&amp;</span>obj<span class="op">;</span></span>
+<span id="cb51-7"><a href="#cb51-7" aria-hidden="true" tabindex="-1"></a>B<span class="op">*</span> pb <span class="op">=</span> <span class="kw">static_cast</span><span class="op">&lt;</span>B<span class="op">*&gt;(</span>pc<span class="op">);</span>   <span class="co">// 转换后地址发生了偏移</span></span></code></pre></div>
+<pre><code>pc=0x16f102e30 pb=0x16f102e34   // pb 比 pc 多 4 字节,B 子对象紧接在 A 子对象之后</code></pre>
+<p><code>reinterpret_cast</code>
+不做任何这样的调整,纯粹把原指针的比特位原样当新类型使用,不保证结果指向有效对象——这也是为什么继承体系内的指针转换应该用
+<code>static_cast</code>/<code>dynamic_cast</code> 而非
+<code>reinterpret_cast</code>。</p>
 <hr />
 <p><a href="index.html">← 返回索引</a></p>
 </div>

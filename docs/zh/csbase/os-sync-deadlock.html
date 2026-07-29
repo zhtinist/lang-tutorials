@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="zh-CN" xml:lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>操作系统同步互斥与死锁</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../../assets/style.css" />
+</head>
+<body>
+<div class="topbar"><div class="wrap"><a class="home" href="../index.html"><span class="logo">📚</span><span class="brand">面向 C/C++ 程序员的其他语言教程</span></a>
+<a href="../python/index.html">Python</a>
+<a href="../java/index.html">Java</a>
+<a href="../go/index.html">Go</a>
+<a href="../algo/index.html">算法笔记</a>
+<a href="../architecture/index.html">架构设计</a>
+<a href="../oodlld/index.html">OOD/LLD</a>
+<a href="../container/index.html">容器对照</a>
+<a href="../cpp/index.html">C++ 教程</a>
+<a href="../baguwen/index.html">面试八股</a>
+<a href="../csbase/index.html" style="color:var(--accent-dark);font-weight:700">计算机基础</a>
+<a href="../javaeco/index.html">Java 生态</a></div></div>
+<div class="wrap">
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#操作系统同步互斥与死锁"
+id="toc-操作系统同步互斥与死锁">操作系统同步互斥与死锁</a>
+<ul>
+<li><a href="#一线程同步的方式有哪些"
+id="toc-一线程同步的方式有哪些">一、线程同步的方式有哪些</a></li>
+<li><a href="#二常见的锁有哪些类型"
+id="toc-二常见的锁有哪些类型">二、常见的锁有哪些类型</a></li>
+<li><a href="#三进程的同步与互斥及其实现方法"
+id="toc-三进程的同步与互斥及其实现方法">三、进程的同步与互斥及其实现方法</a></li>
+<li><a href="#四死锁的定义与预防"
+id="toc-四死锁的定义与预防">四、死锁的定义与预防</a></li>
+<li><a href="#五死锁产生的深层原因与真实场景"
+id="toc-五死锁产生的深层原因与真实场景">五、死锁产生的深层原因与真实场景</a></li>
+<li><a href="#六银行家算法"
+id="toc-六银行家算法">六、银行家算法</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1 id="操作系统同步互斥与死锁">操作系统同步互斥与死锁</h1>
+<p>多个进程或线程并发执行时，一旦涉及共享资源，就会出现两类问题：一是”谁先谁后”的协作顺序问题（同步），二是”同一时刻只能一个用”的独占访问问题（互斥）。处理不好，轻则数据错乱，重则所有相关进程永远卡住不动——也就是死锁。这一篇把同步互斥的实现手段，从最原始的软件算法到操作系统提供的信号量、管程，再到死锁的成因、预防和银行家算法，逐一讲清楚。</p>
+<h2 id="一线程同步的方式有哪些">一、线程同步的方式有哪些</h2>
+<p>线程的实现方式分内核级和用户级两类（参见”进程和线程的区别”），同步手段也因此分成两组。</p>
+<p><strong>内核级线程（KLT）的同步方式</strong>，特点是需要操作系统介入，竞争失败的线程会被移出调度队列进入阻塞：</p>
+<ul>
+<li><strong>互斥锁（Mutex）</strong>：通过系统调用（如
+<code>pthread_mutex_lock</code>）获取锁，确保同一时间只有一个线程进入临界区，竞争失败的线程被阻塞。Linux
+用 <code>futex</code>
+做了优化——先在用户态自旋一小段时间，实在拿不到锁才真正陷入内核阻塞，减少不必要的上下文切换。适用场景是长临界区，比如文件操作，用忙等待反而浪费
+CPU。</li>
+<li><strong>信号量（Semaphore）</strong>：计数信号量管理资源池，例如数据库连接池——池子里有几个连接就允许几个线程同时拿；二进制信号量等价于互斥锁，但支持跨进程（System
+V 信号量）。</li>
+<li><strong>条件变量（Condition
+Variable）</strong>：必须搭配互斥锁使用，<code>wait()</code>
+释放锁并阻塞，<code>signal()</code>
+唤醒等待线程。典型场景是生产者-消费者模型：缓冲区满了生产者等待，缓冲区空了消费者等待，谁的条件满足了就被对方唤醒。</li>
+<li><strong>读写锁（Read-Write
+Lock）</strong>：读锁共享（多个线程可同时持有），写锁独占。适合读多写少的场景，比如配置文件——多个线程同时读取配置没问题，但更新配置时必须独占。</li>
+<li><strong>自旋锁（Spinlock）</strong>：线程循环检测锁状态（类似
+<code>while (lock == BUSY);</code>），不主动让出
+CPU。适用于多核环境下的短临界区，比如 Linux
+内核处理中断时的临界区保护——因为临界区执行得很快，忙等的开销比切换线程的开销还小。风险是如果临界区变长，长时间自旋会白白浪费
+CPU，需要配合抢占式调度。</li>
+</ul>
+<p><strong>用户级线程（ULT）的同步方式</strong>，特点是尽量不触发内核态切换：</p>
+<ul>
+<li><strong>原子操作（Atomic）</strong>：通过 CPU 指令（如
+CAS、LL/SC）直接操作内存，不需要锁。适合无锁计数器、标志位更新这类简单操作（如
+<code>atomic.AddInt32</code>），复杂逻辑仍然需要锁。</li>
+<li><strong>协程同步原语</strong>：如 Go 的
+<code>channel</code>，通过通信传递数据所有权来代替共享内存，依赖调度器做协作式（非抢占式）切换，没有锁竞争，适合高并发
+I/O 密集型任务（网络服务器）。</li>
+<li><strong>轻量级锁</strong>：先在用户态尝试自旋，失败后再升级为内核锁，例如
+Java
+的锁膨胀机制（偏向锁→轻量级锁→重量级锁），目的是减少内核切换次数，兼顾性能与公平性。</li>
+<li><strong>非阻塞数据结构</strong>：基于原子操作实现的无锁队列、无锁栈，比如
+Java 的 <code>ConcurrentLinkedQueue</code>。</li>
+<li><strong>协作式调度同步</strong>：用户态调度器主动让出 CPU（如协程
+<code>yield</code>），通过事件循环协调任务。缺点是依赖开发者手动控制切换时机，容易因为忘记让出而引发死锁。</li>
+</ul>
+<p>几个常见追问：</p>
+<p><strong>Go 的 Goroutine 如何避免内核级同步的开销？</strong> 用
+<code>channel</code>
+通信替代锁，协程切换完全在用户态由调度器管理，只有在真正需要系统调用时才进入内核态。</p>
+<p><strong>自旋锁在什么场景下会失效？如何优化？</strong>
+单核环境下自旋等于纯粹浪费
+CPU（因为持锁线程根本没有机会被调度执行来释放锁）；临界区一长，自旋时间跟着变长同样不划算。优化方式是设置最大自旋次数，超过后转为阻塞锁，或者做自适应自旋——根据历史等待时间动态预测这次该不该继续自旋。</p>
+<p><strong>自旋锁在内核线程和用户线程中使用有何差异？</strong>
+内核态可以直接禁用中断来保证原子性、防止死锁，并且支持多核并发自旋；用户态没有这个特权，只能依赖原子指令或
+<code>futex</code>，单核环境下需要主动调用 <code>sched_yield</code> 让出
+CPU。</p>
+<h2 id="二常见的锁有哪些类型">二、常见的锁有哪些类型</h2>
+<p>三种最典型的锁：</p>
+<ul>
+<li><strong>互斥锁（Mutex
+Lock）</strong>：保证同一时间只有一个线程能访问共享资源，一个线程拿到锁后其他线程必须等锁释放。常与条件变量配合实现条件同步，适用于需要独占访问的场景，如修改全局变量、维护共享数据结构。</li>
+<li><strong>读写锁（Read-Write
+Lock）</strong>：拆成共享的读锁和独占的写锁——读锁可以被多个线程同时持有，写锁只能被一个线程持有。适合读多写少的场景，如缓存系统、数据库。</li>
+<li><strong>自旋锁（Spin
+Lock）</strong>：锁被占用时不阻塞，而是循环检测（忙等待），以此避免线程切换的开销。适用于锁占用时间极短的场景，比如内核里的临界区保护。</li>
+</ul>
+<p><strong>信号量、锁、条件变量三者的关系</strong>是一个常见的追问点：</p>
+<ul>
+<li>信号量是最通用的同步机制，靠计数器控制资源访问，几乎任何同步问题（包括锁）都可以用信号量搭建出来。互斥锁本质上就是信号量的一个特例——一个只能取
+0 或 1 的二进制信号量。</li>
+<li>锁是更高层次的抽象，专门用来保护临界区。互斥锁虽然和信号量相关，但作为一个具体实现，它本身属于锁的范畴。读写锁、自旋锁也是锁的类型，但它们<strong>不是</strong>信号量的特例：读写锁允许多个读操作并发但写操作排他，自旋锁是获取失败时忙等而不是阻塞——这两种行为都超出了”一个计数器”能表达的语义。</li>
+<li>条件变量通常和互斥锁一起使用，用于线程间的通信：允许线程在某个条件不满足时等待，等其他线程发出通知再醒来。条件变量本身不是信号量，但可以和信号量结合实现更复杂的同步逻辑。</li>
+</ul>
+<p><strong>为什么要用锁和条件变量而不是直接裸用信号量？</strong>
+两个原因。一是抽象层次——锁和条件变量提供了更高层次的抽象，代码更易读易写易维护；信号量更底层，需要开发者手动管理计数器，容易出错。二是功能专门化——锁专门保护临界区，条件变量专门做线程间通信，两者组合能更清晰地表达同步逻辑；而信号量虽然功能强大，想用它单独实现同样的效果往往要写更多代码，还更容易踩中死锁或资源争用的坑。</p>
+<h2
+id="三进程的同步与互斥及其实现方法">三、进程的同步与互斥及其实现方法</h2>
+<p><strong>同步</strong>（又称直接相互制约关系，“程序-程序”模式）：多个协作进程按一定顺序执行，在工作中相互等待或通信，体现的是协作关系。<strong>互斥</strong>（又称间接相互制约关系，“程序-资源-程序”模式）：一个进程访问临界资源时，其他进程必须等它退出临界区才能访问，体现的是竞争关系。</p>
+<p>先明确两个概念：<strong>临界资源</strong>是同一时刻只能由一个进程使用的资源，既包括打印机、磁带机、绘图仪这类物理设备，也包括消息队列、共享变量、文件这类软件资源；<strong>临界区</strong>是程序中访问临界资源的那部分代码。临界区前面通常有一段检查代码（进入区），后面有一段释放代码（退出区），其余代码称为剩余区。</p>
+<p>同步与互斥的实现都必须遵循四条设计准则：</p>
+<ol type="1">
+<li><strong>空闲让进</strong>：临界区空闲时，请求进入的进程应立即被允许进入，不能让临界资源闲置。</li>
+<li><strong>忙则等待</strong>：已有进程在临界区内时，其他请求进入的进程必须在外面等待，确保互斥访问。</li>
+<li><strong>有限等待</strong>：对请求访问临界资源的进程，必须保证它能在有限时间内进入临界区，否则会陷入”无限等待”，即便最终等到资源也失去了意义。</li>
+<li><strong>让权等待</strong>：进程如果暂时无法进入临界区，应该立即释放处理器，避免陷入”忙等”浪费
+CPU。</li>
+</ol>
+<h3 id="软件实现方法">软件实现方法</h3>
+<p>以下四种方法只考虑两个进程之间的互斥，是理解”为什么需要硬件/操作系统支持”的铺垫：</p>
+<p><strong>① 单标志法</strong>：设一个共享变量 <code>turn</code>（0 或
+1），表示进入临界区的权限归谁：</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// 进程 P0</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="cf">while</span> <span class="op">(</span>TRUE<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> <span class="op">(</span>turn <span class="op">!=</span> <span class="dv">0</span><span class="op">);</span>   <span class="co">// 进入区：turn=1 说明轮到 P1，P0 阻塞在这里</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    临界区<span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    turn <span class="op">=</span> <span class="dv">1</span><span class="op">;</span>             <span class="co">// 退出区：把权限让给 P1</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    剩余区<span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="co">// 进程 P1</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="cf">while</span> <span class="op">(</span>TRUE<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> <span class="op">(</span>turn <span class="op">!=</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    临界区<span class="op">;</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    turn <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    剩余区<span class="op">;</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>问题：强制要求两个进程轮流进入，如果 P0 还没准备好进临界区，P1
+明明想进也进不去（临界区空闲却不让进），<strong>违背了”空闲让进”</strong>。</p>
+<p><strong>② 双标志先检查法</strong>：改用数组
+<code>flag[2]</code>，进程进入前先检查对方标志位，对方不忙就把自己标志位置
+TRUE：</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="cf">while</span> <span class="op">(</span>TRUE<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> <span class="op">(</span>flag<span class="op">[</span>j<span class="op">]);</span>   <span class="co">// 检查对方是否在用</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    flag<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> TRUE<span class="op">;</span>    <span class="co">// 标记自己进入</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    临界区<span class="op">;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    flag<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> FALSE<span class="op">;</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    剩余区<span class="op">;</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>问题：检查 <code>flag[j]</code> 和设置 <code>flag[i]</code>
+之间存在时间差，两个进程可能都检查到对方标志位为
+FALSE，然后同时把自己的标志位置 TRUE
+并同时进入临界区，<strong>违背”忙则等待”</strong>。</p>
+<p><strong>③
+双标志后检查法</strong>：调整顺序，先设置自己的标志位再检查对方：</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="cf">while</span> <span class="op">(</span>TRUE<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    flag<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> TRUE<span class="op">;</span>    <span class="co">// 先声明自己要进</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> <span class="op">(</span>flag<span class="op">[</span>j<span class="op">]);</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    临界区<span class="op">;</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    flag<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> FALSE<span class="op">;</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    剩余区<span class="op">;</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>这样避免了两个进程同时进入，但又引出新问题：如果两个进程都先把自己的
+flag 置 TRUE，然后互相发现对方也想进，就会都卡在
+<code>while (flag[j])</code>
+里退不出来，<strong>违背”有限等待”和”空闲让进”</strong>。</p>
+<p><strong>④ Peterson 算法</strong>：结合标志位和谦让变量
+<code>turn</code>，既表明”我想进”，又主动谦让：</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="cf">while</span> <span class="op">(</span>TRUE<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    flag<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> TRUE<span class="op">;</span>              <span class="co">// 先表示希望进入</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    turn <span class="op">=</span> j<span class="op">;</span>                    <span class="co">// 再谦让，把先机让给对方</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> <span class="op">(</span>flag<span class="op">[</span>j<span class="op">]</span> <span class="op">&amp;&amp;</span> turn <span class="op">==</span> j<span class="op">);</span> <span class="co">// 对方也想进且轮到对方时，自己等待</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    临界区<span class="op">;</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    flag<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> FALSE<span class="op">;</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>    剩余区<span class="op">;</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Peterson
+算法满足互斥、空闲让进、有限等待三个条件，但不满足”让权等待”（不能进临界区时依然在忙等，没有主动释放处理器），并且<strong>只能处理两个进程之间</strong>的互斥，不符合多进程的实际需求。这说明纯软件手段本身有局限，必须靠硬件或操作系统层面的机制补齐。</p>
+<h3 id="硬件实现方法">硬件实现方法</h3>
+<ul>
+<li><strong>关中断方法</strong>：进入临界区前关中断（暂停进程调度，让当前进程独占处理机），退出后再开中断。能同时满足空闲让进、忙则等待、有限等待，但<strong>不适用于多处理器环境</strong>——即使把当前核心的中断关了，其他核心上的进程照样能跑，无法阻止它们同时进入临界区。</li>
+<li><strong>硬件指令方法</strong>：<strong>TSL（Test-and-Set-Lock）</strong>通过一条硬件指令完成”读取并设置”的原子操作；<strong>Swap（又称
+exchange）</strong>指令通过硬件原子地交换两个变量的值。两者都利用了指令级的原子性来规避软件方法里”检查”和”设置”之间的时间差问题。</li>
+</ul>
+<h3 id="高级同步机制">高级同步机制</h3>
+<ul>
+<li><strong>信号量（Semaphore）</strong>：一种关联临界资源的数据结构，不同的值表示资源的不同状态，支持
+P()（申请资源，不够则阻塞等待）和
+V()（释放资源，有等待者则唤醒一个）两种原子操作。按用途和取值范围可分为二进制信号量和计数信号量，按实现机制可分为整型信号量和记录型信号量。</li>
+<li><strong>管程（Monitor）</strong>：为了集中管理分散在各个进程里的临界区、防止进程违反同步规则而引入的软件模块，由公共变量及其访问函数组成。进程对共享资源的请求、释放等操作必须统一通过管程完成，管程会根据资源状态决定接受或拒绝，确保每次只有一个进程能进入临界区。管程带有面向对象的思想——把共享数据结构和对它的操作、以及同步细节都封装在一个对象里，调用者不需要关心内部的同步逻辑。</li>
+<li><strong>屏障（Barrier）</strong>：确保多个进程或线程在某个点之前都不会继续往下执行——先到的进程会一直等待，直到所有进程都到达屏障后才一起放行。适合并行计算、多阶段任务这类需要”集合点”的场景。</li>
+<li><strong>条件变量（Condition
+Variable）</strong>：本质是一个抽象对象，内部维护一个等待队列，用于在多个进程/线程之间传递状态信息，专门适合”等待某条件成立”的场景，通常与互斥锁一起使用以避免竞态条件。</li>
+</ul>
+<p>进程本身由<strong>程序段、数据段、进程控制块（PCB）</strong>三部分组成。程序未运行时，程序段和数据段是磁盘上的静态文件；运行时操作系统把它们加载进内存形成进程的地址空间，进程就是这个动态执行过程——多个进程完全可以对应同一段静态的程序代码（比如同一个可执行文件启动了多个实例）。</p>
+<h2 id="四死锁的定义与预防">四、死锁的定义与预防</h2>
+<p><strong>死锁</strong>是指多个进程或线程在执行过程中，因为竞争资源而造成的一种互相等待的僵局，导致所有相关进程都无法继续向前推进。产生死锁必须<strong>同时满足</strong>四个必要条件：</p>
+<ol type="1">
+<li><strong>互斥条件</strong>：资源一次只能被一个进程占用（资源本身是独占的，不能共享）。</li>
+<li><strong>请求和保持条件</strong>：进程已经持有至少一个资源，同时又在请求其他资源。</li>
+<li><strong>不可抢占条件</strong>：进程已经获得的资源不能被其他进程或系统强行剥夺，只能由持有者自己主动释放。</li>
+<li><strong>循环等待条件</strong>：存在一个进程-资源的循环等待链，比如进程
+A 等进程 B 持有的资源，进程 B 又在等进程 A 持有的资源。</li>
+</ol>
+<p>一个具体的死锁场景：进程 1 持有打印机、请求扫描仪，进程 2
+持有扫描仪、请求打印机——两者互相持有对方需要的资源，又都不肯放手，形成循环等待，从此都卡死不动。</p>
+<p><strong>死锁预防</strong>的思路是从根本上破坏四个必要条件之一，让死锁根本没有发生的可能：</p>
+<ul>
+<li><strong>破坏互斥条件</strong>：允许资源被多个进程共享。例：只读文件可以被多个进程同时打开访问，不需要互斥。</li>
+<li><strong>破坏请求和保持条件</strong>：要求进程请求资源前必须先释放已持有的资源，或者干脆采用”一次性分配”策略——进程开始执行前必须一次性申请到运行期间需要的全部资源。</li>
+<li><strong>破坏不可抢占条件</strong>：允许系统强制抢占进程已持有的资源。例：当某进程请求资源失败时，系统可以抢占它已经拿到的资源分给别人。</li>
+<li><strong>破坏循环等待条件</strong>：给资源统一编号，要求进程只能按编号递增的顺序申请资源，这样就不可能出现”A
+等 B、B 又等 A”这种环。</li>
+</ul>
+<p>死锁的完整处理策略分为四类：</p>
+<ol type="1">
+<li><strong>死锁预防（Deadlock
+Prevention）</strong>：如上所述，通过破坏必要条件从根源上避免死锁，代价是限制了资源分配的灵活性。</li>
+<li><strong>死锁避免（Deadlock
+Avoidance）</strong>：不限制资源分配方式，而是在每次分配前动态检查系统会不会进入不安全状态，最经典的是<strong>银行家算法</strong>（见下文）。优点是不需要事先限制资源分配方式，缺点是需要预先知道每个进程的最大资源需求，且计算开销较大。</li>
+<li><strong>死锁检测（Deadlock
+Detection）</strong>：不做任何限制，允许死锁真的发生，然后定期检查系统状态是否已经死锁。常用资源分配图检测环路，或用定期检测算法模拟资源分配过程来判断。优点是不限制资源分配，缺点是检测本身消耗系统资源，且检测到死锁后还需要进一步处理。</li>
+<li><strong>死锁解除（Deadlock
+Recovery）</strong>：检测到死锁后采取恢复措施，常见做法是<strong>终止进程</strong>（选择一个或多个死锁进程强制终止，释放其资源）或<strong>资源抢占</strong>（强制回收死锁进程持有的资源分给别人）。选择终止或抢占哪个进程时，通常会综合考虑进程优先级、已运行时间、资源占用情况，以最小化对系统整体的影响。</li>
+</ol>
+<h2
+id="五死锁产生的深层原因与真实场景">五、死锁产生的深层原因与真实场景</h2>
+<p>除了四个必要条件这个理论刻画，死锁在实践中往往可以归结为四类具体原因：</p>
+<ul>
+<li><strong>资源竞争</strong>：多个进程争用数量有限的资源，这是死锁的物质基础。</li>
+<li><strong>推进顺序不当</strong>：进程之间的执行顺序安排不合理，导致互相等待。</li>
+<li><strong>资源分配策略问题</strong>：系统缺乏有效的死锁预防或避免机制。</li>
+<li><strong>程序设计缺陷</strong>：开发者在写代码时没有考虑资源获取的先后顺序。</li>
+</ul>
+<p>几个真实世界里死锁高发的场景：</p>
+<p><strong>数据库系统</strong>：事务 A 锁定了第 1 行、请求锁第 2
+行；事务 B 锁定了第 2 行、请求锁第 1
+行——两个事务互相等待对方释放锁，形成死锁。解决方案通常是<strong>两阶段锁定协议</strong>，或者由数据库引擎的死锁检测器发现环路后主动回滚其中一个事务。</p>
+<p><strong>操作系统资源管理</strong>：进程 1
+持有打印机、请求扫描仪；进程 2
+持有扫描仪、请求打印机。解决方案是对资源做<strong>有序分配</strong>——规定所有进程必须先申请打印机再申请扫描仪，杜绝反向申请的可能。</p>
+<p><strong>多线程编程</strong>：线程 A 按
+<code>lock(m1) → lock(m2)</code> 的顺序加锁，线程 B 按
+<code>lock(m2) → lock(m1)</code> 的顺序加锁——如果 A 刚拿到 m1、B 刚拿到
+m2，两者就会互相等待对方释放。解决方案是建立<strong>锁的层次结构</strong>，规定所有代码路径必须按照同一个固定顺序获取多把锁。</p>
+<p><strong>分布式系统</strong>：多个节点互相等待对方的响应或释放的资源，本质和单机死锁一样，只是资源分布在了不同节点上，检测和恢复的难度更高。</p>
+<p>死锁常和另外两个概念混淆，值得专门辨析一下：</p>
+<ul>
+<li><strong>死锁</strong>：进程被阻塞，彻底不做任何事，永远卡住。</li>
+<li><strong>活锁</strong>：进程仍在运行、状态在变化，但始终没有实质性进展——类比两个人在走廊相向而行，同时向同一侧让路，结果还是撞上，反复调整却谁都过不去。</li>
+<li><strong>饥饿</strong>：进程长期得不到所需资源，但理论上有获得资源、继续推进的可能（比如低优先级进程在优先级调度下一直被插队，但不是完全没有机会）。</li>
+</ul>
+<p>实际开发中预防死锁常用的手段：<strong>锁顺序</strong>——所有线程按相同顺序获取多把锁；<strong>锁超时</strong>——尝试获取锁时设置超时时间，超时就放弃并回退；<strong>锁粒度</strong>——尽量缩小锁保护的范围，减少持锁时间和锁的数量；<strong>无锁编程</strong>——用原子操作或无锁数据结构规避锁本身；<strong>层级锁</strong>——显式定义锁的获取层级，强制自上而下获取。</p>
+<h2 id="六银行家算法">六、银行家算法</h2>
+<p><strong>银行家算法</strong>由 Dijkstra
+提出，是一种用于动态资源分配的死锁<strong>避免</strong>算法（注意区分于死锁预防）。核心思想：每次有进程申请资源，系统都要实时判断”如果批准这次申请，系统是否还能找到一种让所有进程都顺利跑完的分配顺序”；只有在分配后系统仍处于安全状态时才批准，否则拒绝或者让进程继续等待。这个类比来自银行放贷——银行只有在确认放贷后仍有能力应对所有储户提款需求时才会放款。</p>
+<p><strong>算法依赖四个数据结构</strong>：</p>
+<ul>
+<li><code>Available[m]</code>：系统当前每种资源的可用数量，随分配和回收动态变化。</li>
+<li><code>Max[n][m]</code>：n 个进程各自对 m
+类资源的最大需求量，进程运行前必须提前声明。</li>
+<li><code>Allocation[n][m]</code>：每个进程当前已经占有的各类资源数量。</li>
+<li><code>Need[n][m]</code>：每个进程完成任务还需要的资源数量，<code>Need[i][j] = Max[i][j] - Allocation[i][j]</code>。</li>
+</ul>
+<p><strong>处理一次资源请求 Request_i 的步骤</strong>（进程 Pi
+申请资源）：</p>
+<ol type="1">
+<li>若
+<code>Request_i[j] ≤ Need[i][j]</code>，进入下一步；否则说明申请量超过了当初声明的最大需求，直接判定请求失败。</li>
+<li>若
+<code>Request_i[j] ≤ Available[j]</code>，进入下一步；否则说明系统当前没有足够的空闲资源，Pi
+必须等待。</li>
+<li>系统先<strong>试探性</strong>分配资源，更新三个数据结构：</li>
+</ol>
+<pre class="text"><code>Available[j]      = Available[j] - Request_i[j];
+Allocation[i][j]  = Allocation[i][j] + Request_i[j];
+Need[i][j]        = Need[i][j] - Request_i[j];</code></pre>
+<ol start="4" type="1">
+<li>调用<strong>安全性算法</strong>检查试探性分配之后系统是否仍处于安全状态。如果安全，这次分配就正式生效；如果不安全，撤销刚才的试探性分配，恢复原状态，让
+Pi 继续等待。</li>
+</ol>
+<p><strong>安全性检查算法</strong>：</p>
+<ol type="1">
+<li>初始化两个向量：<code>Work[m] = Available[m]</code>（可用于维持进程运行的资源量）；<code>Finish[n]</code>
+全部置为 <code>FALSE</code>（表示尚未确认某进程能顺利跑完）。</li>
+<li>在所有 <code>Finish[i] == FALSE</code> 的进程里，找一个满足
+<code>Need[i][j] ≤ Work[j]</code> 的进程
+Pi（即当前剩余资源足够它跑完）。找不到就跳到第 4 步。</li>
+<li>假设 Pi
+能顺利运行完毕并释放它占有的全部资源：<code>Work[j] = Work[j] + Allocation[i][j]</code>，把
+<code>Finish[i]</code> 置为 <code>TRUE</code>，回到第 2
+步继续找下一个满足条件的进程。</li>
+<li>如果最终所有进程的 <code>Finish[i]</code> 都为
+<code>TRUE</code>，说明存在一个安全序列，系统处于安全状态，允许本次分配；只要有一个进程始终找不到满足条件的机会，系统就处于不安全状态，本次分配不能批准。</li>
+</ol>
+<p><strong>优缺点</strong>：优点是能严格避免死锁、保证系统安全，资源利用率也比”一次性分配所有资源”这类死锁预防策略更高。缺点也很实际：需要进程预先声明最大资源需求，现实场景里这个需求量往往难以准确预估或动态调整；每次请求都要跑一遍安全性检查，遍历所有进程，时间复杂度为
+O(n²)，计算开销不小；而且它假设资源可以被安全地”暂不分配、让进程等待”，因此<strong>不适用于不可抢占资源</strong>（比如打印机这类独占设备一旦占用就无法中途插队检查）。</p>
+<hr />
+<p><a href="index.html">返回索引</a></p>
+</div>
+</body>
+</html>

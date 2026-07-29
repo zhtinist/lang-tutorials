@@ -102,7 +102,9 @@
 <a href="../oodlld/index.html">OOD/LLD</a>
 <a href="../container/index.html">容器对照</a>
 <a href="../cpp/index.html" style="color:var(--accent-dark);font-weight:700">C++ 教程</a>
-<a href="../baguwen/index.html">面试八股</a></div></div>
+<a href="../baguwen/index.html">面试八股</a>
+<a href="../csbase/index.html">计算机基础</a>
+<a href="../javaeco/index.html">Java 生态</a></div></div>
 <div class="wrap">
 <nav id="TOC" role="doc-toc">
 <ul>
@@ -123,14 +125,18 @@ id="toc-四自定义删除器">四、自定义删除器</a></li>
 <li><a href="#六newdelete-与-mallocfree-对比"
 id="toc-六newdelete-与-mallocfree-对比">六、<code>new</code>/<code>delete</code>
 与 <code>malloc</code>/<code>free</code> 对比</a></li>
+<li><a href="#七智能指针的线程安全性"
+id="toc-七智能指针的线程安全性">七、智能指针的线程安全性</a></li>
 </ul></li>
 </ul>
 </nav>
 <h1 id="智能指针与现代内存管理">智能指针与现代内存管理</h1>
 <p>本章覆盖现代 C++
-内存管理的核心知识点:三种智能指针(<code>unique_ptr</code>/<code>shared_ptr</code>/<code>weak_ptr</code>)的用法与适用场景、<code>make_unique</code>/<code>make_shared</code>、循环引用问题、自定义删除器、RAII
-思想,以及 <code>new</code>/<code>delete</code> 与
-<code>malloc</code>/<code>free</code> 的区别。现代 C++
+内存管理的核心知识点:三种智能指针(<code>unique_ptr</code>/<code>shared_ptr</code>/<code>weak_ptr</code>)的用法、适用场景与选型原则、<code>make_unique</code>/<code>make_shared</code>(含
+<code>shared_ptr</code>
+控制块的内部结构)、循环引用问题、自定义删除器、RAII
+思想、智能指针的线程安全边界,以及 <code>new</code>/<code>delete</code>
+与 <code>malloc</code>/<code>free</code> 的区别。现代 C++
 代码里几乎不应该出现裸 <code>new</code>/<code>delete</code>。</p>
 <h2
 id="一unique_ptr独占所有权">一、<code>unique_ptr</code>:独占所有权</h2>
@@ -171,42 +177,61 @@ w2-&gt;id=1
 析构 Widget 3
 析构 Widget 1</code></pre>
 <p><strong>适用场景</strong>:资源只有唯一所有者的绝大多数情况——函数内创建、返回给调用者;类的成员,表示”我独占这个资源”;工厂函数的返回值。应作为默认首选的智能指针。</p>
+<p><strong>“独占”是怎么在编译期强制出来的</strong>:<code>unique_ptr</code>
+内部没有引用计数,本质就是对一个裸指针的 RAII 包装,析构函数里调一次
+<code>delete</code>(或自定义
+deleter)。真正保证”同一时刻只有一份所有权”的不是运行期检查,而是编译期直接堵死拷贝路径——一旦类里声明了移动构造/移动赋值,拷贝构造和拷贝赋值的隐式生成就会被抑制,等价于显式
+<code>= delete</code>,任何试图拷贝的代码根本无法通过编译:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>unique_ptr<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> a<span class="op">(</span><span class="kw">new</span> <span class="dt">int</span><span class="op">(</span><span class="dv">1</span><span class="op">));</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>unique_ptr<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> b <span class="op">=</span> a<span class="op">;</span>   <span class="co">// 编译错误</span></span></code></pre></div>
+<pre><code>error: call to implicitly-deleted copy constructor of &#39;std::unique_ptr&lt;int&gt;&#39;
+note: copy constructor is implicitly deleted because &#39;unique_ptr&lt;int&gt;&#39;
+      has a user-declared move constructor</code></pre>
+<p>这是”把一类运行期才会暴露的所有权错误,转移到编译期直接堵死”的典型设计:不需要任何运行时开销(没有标志位、没有检查),类型系统本身就保证了独占语义。</p>
+<p><strong>选型的决策顺序</strong>:默认用
+<code>unique_ptr</code>;确认资源需要被多处真正共享时才升级为
+<code>shared_ptr</code>;出现循环引用或需要非拥有性的观察语义时,把其中一个方向换成
+<code>weak_ptr</code>。<code>shared_ptr</code>
+往往是”没理清楚所有权关系”时的妥协方案——如果能把创建者、拥有者、销毁者的责任划分清楚,绝大多数情况只用
+<code>unique_ptr</code> 就够了。<code>unique_ptr</code> 可以单向转换成
+<code>shared_ptr</code>(<code>std::shared_ptr&lt;T&gt; sp = std::move(up);</code>),反过来不行,这是所有权从”独占”放大为”共享”的单向操作,语义上不可逆。</p>
 <h2 id="二shared_ptr-与-weak_ptr共享所有权">二、<code>shared_ptr</code>
 与 <code>weak_ptr</code>:共享所有权</h2>
 <p><code>std::shared_ptr</code>
 通过<strong>引用计数</strong>支持多个所有者共享同一个对象,计数归零时自动释放。<code>std::weak_ptr</code>
 不参与计数,只”观察”对象是否还存活,用来打破循环引用。</p>
-<div class="sourceCode" id="cb3"><pre
-class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;iostream&gt;</span></span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;memory&gt;</span></span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> Node <span class="op">{</span></span>
-<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> id<span class="op">;</span></span>
-<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    Node<span class="op">(</span><span class="dt">int</span> id<span class="op">)</span> <span class="op">:</span> id<span class="op">(</span>id<span class="op">)</span> <span class="op">{</span> <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;构造 Node &quot;</span> <span class="op">&lt;&lt;</span> id <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="op">}</span></span>
-<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">~</span>Node<span class="op">()</span> <span class="op">{</span> <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;析构 Node &quot;</span> <span class="op">&lt;&lt;</span> id <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="op">}</span></span>
-<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
-<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> main<span class="op">()</span> <span class="op">{</span></span>
-<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    <span class="kw">auto</span> a <span class="op">=</span> <span class="bu">std::</span>make_shared<span class="op">&lt;</span>Node<span class="op">&gt;(</span><span class="dv">1</span><span class="op">);</span>   <span class="co">// make_shared:一次分配同时容纳对象和控制块,比 shared_ptr(new T) 更高效</span></span>
-<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;use_count(a)=&quot;</span> <span class="op">&lt;&lt;</span> a<span class="op">.</span>use_count<span class="op">()</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="co">// 1</span></span>
-<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>    <span class="op">{</span></span>
-<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>        <span class="kw">auto</span> b <span class="op">=</span> a<span class="op">;</span>                          <span class="co">// 拷贝 shared_ptr,引用计数 +1</span></span>
-<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>        <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;use_count(a)=&quot;</span> <span class="op">&lt;&lt;</span> a<span class="op">.</span>use_count<span class="op">()</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="co">// 2</span></span>
-<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span> <span class="co">// b 离开作用域,引用计数 -1</span></span>
-<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;use_count(a) after scope=&quot;</span> <span class="op">&lt;&lt;</span> a<span class="op">.</span>use_count<span class="op">()</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="co">// 1</span></span>
-<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>weak_ptr<span class="op">&lt;</span>Node<span class="op">&gt;</span> weakRef <span class="op">=</span> a<span class="op">;</span>   <span class="co">// weak_ptr 不增加引用计数,只是“观察”</span></span>
-<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;use_count via weak still=&quot;</span> <span class="op">&lt;&lt;</span> a<span class="op">.</span>use_count<span class="op">()</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="co">// 1</span></span>
-<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span><span class="kw">auto</span> locked <span class="op">=</span> weakRef<span class="op">.</span>lock<span class="op">())</span> <span class="op">{</span> <span class="co">// lock() 尝试提升为 shared_ptr,对象存活则成功</span></span>
-<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>        <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;locked id=&quot;</span> <span class="op">&lt;&lt;</span> locked<span class="op">-&gt;</span>id <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span></span>
-<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a>    a<span class="op">.</span>reset<span class="op">();</span>                           <span class="co">// 显式释放</span></span>
-<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;expired=&quot;</span> <span class="op">&lt;&lt;</span> weakRef<span class="op">.</span>expired<span class="op">()</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="co">// 1(true),对象已销毁</span></span>
-<span id="cb3-30"><a href="#cb3-30" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;iostream&gt;</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;memory&gt;</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> Node <span class="op">{</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> id<span class="op">;</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>    Node<span class="op">(</span><span class="dt">int</span> id<span class="op">)</span> <span class="op">:</span> id<span class="op">(</span>id<span class="op">)</span> <span class="op">{</span> <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;构造 Node &quot;</span> <span class="op">&lt;&lt;</span> id <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">~</span>Node<span class="op">()</span> <span class="op">{</span> <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;析构 Node &quot;</span> <span class="op">&lt;&lt;</span> id <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>    <span class="kw">auto</span> a <span class="op">=</span> <span class="bu">std::</span>make_shared<span class="op">&lt;</span>Node<span class="op">&gt;(</span><span class="dv">1</span><span class="op">);</span>   <span class="co">// make_shared:一次分配同时容纳对象和控制块,比 shared_ptr(new T) 更高效</span></span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;use_count(a)=&quot;</span> <span class="op">&lt;&lt;</span> a<span class="op">.</span>use_count<span class="op">()</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="co">// 1</span></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>    <span class="op">{</span></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>        <span class="kw">auto</span> b <span class="op">=</span> a<span class="op">;</span>                          <span class="co">// 拷贝 shared_ptr,引用计数 +1</span></span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>        <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;use_count(a)=&quot;</span> <span class="op">&lt;&lt;</span> a<span class="op">.</span>use_count<span class="op">()</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="co">// 2</span></span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span> <span class="co">// b 离开作用域,引用计数 -1</span></span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;use_count(a) after scope=&quot;</span> <span class="op">&lt;&lt;</span> a<span class="op">.</span>use_count<span class="op">()</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="co">// 1</span></span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>weak_ptr<span class="op">&lt;</span>Node<span class="op">&gt;</span> weakRef <span class="op">=</span> a<span class="op">;</span>   <span class="co">// weak_ptr 不增加引用计数,只是“观察”</span></span>
+<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;use_count via weak still=&quot;</span> <span class="op">&lt;&lt;</span> a<span class="op">.</span>use_count<span class="op">()</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="co">// 1</span></span>
+<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span><span class="kw">auto</span> locked <span class="op">=</span> weakRef<span class="op">.</span>lock<span class="op">())</span> <span class="op">{</span> <span class="co">// lock() 尝试提升为 shared_ptr,对象存活则成功</span></span>
+<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a>        <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;locked id=&quot;</span> <span class="op">&lt;&lt;</span> locked<span class="op">-&gt;</span>id <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span></span>
+<span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-28"><a href="#cb5-28" aria-hidden="true" tabindex="-1"></a>    a<span class="op">.</span>reset<span class="op">();</span>                           <span class="co">// 显式释放</span></span>
+<span id="cb5-29"><a href="#cb5-29" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;expired=&quot;</span> <span class="op">&lt;&lt;</span> weakRef<span class="op">.</span>expired<span class="op">()</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="co">// 1(true),对象已销毁</span></span>
+<span id="cb5-30"><a href="#cb5-30" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <pre><code>构造 Node 1
 use_count(a)=1
 use_count(a)=2
@@ -218,50 +243,82 @@ expired=1</code></pre>
 <p><code>make_shared</code> 比
 <code>std::shared_ptr&lt;T&gt;(new T(...))</code>
 更推荐:后者要分配两次(对象一次、控制块一次),前者一次分配同时放下对象和控制块,更快且异常安全性更好。<strong>适用场景</strong>:多个地方需要共同拥有、生命周期不确定谁最后释放的资源(比如观察者模式里的观察者列表、图/树结构中共享的节点)。</p>
+<p><strong><code>shared_ptr</code>
+内部的控制块长什么样</strong>:<code>shared_ptr</code>
+除了一个指向被管理对象的裸指针,还持有一个指向控制块(control
+block)的指针。控制块是一块独立分配的内存,至少包含两个原子计数器——<code>shared_count</code>(强引用计数):每拷贝一次
+<code>shared_ptr</code> 原子加一,每析构一次原子减一,减到 0
+时被管理对象立即销毁;<code>weak_count</code>(弱引用计数):每创建一个指向同一控制块的
+<code>weak_ptr</code> 原子加一,<code>weak_ptr</code>
+析构原子减一。<strong>控制块本身要等 <code>shared_count</code> 和
+<code>weak_count</code>
+都归零才会被释放</strong>——这意味着只要还有存活的
+<code>weak_ptr</code>,控制块占用的内存就不会被回收,即便对象本身早已析构。这也是为什么
+<code>weak_ptr::lock()</code> 之后可能安全地返回一个空
+<code>shared_ptr</code>,而不是访问到一块已经被完全释放的内存:控制块还在,只是里面记录的”对象已死”这条状态被查询到了。</p>
+<p><code>make_shared</code>
+把对象和控制块安排在同一块连续内存里一次分配完成,用重载
+<code>operator new</code> 计数分配次数可以直接验证这个差异:</p>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>shared_ptr<span class="op">&lt;</span>Big<span class="op">&gt;</span> p<span class="op">(</span><span class="kw">new</span> Big<span class="op">());</span>   <span class="co">// 2 次 operator new:对象一次,控制块一次</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="op">{</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">auto</span> p <span class="op">=</span> <span class="bu">std::</span>make_shared<span class="op">&lt;</span>Big<span class="op">&gt;();</span>    <span class="co">// 1 次 operator new</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>这个优化也带来一个容易被忽视的代价:既然对象和控制块共享同一块内存,只要有任何一个
+<code>weak_ptr</code>
+还存活,这整块内存(包括对象本身占用的部分)就不能释放——<code>make_shared</code>
+出来的对象,其内存的实际释放时机会被”最后一个 <code>weak_ptr</code>
+析构”这个更晚的事件拖住;而 <code>new</code> + <code>shared_ptr</code>
+的写法里,对象内存在 <code>shared_count</code>
+归零时就能立即释放,控制块内存可以晚一点单独释放。对于对象本身占用内存较大、又存在长期持有的
+<code>weak_ptr</code> 的场景,这个差异值得权衡,不能无条件认为
+<code>make_shared</code> 总是更优。</p>
 <h2 id="三循环引用问题与-weak_ptr-解决方案">三、循环引用问题与
 <code>weak_ptr</code> 解决方案</h2>
 <p>如果两个对象互相持有对方的
 <code>shared_ptr</code>,会形成引用环,双方引用计数永远不会归零,导致内存泄漏:</p>
-<div class="sourceCode" id="cb5"><pre
-class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;iostream&gt;</span></span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;memory&gt;</span></span>
-<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> Node <span class="op">{</span></span>
-<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> id<span class="op">;</span></span>
-<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>shared_ptr<span class="op">&lt;</span>Node<span class="op">&gt;</span> next<span class="op">;</span>   <span class="co">// 两边都用 shared_ptr 会形成循环引用</span></span>
-<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>    Node<span class="op">(</span><span class="dt">int</span> id<span class="op">)</span> <span class="op">:</span> id<span class="op">(</span>id<span class="op">)</span> <span class="op">{</span> <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;构造 Node &quot;</span> <span class="op">&lt;&lt;</span> id <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="op">}</span></span>
-<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">~</span>Node<span class="op">()</span> <span class="op">{</span> <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;析构 Node &quot;</span> <span class="op">&lt;&lt;</span> id <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="op">}</span></span>
-<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
-<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> demoLeak<span class="op">()</span> <span class="op">{</span></span>
-<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>    <span class="kw">auto</span> a <span class="op">=</span> <span class="bu">std::</span>make_shared<span class="op">&lt;</span>Node<span class="op">&gt;(</span><span class="dv">1</span><span class="op">);</span></span>
-<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>    <span class="kw">auto</span> b <span class="op">=</span> <span class="bu">std::</span>make_shared<span class="op">&lt;</span>Node<span class="op">&gt;(</span><span class="dv">2</span><span class="op">);</span></span>
-<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>    a<span class="op">-&gt;</span>next <span class="op">=</span> b<span class="op">;</span>    <span class="co">// a 持有 b 的 shared_ptr</span></span>
-<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>    b<span class="op">-&gt;</span>next <span class="op">=</span> a<span class="op">;</span>      <span class="co">// b 也持有 a 的 shared_ptr —— 循环引用!</span></span>
-<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;use_count(a)=&quot;</span> <span class="op">&lt;&lt;</span> a<span class="op">.</span>use_count<span class="op">()</span> <span class="op">&lt;&lt;</span> <span class="st">&quot; use_count(b)=&quot;</span> <span class="op">&lt;&lt;</span> b<span class="op">.</span>use_count<span class="op">()</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="co">// 都是 2</span></span>
-<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> <span class="co">// a, b 局部变量析构,但各自引用计数只减到 1(对方还拿着),对象永远不会被析构 —— 内存泄漏</span></span></code></pre></div>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;iostream&gt;</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;memory&gt;</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> Node <span class="op">{</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> id<span class="op">;</span></span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>shared_ptr<span class="op">&lt;</span>Node<span class="op">&gt;</span> next<span class="op">;</span>   <span class="co">// 两边都用 shared_ptr 会形成循环引用</span></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>    Node<span class="op">(</span><span class="dt">int</span> id<span class="op">)</span> <span class="op">:</span> id<span class="op">(</span>id<span class="op">)</span> <span class="op">{</span> <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;构造 Node &quot;</span> <span class="op">&lt;&lt;</span> id <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">~</span>Node<span class="op">()</span> <span class="op">{</span> <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;析构 Node &quot;</span> <span class="op">&lt;&lt;</span> id <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> demoLeak<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a>    <span class="kw">auto</span> a <span class="op">=</span> <span class="bu">std::</span>make_shared<span class="op">&lt;</span>Node<span class="op">&gt;(</span><span class="dv">1</span><span class="op">);</span></span>
+<span id="cb8-13"><a href="#cb8-13" aria-hidden="true" tabindex="-1"></a>    <span class="kw">auto</span> b <span class="op">=</span> <span class="bu">std::</span>make_shared<span class="op">&lt;</span>Node<span class="op">&gt;(</span><span class="dv">2</span><span class="op">);</span></span>
+<span id="cb8-14"><a href="#cb8-14" aria-hidden="true" tabindex="-1"></a>    a<span class="op">-&gt;</span>next <span class="op">=</span> b<span class="op">;</span>    <span class="co">// a 持有 b 的 shared_ptr</span></span>
+<span id="cb8-15"><a href="#cb8-15" aria-hidden="true" tabindex="-1"></a>    b<span class="op">-&gt;</span>next <span class="op">=</span> a<span class="op">;</span>      <span class="co">// b 也持有 a 的 shared_ptr —— 循环引用!</span></span>
+<span id="cb8-16"><a href="#cb8-16" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;use_count(a)=&quot;</span> <span class="op">&lt;&lt;</span> a<span class="op">.</span>use_count<span class="op">()</span> <span class="op">&lt;&lt;</span> <span class="st">&quot; use_count(b)=&quot;</span> <span class="op">&lt;&lt;</span> b<span class="op">.</span>use_count<span class="op">()</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="co">// 都是 2</span></span>
+<span id="cb8-17"><a href="#cb8-17" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> <span class="co">// a, b 局部变量析构,但各自引用计数只减到 1(对方还拿着),对象永远不会被析构 —— 内存泄漏</span></span></code></pre></div>
 <pre><code>构造 Node 1
 构造 Node 2
 use_count(a)=2 use_count(b)=2
 (demoLeak 结束,但没有看到 Node 的析构输出 —— 说明发生了内存泄漏)</code></pre>
 <p>解决方案是把其中一个方向的引用(通常是”反向指针”、“父指针”这类逻辑上不应该拥有所有权的一边)改成
 <code>weak_ptr</code>:</p>
-<div class="sourceCode" id="cb7"><pre
-class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> NodeFixed <span class="op">{</span></span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> id<span class="op">;</span></span>
-<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>shared_ptr<span class="op">&lt;</span>NodeFixed<span class="op">&gt;</span> next<span class="op">;</span></span>
-<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>weak_ptr<span class="op">&lt;</span>NodeFixed<span class="op">&gt;</span> prev<span class="op">;</span>    <span class="co">// 用 weak_ptr 打破环,不增加引用计数</span></span>
-<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>    NodeFixed<span class="op">(</span><span class="dt">int</span> id<span class="op">)</span> <span class="op">:</span> id<span class="op">(</span>id<span class="op">)</span> <span class="op">{</span> <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;构造 NodeFixed &quot;</span> <span class="op">&lt;&lt;</span> id <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="op">}</span></span>
-<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">~</span>NodeFixed<span class="op">()</span> <span class="op">{</span> <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;析构 NodeFixed &quot;</span> <span class="op">&lt;&lt;</span> id <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="op">}</span></span>
-<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
-<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> demoFixed<span class="op">()</span> <span class="op">{</span></span>
-<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">auto</span> a <span class="op">=</span> <span class="bu">std::</span>make_shared<span class="op">&lt;</span>NodeFixed<span class="op">&gt;(</span><span class="dv">1</span><span class="op">);</span></span>
-<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>    <span class="kw">auto</span> b <span class="op">=</span> <span class="bu">std::</span>make_shared<span class="op">&lt;</span>NodeFixed<span class="op">&gt;(</span><span class="dv">2</span><span class="op">);</span></span>
-<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>    a<span class="op">-&gt;</span>next <span class="op">=</span> b<span class="op">;</span></span>
-<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>    b<span class="op">-&gt;</span>prev <span class="op">=</span> a<span class="op">;</span>      <span class="co">// weak_ptr,不增加 a 的引用计数</span></span>
-<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;use_count(a)=&quot;</span> <span class="op">&lt;&lt;</span> a<span class="op">.</span>use_count<span class="op">()</span> <span class="op">&lt;&lt;</span> <span class="st">&quot; use_count(b)=&quot;</span> <span class="op">&lt;&lt;</span> b<span class="op">.</span>use_count<span class="op">()</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="co">// a=1, b=2</span></span>
-<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> <span class="co">// 离开作用域后正常释放</span></span></code></pre></div>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> NodeFixed <span class="op">{</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> id<span class="op">;</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>shared_ptr<span class="op">&lt;</span>NodeFixed<span class="op">&gt;</span> next<span class="op">;</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>weak_ptr<span class="op">&lt;</span>NodeFixed<span class="op">&gt;</span> prev<span class="op">;</span>    <span class="co">// 用 weak_ptr 打破环,不增加引用计数</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>    NodeFixed<span class="op">(</span><span class="dt">int</span> id<span class="op">)</span> <span class="op">:</span> id<span class="op">(</span>id<span class="op">)</span> <span class="op">{</span> <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;构造 NodeFixed &quot;</span> <span class="op">&lt;&lt;</span> id <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">~</span>NodeFixed<span class="op">()</span> <span class="op">{</span> <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;析构 NodeFixed &quot;</span> <span class="op">&lt;&lt;</span> id <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> demoFixed<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">auto</span> a <span class="op">=</span> <span class="bu">std::</span>make_shared<span class="op">&lt;</span>NodeFixed<span class="op">&gt;(</span><span class="dv">1</span><span class="op">);</span></span>
+<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a>    <span class="kw">auto</span> b <span class="op">=</span> <span class="bu">std::</span>make_shared<span class="op">&lt;</span>NodeFixed<span class="op">&gt;(</span><span class="dv">2</span><span class="op">);</span></span>
+<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a>    a<span class="op">-&gt;</span>next <span class="op">=</span> b<span class="op">;</span></span>
+<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a>    b<span class="op">-&gt;</span>prev <span class="op">=</span> a<span class="op">;</span>      <span class="co">// weak_ptr,不增加 a 的引用计数</span></span>
+<span id="cb10-14"><a href="#cb10-14" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;use_count(a)=&quot;</span> <span class="op">&lt;&lt;</span> a<span class="op">.</span>use_count<span class="op">()</span> <span class="op">&lt;&lt;</span> <span class="st">&quot; use_count(b)=&quot;</span> <span class="op">&lt;&lt;</span> b<span class="op">.</span>use_count<span class="op">()</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="co">// a=1, b=2</span></span>
+<span id="cb10-15"><a href="#cb10-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> <span class="co">// 离开作用域后正常释放</span></span></code></pre></div>
 <pre><code>构造 NodeFixed 1
 构造 NodeFixed 2
 use_count(a)=1 use_count(b)=2
@@ -270,38 +327,52 @@ use_count(a)=1 use_count(b)=2
 (demoFixed 结束,两个 NodeFixed 都被正确析构)</code></pre>
 <p>判断原则:两个对象的”拥有”关系如果是双向的,至少要有一个方向不算作真正的所有权(只是引用/观察),就应该用
 <code>weak_ptr</code>。典型场景:双向链表/树的父指针、观察者模式里被观察者持有观察者列表、缓存里指向”拥有者”的反向指针。</p>
+<p>上面 <code>demoFixed</code>
+里两个对象的析构不是同时发生的,而是<strong>级联触发</strong>的:局部变量按声明逆序析构,局部变量
+<code>b</code>(那个 <code>shared_ptr</code> 本身)先析构,但它只是把
+<code>NodeFixed 2</code> 的强引用计数从 2(局部 <code>b</code> 加上
+<code>a-&gt;next</code>)减到 1,对象还被 <code>a-&gt;next</code>
+那份强引用拽着,不会被销毁;接着局部变量 <code>a</code>
+析构,<code>NodeFixed 1</code> 的强引用计数(只有局部 <code>a</code>
+这一份,因为 <code>b-&gt;prev</code> 是 <code>weak_ptr</code>
+不计入)归零,<code>a</code> 对象被销毁——销毁过程中它的成员
+<code>next</code>(那个指向 <code>b</code> 的
+<code>shared_ptr</code>)也随之析构,这才把 <code>NodeFixed 2</code>
+的计数从 1 减到 0,级联触发 <code>b</code> 对象的销毁。所以实际打印顺序是
+<code>NodeFixed 1</code> 先析构、<code>NodeFixed 2</code>
+紧随其后被级联析构,而不是按局部变量声明的字面顺序。理解这条级联链,是排查”打破循环引用之后析构顺序为什么和预期不一样”这类问题的关键。</p>
 <h2 id="四自定义删除器">四、自定义删除器</h2>
 <p>智能指针默认用 <code>delete</code>/<code>delete[]</code>
 释放资源,但很多资源(C API
 返回的句柄、文件指针、系统对象)需要专门的释放函数,这时可以提供自定义删除器:</p>
-<div class="sourceCode" id="cb9"><pre
-class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;iostream&gt;</span></span>
-<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;memory&gt;</span></span>
-<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;cstdio&gt;</span></span>
-<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> FileCloser <span class="op">{</span></span>
-<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">void</span> <span class="kw">operator</span><span class="op">()(</span><span class="dt">FILE</span><span class="op">*</span> f<span class="op">)</span> <span class="at">const</span> <span class="op">{</span></span>
-<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>f<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>            <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;关闭文件</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span></span>
-<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>            <span class="bu">std::</span>fclose<span class="op">(</span>f<span class="op">);</span></span>
-<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
-<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
-<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb9-14"><a href="#cb9-14" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> main<span class="op">()</span> <span class="op">{</span></span>
-<span id="cb9-15"><a href="#cb9-15" aria-hidden="true" tabindex="-1"></a>    <span class="co">// unique_ptr 的删除器类型是模板参数的一部分</span></span>
-<span id="cb9-16"><a href="#cb9-16" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>unique_ptr<span class="op">&lt;</span><span class="dt">FILE</span><span class="op">,</span> FileCloser<span class="op">&gt;</span> file<span class="op">(</span><span class="bu">std::</span>fopen<span class="op">(</span><span class="st">&quot;/tmp/cpp_tutorial_test.txt&quot;</span><span class="op">,</span> <span class="st">&quot;w&quot;</span><span class="op">));</span></span>
-<span id="cb9-17"><a href="#cb9-17" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>file<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb9-18"><a href="#cb9-18" aria-hidden="true" tabindex="-1"></a>        <span class="bu">std::</span>fputs<span class="op">(</span><span class="st">&quot;hello</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">,</span> file<span class="op">.</span>get<span class="op">());</span></span>
-<span id="cb9-19"><a href="#cb9-19" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb9-20"><a href="#cb9-20" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 离开作用域自动调用 FileCloser::operator(),而不是默认的 delete</span></span>
-<span id="cb9-21"><a href="#cb9-21" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb9-22"><a href="#cb9-22" aria-hidden="true" tabindex="-1"></a>    <span class="co">// shared_ptr 的删除器是运行期存储的(类型擦除),可以直接传 lambda</span></span>
-<span id="cb9-23"><a href="#cb9-23" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>shared_ptr<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> arr<span class="op">(</span><span class="kw">new</span> <span class="dt">int</span><span class="op">[</span><span class="dv">5</span><span class="op">],</span> <span class="op">[](</span><span class="dt">int</span><span class="op">*</span> p<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb9-24"><a href="#cb9-24" aria-hidden="true" tabindex="-1"></a>        <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;自定义删除数组</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span></span>
-<span id="cb9-25"><a href="#cb9-25" aria-hidden="true" tabindex="-1"></a>        <span class="kw">delete</span><span class="op">[]</span> p<span class="op">;</span></span>
-<span id="cb9-26"><a href="#cb9-26" aria-hidden="true" tabindex="-1"></a>    <span class="op">});</span></span>
-<span id="cb9-27"><a href="#cb9-27" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;iostream&gt;</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;memory&gt;</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;cstdio&gt;</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> FileCloser <span class="op">{</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">void</span> <span class="kw">operator</span><span class="op">()(</span><span class="dt">FILE</span><span class="op">*</span> f<span class="op">)</span> <span class="at">const</span> <span class="op">{</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>f<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>            <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;关闭文件</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span></span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>            <span class="bu">std::</span>fclose<span class="op">(</span>f<span class="op">);</span></span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a>    <span class="co">// unique_ptr 的删除器类型是模板参数的一部分</span></span>
+<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>unique_ptr<span class="op">&lt;</span><span class="dt">FILE</span><span class="op">,</span> FileCloser<span class="op">&gt;</span> file<span class="op">(</span><span class="bu">std::</span>fopen<span class="op">(</span><span class="st">&quot;/tmp/cpp_tutorial_test.txt&quot;</span><span class="op">,</span> <span class="st">&quot;w&quot;</span><span class="op">));</span></span>
+<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>file<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a>        <span class="bu">std::</span>fputs<span class="op">(</span><span class="st">&quot;hello</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">,</span> file<span class="op">.</span>get<span class="op">());</span></span>
+<span id="cb12-19"><a href="#cb12-19" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb12-20"><a href="#cb12-20" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 离开作用域自动调用 FileCloser::operator(),而不是默认的 delete</span></span>
+<span id="cb12-21"><a href="#cb12-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-22"><a href="#cb12-22" aria-hidden="true" tabindex="-1"></a>    <span class="co">// shared_ptr 的删除器是运行期存储的(类型擦除),可以直接传 lambda</span></span>
+<span id="cb12-23"><a href="#cb12-23" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>shared_ptr<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> arr<span class="op">(</span><span class="kw">new</span> <span class="dt">int</span><span class="op">[</span><span class="dv">5</span><span class="op">],</span> <span class="op">[](</span><span class="dt">int</span><span class="op">*</span> p<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb12-24"><a href="#cb12-24" aria-hidden="true" tabindex="-1"></a>        <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;自定义删除数组</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span></span>
+<span id="cb12-25"><a href="#cb12-25" aria-hidden="true" tabindex="-1"></a>        <span class="kw">delete</span><span class="op">[]</span> p<span class="op">;</span></span>
+<span id="cb12-26"><a href="#cb12-26" aria-hidden="true" tabindex="-1"></a>    <span class="op">});</span></span>
+<span id="cb12-27"><a href="#cb12-27" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <pre><code>自定义删除数组
 关闭文件</code></pre>
 <p><code>unique_ptr&lt;T, Deleter&gt;</code>
@@ -316,38 +387,38 @@ Initialization,资源获取即初始化)是 C++
 C++
 保证局部对象在离开作用域时(无论是正常返回还是异常导致的栈展开)一定会调用析构函数,资源就一定会被释放,不需要
 <code>try/finally</code> 这类语法来保证清理。</p>
-<div class="sourceCode" id="cb11"><pre
-class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;iostream&gt;</span></span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;stdexcept&gt;</span></span>
-<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> FileGuard <span class="op">{</span>              <span class="co">// RAII:构造时获取资源,析构时自动释放,保证异常安全</span></span>
-<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span><span class="op">:</span></span>
-<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>    FileGuard<span class="op">(</span><span class="at">const</span> <span class="bu">std::</span>string<span class="op">&amp;</span> name<span class="op">)</span> <span class="op">:</span> <span class="va">name_</span><span class="op">(</span>name<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>        <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;打开资源: &quot;</span> <span class="op">&lt;&lt;</span> <span class="va">name_</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span></span>
-<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">~</span>FileGuard<span class="op">()</span> <span class="op">{</span></span>
-<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a>        <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;释放资源: &quot;</span> <span class="op">&lt;&lt;</span> <span class="va">name_</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span></span>
-<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a><span class="kw">private</span><span class="op">:</span></span>
-<span id="cb11-13"><a href="#cb11-13" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>string <span class="va">name_</span><span class="op">;</span></span>
-<span id="cb11-14"><a href="#cb11-14" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
-<span id="cb11-15"><a href="#cb11-15" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-16"><a href="#cb11-16" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> mayThrow<span class="op">(</span><span class="dt">bool</span> doThrow<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb11-17"><a href="#cb11-17" aria-hidden="true" tabindex="-1"></a>    FileGuard guard<span class="op">(</span><span class="st">&quot;data.txt&quot;</span><span class="op">);</span>    <span class="co">// 资源获取即初始化</span></span>
-<span id="cb11-18"><a href="#cb11-18" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>doThrow<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb11-19"><a href="#cb11-19" aria-hidden="true" tabindex="-1"></a>        <span class="cf">throw</span> <span class="bu">std::</span>runtime_error<span class="op">(</span><span class="st">&quot;出错了&quot;</span><span class="op">);</span></span>
-<span id="cb11-20"><a href="#cb11-20" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb11-21"><a href="#cb11-21" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;正常使用资源</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span></span>
-<span id="cb11-22"><a href="#cb11-22" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> <span class="co">// 无论正常返回还是异常抛出,guard 的析构函数都会被调用,资源不会泄漏</span></span>
-<span id="cb11-23"><a href="#cb11-23" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-24"><a href="#cb11-24" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> main<span class="op">()</span> <span class="op">{</span></span>
-<span id="cb11-25"><a href="#cb11-25" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span> <span class="op">{</span></span>
-<span id="cb11-26"><a href="#cb11-26" aria-hidden="true" tabindex="-1"></a>        mayThrow<span class="op">(</span><span class="kw">false</span><span class="op">);</span></span>
-<span id="cb11-27"><a href="#cb11-27" aria-hidden="true" tabindex="-1"></a>        mayThrow<span class="op">(</span><span class="kw">true</span><span class="op">);</span></span>
-<span id="cb11-28"><a href="#cb11-28" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span> <span class="cf">catch</span> <span class="op">(</span><span class="at">const</span> <span class="bu">std::</span>exception<span class="op">&amp;</span> e<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb11-29"><a href="#cb11-29" aria-hidden="true" tabindex="-1"></a>        <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;捕获异常: &quot;</span> <span class="op">&lt;&lt;</span> e<span class="op">.</span>what<span class="op">()</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span></span>
-<span id="cb11-30"><a href="#cb11-30" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb11-31"><a href="#cb11-31" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;iostream&gt;</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;stdexcept&gt;</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> FileGuard <span class="op">{</span>              <span class="co">// RAII:构造时获取资源,析构时自动释放,保证异常安全</span></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span><span class="op">:</span></span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>    FileGuard<span class="op">(</span><span class="at">const</span> <span class="bu">std::</span>string<span class="op">&amp;</span> name<span class="op">)</span> <span class="op">:</span> <span class="va">name_</span><span class="op">(</span>name<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>        <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;打开资源: &quot;</span> <span class="op">&lt;&lt;</span> <span class="va">name_</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span></span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">~</span>FileGuard<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a>        <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;释放资源: &quot;</span> <span class="op">&lt;&lt;</span> <span class="va">name_</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span></span>
+<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a><span class="kw">private</span><span class="op">:</span></span>
+<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>string <span class="va">name_</span><span class="op">;</span></span>
+<span id="cb14-14"><a href="#cb14-14" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb14-15"><a href="#cb14-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-16"><a href="#cb14-16" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> mayThrow<span class="op">(</span><span class="dt">bool</span> doThrow<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb14-17"><a href="#cb14-17" aria-hidden="true" tabindex="-1"></a>    FileGuard guard<span class="op">(</span><span class="st">&quot;data.txt&quot;</span><span class="op">);</span>    <span class="co">// 资源获取即初始化</span></span>
+<span id="cb14-18"><a href="#cb14-18" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>doThrow<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb14-19"><a href="#cb14-19" aria-hidden="true" tabindex="-1"></a>        <span class="cf">throw</span> <span class="bu">std::</span>runtime_error<span class="op">(</span><span class="st">&quot;出错了&quot;</span><span class="op">);</span></span>
+<span id="cb14-20"><a href="#cb14-20" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb14-21"><a href="#cb14-21" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;正常使用资源</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span></span>
+<span id="cb14-22"><a href="#cb14-22" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> <span class="co">// 无论正常返回还是异常抛出,guard 的析构函数都会被调用,资源不会泄漏</span></span>
+<span id="cb14-23"><a href="#cb14-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-24"><a href="#cb14-24" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb14-25"><a href="#cb14-25" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span> <span class="op">{</span></span>
+<span id="cb14-26"><a href="#cb14-26" aria-hidden="true" tabindex="-1"></a>        mayThrow<span class="op">(</span><span class="kw">false</span><span class="op">);</span></span>
+<span id="cb14-27"><a href="#cb14-27" aria-hidden="true" tabindex="-1"></a>        mayThrow<span class="op">(</span><span class="kw">true</span><span class="op">);</span></span>
+<span id="cb14-28"><a href="#cb14-28" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span> <span class="cf">catch</span> <span class="op">(</span><span class="at">const</span> <span class="bu">std::</span>exception<span class="op">&amp;</span> e<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb14-29"><a href="#cb14-29" aria-hidden="true" tabindex="-1"></a>        <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;捕获异常: &quot;</span> <span class="op">&lt;&lt;</span> e<span class="op">.</span>what<span class="op">()</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span></span>
+<span id="cb14-30"><a href="#cb14-30" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb14-31"><a href="#cb14-31" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <pre><code>打开资源: data.txt
 正常使用资源
 释放资源: data.txt
@@ -360,31 +431,31 @@ class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb11-1"><a href="#
 <h2
 id="六newdelete-与-mallocfree-对比">六、<code>new</code>/<code>delete</code>
 与 <code>malloc</code>/<code>free</code> 对比</h2>
-<div class="sourceCode" id="cb13"><pre
-class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;iostream&gt;</span></span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;cstdlib&gt;</span></span>
-<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> Point <span class="op">{</span></span>
-<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> x<span class="op">,</span> y<span class="op">;</span></span>
-<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>    Point<span class="op">()</span> <span class="op">:</span> x<span class="op">(</span><span class="dv">0</span><span class="op">),</span> y<span class="op">(</span><span class="dv">0</span><span class="op">)</span> <span class="op">{</span> <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;Point 构造函数被调用</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="op">}</span></span>
-<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
-<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> main<span class="op">()</span> <span class="op">{</span></span>
-<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a>    <span class="co">// malloc/free:只分配/释放原始内存,不调用构造/析构函数</span></span>
-<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a>    Point<span class="op">*</span> p1 <span class="op">=</span> <span class="op">(</span>Point<span class="op">*)</span><span class="bu">std::</span>malloc<span class="op">(</span><span class="kw">sizeof</span><span class="op">(</span>Point<span class="op">));</span></span>
-<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;malloc 之后 x=&quot;</span> <span class="op">&lt;&lt;</span> p1<span class="op">-&gt;</span>x <span class="op">&lt;&lt;</span> <span class="st">&quot; (未初始化,值不确定)</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span></span>
-<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>free<span class="op">(</span>p1<span class="op">);</span></span>
-<span id="cb13-14"><a href="#cb13-14" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-15"><a href="#cb13-15" aria-hidden="true" tabindex="-1"></a>    <span class="co">// new/delete:分配内存 + 调用构造函数;delete 调用析构函数 + 释放内存</span></span>
-<span id="cb13-16"><a href="#cb13-16" aria-hidden="true" tabindex="-1"></a>    Point<span class="op">*</span> p2 <span class="op">=</span> <span class="kw">new</span> Point<span class="op">();</span>        <span class="co">// 会打印 &quot;Point 构造函数被调用&quot;</span></span>
-<span id="cb13-17"><a href="#cb13-17" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;new 之后 x=&quot;</span> <span class="op">&lt;&lt;</span> p2<span class="op">-&gt;</span>x <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="co">// 保证是 0,因为构造函数初始化了</span></span>
-<span id="cb13-18"><a href="#cb13-18" aria-hidden="true" tabindex="-1"></a>    <span class="kw">delete</span> p2<span class="op">;</span></span>
-<span id="cb13-19"><a href="#cb13-19" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-20"><a href="#cb13-20" aria-hidden="true" tabindex="-1"></a>    <span class="co">// new[]/delete[] 用于数组</span></span>
-<span id="cb13-21"><a href="#cb13-21" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span><span class="op">*</span> arr <span class="op">=</span> <span class="kw">new</span> <span class="dt">int</span><span class="op">[</span><span class="dv">5</span><span class="op">]{</span><span class="dv">1</span><span class="op">,</span><span class="dv">2</span><span class="op">,</span><span class="dv">3</span><span class="op">,</span><span class="dv">4</span><span class="op">,</span><span class="dv">5</span><span class="op">};</span></span>
-<span id="cb13-22"><a href="#cb13-22" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> arr<span class="op">[</span><span class="dv">4</span><span class="op">]</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span></span>
-<span id="cb13-23"><a href="#cb13-23" aria-hidden="true" tabindex="-1"></a>    <span class="kw">delete</span><span class="op">[]</span> arr<span class="op">;</span></span>
-<span id="cb13-24"><a href="#cb13-24" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb16"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;iostream&gt;</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;cstdlib&gt;</span></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> Point <span class="op">{</span></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> x<span class="op">,</span> y<span class="op">;</span></span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>    Point<span class="op">()</span> <span class="op">:</span> x<span class="op">(</span><span class="dv">0</span><span class="op">),</span> y<span class="op">(</span><span class="dv">0</span><span class="op">)</span> <span class="op">{</span> <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;Point 构造函数被调用</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a>    <span class="co">// malloc/free:只分配/释放原始内存,不调用构造/析构函数</span></span>
+<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a>    Point<span class="op">*</span> p1 <span class="op">=</span> <span class="op">(</span>Point<span class="op">*)</span><span class="bu">std::</span>malloc<span class="op">(</span><span class="kw">sizeof</span><span class="op">(</span>Point<span class="op">));</span></span>
+<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;malloc 之后 x=&quot;</span> <span class="op">&lt;&lt;</span> p1<span class="op">-&gt;</span>x <span class="op">&lt;&lt;</span> <span class="st">&quot; (未初始化,值不确定)</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span></span>
+<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>free<span class="op">(</span>p1<span class="op">);</span></span>
+<span id="cb16-14"><a href="#cb16-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-15"><a href="#cb16-15" aria-hidden="true" tabindex="-1"></a>    <span class="co">// new/delete:分配内存 + 调用构造函数;delete 调用析构函数 + 释放内存</span></span>
+<span id="cb16-16"><a href="#cb16-16" aria-hidden="true" tabindex="-1"></a>    Point<span class="op">*</span> p2 <span class="op">=</span> <span class="kw">new</span> Point<span class="op">();</span>        <span class="co">// 会打印 &quot;Point 构造函数被调用&quot;</span></span>
+<span id="cb16-17"><a href="#cb16-17" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> <span class="st">&quot;new 之后 x=&quot;</span> <span class="op">&lt;&lt;</span> p2<span class="op">-&gt;</span>x <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span> <span class="co">// 保证是 0,因为构造函数初始化了</span></span>
+<span id="cb16-18"><a href="#cb16-18" aria-hidden="true" tabindex="-1"></a>    <span class="kw">delete</span> p2<span class="op">;</span></span>
+<span id="cb16-19"><a href="#cb16-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-20"><a href="#cb16-20" aria-hidden="true" tabindex="-1"></a>    <span class="co">// new[]/delete[] 用于数组</span></span>
+<span id="cb16-21"><a href="#cb16-21" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span><span class="op">*</span> arr <span class="op">=</span> <span class="kw">new</span> <span class="dt">int</span><span class="op">[</span><span class="dv">5</span><span class="op">]{</span><span class="dv">1</span><span class="op">,</span><span class="dv">2</span><span class="op">,</span><span class="dv">3</span><span class="op">,</span><span class="dv">4</span><span class="op">,</span><span class="dv">5</span><span class="op">};</span></span>
+<span id="cb16-22"><a href="#cb16-22" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>cout <span class="op">&lt;&lt;</span> arr<span class="op">[</span><span class="dv">4</span><span class="op">]</span> <span class="op">&lt;&lt;</span> <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">;</span></span>
+<span id="cb16-23"><a href="#cb16-23" aria-hidden="true" tabindex="-1"></a>    <span class="kw">delete</span><span class="op">[]</span> arr<span class="op">;</span></span>
+<span id="cb16-24"><a href="#cb16-24" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <pre><code>malloc 之后 x=0 (未初始化,值不确定,这里恰好是0也可能是垃圾值)
 Point 构造函数被调用
 new 之后 x=0
@@ -446,6 +517,62 @@ new 之后 x=0
 C++ 代码应优先用智能指针 + 容器,把裸
 <code>new</code>/<code>delete</code>/<code>malloc</code>/<code>free</code>
 限制在极少数手写底层数据结构或与 C API 交互的场景。</p>
+<h2 id="七智能指针的线程安全性">七、智能指针的线程安全性</h2>
+<p>“<code>shared_ptr</code>
+是不是线程安全的”不能用一个”是”或”否”打发,必须拆成三个层面分别回答:</p>
+<p><strong>第一层:控制块(引用计数)——
+线程安全</strong>。标准保证控制块内部的引用计数用原子操作实现,多个线程各自持有
+<code>shared_ptr</code>
+的副本、并发地拷贝或析构,引用计数的加减不会出现丢失更新或数据竞争。</p>
+<p><strong>第二层:<code>shared_ptr</code> 实例本身(这个变量的读写)——
+不安全</strong>。多个线程同时<strong>只读</strong>访问同一个
+<code>shared_ptr</code>
+变量是安全的,标准明确规定这不构成数据竞争。但只要有一个线程在<strong>写</strong>这个变量(<code>reset</code>、赋值、移动),就必须额外加锁——写操作需要同时修改内部的裸指针和调整引用计数,这不是一个原子步骤,并发写、或者一读一写,都需要
+<code>mutex</code> 保护。</p>
+<p><strong>第三层:被管理的对象本身 ——
+不安全</strong>。智能指针只负责生命周期,完全不管对象内部数据的并发访问。多个线程通过各自的
+<code>shared_ptr</code> 副本读写同一个底层对象的成员,仍然需要
+<code>mutex</code> 或其他同步手段保护,和智能指针没有关系。</p>
+<p><code>unique_ptr</code>
+因为是独占语义,不存在”共享”这个场景;所有权转移(移动)本身不是线程安全操作,必须保证同一时刻只有一个线程在操作同一个
+<code>unique_ptr</code>。</p>
+<p>多线程并发拷贝同一个 <code>shared_ptr</code>
+是安全用法的典型例子——每个线程按值捕获一份副本,强引用计数原子加一,线程内部操作的是自己的独立副本,互不干扰:</p>
+<div class="sourceCode" id="cb18"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="kw">auto</span> sp <span class="op">=</span> <span class="bu">std::</span>make_shared<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;(</span><span class="dv">0</span><span class="op">);</span></span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>vector<span class="op">&lt;</span><span class="bu">std::</span>thread<span class="op">&gt;</span> threads<span class="op">;</span></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">8</span><span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>    threads<span class="op">.</span>emplace_back<span class="op">([</span>sp<span class="op">]()</span> <span class="at">mutable</span> <span class="op">{</span></span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> j <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> j <span class="op">&lt;</span> <span class="dv">10000</span><span class="op">;</span> <span class="op">++</span>j<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>            <span class="bu">std::</span>shared_ptr<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> local <span class="op">=</span> sp<span class="op">;</span>   <span class="co">// 拷贝:原子 +1</span></span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span>                                        <span class="co">// 局部变量析构:原子 -1</span></span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">});</span></span>
+<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="kw">auto</span><span class="op">&amp;</span> t <span class="op">:</span> threads<span class="op">)</span> t<span class="op">.</span>join<span class="op">();</span></span>
+<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a>printf<span class="op">(</span><span class="st">&quot;</span><span class="sc">%ld\n</span><span class="st">&quot;</span><span class="op">,</span> sp<span class="op">.</span>use_count<span class="op">());</span>   <span class="co">// 1,8 * 10000 次原子增减没有丢计数</span></span></code></pre></div>
+<p>而修改同一个 <code>shared_ptr</code>
+<strong>变量</strong>(不是它管理的对象)则必须显式加锁:</p>
+<div class="sourceCode" id="cb19"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>shared_ptr<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> guarded <span class="op">=</span> <span class="bu">std::</span>make_shared<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;(</span><span class="dv">1</span><span class="op">);</span></span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>mutex m<span class="op">;</span></span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>vector<span class="op">&lt;</span><span class="bu">std::</span>thread<span class="op">&gt;</span> writers<span class="op">;</span></span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">4</span><span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a>    writers<span class="op">.</span>emplace_back<span class="op">([&amp;</span>guarded<span class="op">,</span> <span class="op">&amp;</span>m<span class="op">,</span> i<span class="op">]()</span> <span class="op">{</span></span>
+<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">std::</span>lock_guard<span class="op">&lt;</span><span class="bu">std::</span>mutex<span class="op">&gt;</span> lk<span class="op">(</span>m<span class="op">);</span>      <span class="co">// 写操作必须加锁</span></span>
+<span id="cb19-7"><a href="#cb19-7" aria-hidden="true" tabindex="-1"></a>        guarded <span class="op">=</span> <span class="bu">std::</span>make_shared<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;(</span>i<span class="op">);</span></span>
+<span id="cb19-8"><a href="#cb19-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">});</span></span>
+<span id="cb19-9"><a href="#cb19-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb19-10"><a href="#cb19-10" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="kw">auto</span><span class="op">&amp;</span> t <span class="op">:</span> writers<span class="op">)</span> t<span class="op">.</span>join<span class="op">();</span></span></code></pre></div>
+<p>原子性还有一层细节:引用计数增加时用 <code>memory_order_relaxed</code>
+就够,因为增加计数不需要和其他数据建立同步关系;但减少计数到需要判断是否归零时要用更强的内存序(如
+<code>memory_order_acq_rel</code>)——一旦计数减到 0
+触发对象销毁,必须保证之前所有线程对该对象的写入,在执行销毁的这个线程上都已经可见,否则析构函数可能读到还没写完的数据。</p>
+<p>C++20 定义了 <code>std::atomic&lt;std::shared_ptr&lt;T&gt;&gt;</code>
+特化,用来整体原子地替换一个共享的 <code>shared_ptr</code>
+变量而不需要额外的
+<code>mutex</code>,但这是一个”标准规定、库实现程度不一”的特性——在确认目标标准库版本已经支持之前,用
+<code>mutex</code> 保护跨线程共享的 <code>shared_ptr</code>
+变量的读写仍然是更可靠、可移植性更好的做法。</p>
 <hr />
 <p><a href="index.html">← 返回索引</a></p>
 </div>

@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="zh-CN" xml:lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>数据库基础:SQL、事务与索引机制</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../../assets/style.css" />
+</head>
+<body>
+<div class="topbar"><div class="wrap"><a class="home" href="../index.html"><span class="logo">📚</span><span class="brand">面向 C/C++ 程序员的其他语言教程</span></a>
+<a href="../python/index.html">Python</a>
+<a href="../java/index.html">Java</a>
+<a href="../go/index.html">Go</a>
+<a href="../algo/index.html">算法笔记</a>
+<a href="../architecture/index.html">架构设计</a>
+<a href="../oodlld/index.html">OOD/LLD</a>
+<a href="../container/index.html">容器对照</a>
+<a href="../cpp/index.html">C++ 教程</a>
+<a href="../baguwen/index.html">面试八股</a>
+<a href="../csbase/index.html" style="color:var(--accent-dark);font-weight:700">计算机基础</a>
+<a href="../javaeco/index.html">Java 生态</a></div></div>
+<div class="wrap">
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#数据库基础sql事务与索引机制"
+id="toc-数据库基础sql事务与索引机制">数据库基础:SQL、事务与索引机制</a>
+<ul>
+<li><a href="#一基本-sql-语句速查" id="toc-一基本-sql-语句速查">一、基本
+SQL 语句速查</a></li>
+<li><a href="#二sql-查询执行流程" id="toc-二sql-查询执行流程">二、SQL
+查询执行流程</a></li>
+<li><a href="#三事务四大特性acid"
+id="toc-三事务四大特性acid">三、事务四大特性(ACID)</a></li>
+<li><a href="#四事务隔离级别"
+id="toc-四事务隔离级别">四、事务隔离级别</a></li>
+<li><a href="#五索引的种类"
+id="toc-五索引的种类">五、索引的种类</a></li>
+<li><a href="#六为什么-mysql-索引用-b-树"
+id="toc-六为什么-mysql-索引用-b-树">六、为什么 MySQL 索引用 B+
+树</a></li>
+<li><a href="#七什么时候该建索引"
+id="toc-七什么时候该建索引">七、什么时候该建索引</a></li>
+<li><a href="#八什么时候不该建索引"
+id="toc-八什么时候不该建索引">八、什么时候不该建索引</a></li>
+<li><a href="#九索引失效场景附反例"
+id="toc-九索引失效场景附反例">九、索引失效场景(附反例)</a></li>
+<li><a href="#十mvcc-机制" id="toc-十mvcc-机制">十、MVCC 机制</a></li>
+<li><a href="#十一数据库锁"
+id="toc-十一数据库锁">十一、数据库锁</a></li>
+<li><a href="#十二mysql-存储引擎"
+id="toc-十二mysql-存储引擎">十二、MySQL 存储引擎</a></li>
+<li><a href="#十三mysql-日志文件"
+id="toc-十三mysql-日志文件">十三、MySQL 日志文件</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1 id="数据库基础sql事务与索引机制">数据库基础:SQL、事务与索引机制</h1>
+<p>关系型数据库面试绕不开三个层次的问题:SQL
+怎么写、事务怎么保证正确性、索引怎么让查询变快。这三层环环相扣——事务的隔离性依赖锁和
+MVCC 实现,索引失效直接决定一条 SQL
+是走索引还是走全表扫描,而存储引擎和日志文件则是这一切的底层支撑。本篇按”SQL
+语句 → 执行流程 → 事务 → 索引 →
+存储引擎与日志”的顺序梳理,每一节都给出可以直接对照的示例。</p>
+<h2 id="一基本-sql-语句速查">一、基本 SQL 语句速查</h2>
+<p>SQL
+按功能分四类:DDL(定义)、DML(操作数据)、DQL(查询)、DCL(控制事务与权限)。下面按实际使用场景分组,而不是死记分类名称。</p>
+<p><strong>查询(DQL)</strong></p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode sql"><code class="sourceCode sql"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> <span class="op">*</span> <span class="kw">FROM</span> users;                                  <span class="co">-- 全表查询</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> <span class="kw">id</span>, name <span class="kw">FROM</span> users;                           <span class="co">-- 指定列</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> <span class="op">*</span> <span class="kw">FROM</span> users <span class="kw">WHERE</span> age <span class="op">&gt;</span> <span class="dv">25</span>;                   <span class="co">-- 条件过滤</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> <span class="op">*</span> <span class="kw">FROM</span> users <span class="kw">ORDER</span> <span class="kw">BY</span> age <span class="kw">DESC</span>;                <span class="co">-- 排序</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> <span class="kw">DISTINCT</span> city <span class="kw">FROM</span> users;                      <span class="co">-- 去重</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> <span class="op">*</span> <span class="kw">FROM</span> users <span class="kw">LIMIT</span> <span class="dv">10</span> OFFSET <span class="dv">20</span>;               <span class="co">-- 分页</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> name <span class="kw">AS</span> username <span class="kw">FROM</span> users;                   <span class="co">-- 别名</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> <span class="op">*</span> <span class="kw">FROM</span> users <span class="kw">WHERE</span> name <span class="kw">LIKE</span> <span class="st">&#39;A%&#39;</span>;             <span class="co">-- 模糊匹配</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> <span class="op">*</span> <span class="kw">FROM</span> users <span class="kw">WHERE</span> age <span class="kw">BETWEEN</span> <span class="dv">20</span> <span class="kw">AND</span> <span class="dv">30</span>;      <span class="co">-- 范围查询</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> <span class="op">*</span> <span class="kw">FROM</span> users <span class="kw">WHERE</span> age <span class="op">&gt;</span> <span class="dv">20</span> <span class="kw">AND</span> city <span class="op">=</span> <span class="st">&#39;Beijing&#39;</span>; <span class="co">-- 多条件</span></span></code></pre></div>
+<p><strong>多表连接与子查询</strong></p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode sql"><code class="sourceCode sql"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co">-- 内连接:只保留两表都匹配的行</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> u.name, o.amount <span class="kw">FROM</span> users u <span class="kw">JOIN</span> orders o <span class="kw">ON</span> u.<span class="kw">id</span> <span class="op">=</span> o.user_id;</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="co">-- 左连接:左表全保留,右表无匹配则为 NULL</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> u.name, o.amount <span class="kw">FROM</span> users u <span class="kw">LEFT</span> <span class="kw">JOIN</span> orders o <span class="kw">ON</span> u.<span class="kw">id</span> <span class="op">=</span> o.user_id;</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="co">-- 右连接:右表全保留</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> u.name, o.amount <span class="kw">FROM</span> users u <span class="kw">RIGHT</span> <span class="kw">JOIN</span> orders o <span class="kw">ON</span> u.<span class="kw">id</span> <span class="op">=</span> o.user_id;</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="co">-- WHERE 子查询</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> name <span class="kw">FROM</span> users <span class="kw">WHERE</span> <span class="kw">id</span> <span class="kw">IN</span> (<span class="kw">SELECT</span> user_id <span class="kw">FROM</span> orders);</span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a><span class="co">-- FROM 子查询(派生表)</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> t.user_id, <span class="fu">COUNT</span>(<span class="op">*</span>) <span class="kw">FROM</span> (<span class="kw">SELECT</span> <span class="op">*</span> <span class="kw">FROM</span> orders <span class="kw">WHERE</span> amount <span class="op">&gt;</span> <span class="dv">100</span>) t <span class="kw">GROUP</span> <span class="kw">BY</span> t.user_id;</span></code></pre></div>
+<p><strong>聚合与分组</strong></p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode sql"><code class="sourceCode sql"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> <span class="fu">COUNT</span>(<span class="op">*</span>) <span class="kw">FROM</span> users;</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> <span class="fu">SUM</span>(amount) <span class="kw">FROM</span> orders;</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> <span class="fu">AVG</span>(age) <span class="kw">FROM</span> users;</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> <span class="fu">MAX</span>(age), <span class="fu">MIN</span>(age) <span class="kw">FROM</span> users;</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> city, <span class="fu">COUNT</span>(<span class="op">*</span>) <span class="kw">FROM</span> users <span class="kw">GROUP</span> <span class="kw">BY</span> city;</span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> city, <span class="fu">COUNT</span>(<span class="op">*</span>) <span class="kw">FROM</span> users <span class="kw">GROUP</span> <span class="kw">BY</span> city <span class="kw">HAVING</span> <span class="fu">COUNT</span>(<span class="op">*</span>) <span class="op">&gt;</span> <span class="dv">10</span>;  <span class="co">-- HAVING 过滤分组后的结果,WHERE 过滤分组前的行</span></span></code></pre></div>
+<p><strong>数据写入(DML)</strong></p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode sql"><code class="sourceCode sql"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">INSERT</span> <span class="kw">INTO</span> users(name, age) <span class="kw">VALUES</span>(<span class="st">&#39;Alice&#39;</span>, <span class="dv">30</span>);</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="kw">INSERT</span> <span class="kw">INTO</span> users(name, age) <span class="kw">VALUES</span> (<span class="st">&#39;Bob&#39;</span>, <span class="dv">25</span>), (<span class="st">&#39;Cathy&#39;</span>, <span class="dv">22</span>);       <span class="co">-- 批量插入</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="kw">INSERT</span> <span class="kw">INTO</span> users(<span class="kw">id</span>, name) <span class="kw">VALUES</span> (<span class="dv">1</span>, <span class="st">&#39;Tom&#39;</span>) <span class="kw">ON</span> DUPLICATE <span class="kw">KEY</span> <span class="kw">UPDATE</span> name<span class="op">=</span><span class="st">&#39;Tom&#39;</span>;  <span class="co">-- 存在则更新</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="kw">UPDATE</span> users <span class="kw">SET</span> age <span class="op">=</span> <span class="dv">28</span> <span class="kw">WHERE</span> <span class="kw">id</span> <span class="op">=</span> <span class="dv">1</span>;</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="kw">DELETE</span> <span class="kw">FROM</span> users <span class="kw">WHERE</span> age <span class="op">&lt;</span> <span class="dv">18</span>;</span></code></pre></div>
+<p><strong>索引与执行计划(DDL)</strong></p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode sql"><code class="sourceCode sql"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>SHOW <span class="kw">INDEX</span> <span class="kw">FROM</span> users;</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="kw">CREATE</span> <span class="kw">INDEX</span> idx_age <span class="kw">ON</span> users(age);</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="kw">DROP</span> <span class="kw">INDEX</span> idx_age <span class="kw">ON</span> users;</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="kw">EXPLAIN</span> <span class="kw">SELECT</span> <span class="op">*</span> <span class="kw">FROM</span> users <span class="kw">WHERE</span> age <span class="op">&gt;</span> <span class="dv">30</span>;             <span class="co">-- 查看执行计划,判断是否走索引</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> <span class="op">*</span> <span class="kw">FROM</span> users <span class="kw">FORCE</span> <span class="kw">INDEX</span> (idx_age) <span class="kw">WHERE</span> age <span class="op">&gt;</span> <span class="dv">25</span>; <span class="co">-- 强制指定索引</span></span></code></pre></div>
+<p><strong>事务与锁(DCL 及相关)</strong></p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode sql"><code class="sourceCode sql"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="kw">START</span> <span class="kw">TRANSACTION</span>;   <span class="co">-- 或 </span><span class="re">BEGIN</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="kw">COMMIT</span>;</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="kw">ROLLBACK</span>;</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="kw">SET</span> <span class="kw">SESSION</span> <span class="kw">TRANSACTION</span> <span class="kw">ISOLATION</span> <span class="kw">LEVEL</span> REPEATABLE <span class="kw">READ</span>;</span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> @@tx_isolation;</span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> <span class="op">*</span> <span class="kw">FROM</span> users <span class="kw">WHERE</span> <span class="kw">id</span> <span class="op">=</span> <span class="dv">1</span> <span class="cf">FOR</span> <span class="kw">UPDATE</span>;                          <span class="co">-- 悲观锁</span></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a><span class="kw">UPDATE</span> users <span class="kw">SET</span> age <span class="op">=</span> <span class="dv">26</span>, version <span class="op">=</span> version <span class="op">+</span> <span class="dv">1</span> <span class="kw">WHERE</span> <span class="kw">id</span> <span class="op">=</span> <span class="dv">1</span> <span class="kw">AND</span> version <span class="op">=</span> <span class="dv">2</span>;  <span class="co">-- 乐观锁(靠版本号判断冲突)</span></span></code></pre></div>
+<p>几个高频写法:查重复数据用
+<code>GROUP BY ... HAVING COUNT(*) &gt; 1</code>;判空用
+<code>IS NULL</code>(不能用 <code>= NULL</code>);深分页优化用”上次最大
+id + LIMIT”代替
+<code>OFFSET</code>,避免偏移量越大扫描行数越多的问题。</p>
+<h2 id="二sql-查询执行流程">二、SQL 查询执行流程</h2>
+<p>一条 <code>SELECT</code>
+语句从客户端发出到拿到结果,要经过七个阶段。</p>
+<pre><code>客户端
+  │
+  ▼
+① 连接阶段        TCP 三次握手 + 账号密码认证,为连接分配独立线程
+  │
+  ▼
+② 查询缓存(MySQL 8.0 前) 命中则直接返回;8.0 起已移除
+  │
+  ▼
+③ 解析与预处理     词法分析→语法分析生成 AST;预处理器校验表名/字段名/权限
+  │
+  ▼
+④ 优化器          基于统计信息和成本模型,决定用哪个索引、表连接顺序、连接算法
+  │
+  ▼
+⑤ 执行器          按执行计划调用存储引擎接口,做过滤、排序、连接
+  │
+  ▼
+⑥ 存储引擎(InnoDB) 实际的数据存取、事务与锁在这一层完成
+  │
+  ▼
+⑦ 返回结果         结果集回传客户端,可能分批传输</code></pre>
+<p><strong>查询缓存为什么被移除</strong>:缓存要求 SQL
+文本、库、协议版本完全一致才能命中,而表一旦被写入,相关缓存立即失效。写多读少的表几乎享受不到缓存收益,反而要为维护缓存一致性付出额外锁开销,MySQL
+8.0 直接砍掉了这个模块,交给应用层(如 Redis)做更灵活的缓存。</p>
+<p><strong>优化器如何选索引</strong>:参考每个索引的选择性(区分度)、表的行数统计信息,以及要扫描的数据量估算,用
+<code>EXPLAIN</code> 可以看到 <code>possible_keys</code>(候选索引)和
+<code>key</code>(实际选中的索引)两个字段,两者不一致时说明优化器放弃了看起来更合适的索引,往往是因为该索引的区分度或访问代价没有想象中好。</p>
+<h2 id="三事务四大特性acid">三、事务四大特性(ACID)</h2>
+<table>
+<colgroup>
+<col style="width: 27%" />
+<col style="width: 27%" />
+<col style="width: 45%" />
+</colgroup>
+<thead>
+<tr>
+<th>特性</th>
+<th>定义</th>
+<th>实现机制</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>原子性 Atomicity</td>
+<td>事务内所有操作要么全部成功,要么全部回滚,不存在中间状态</td>
+<td>Undo Log:记录修改前的旧值,失败时反向应用回滚</td>
+</tr>
+<tr>
+<td>一致性 Consistency</td>
+<td>事务执行前后,数据库都满足完整性约束(主键、外键、唯一、check、业务规则)</td>
+<td>是其余三个特性共同作用的<strong>目标</strong>,不是单独的技术手段</td>
+</tr>
+<tr>
+<td>隔离性 Isolation</td>
+<td>并发事务互不干扰,每个事务感觉不到其他事务的存在</td>
+<td>锁机制 + MVCC(多版本并发控制)</td>
+</tr>
+<tr>
+<td>持久性 Durability</td>
+<td>一旦提交,修改永久生效,即使宕机重启也不丢失</td>
+<td>Redo Log:提交前先写入磁盘上的日志,重启后重放已提交事务</td>
+</tr>
+</tbody>
+</table>
+<p>四者的关系可以概括为:<strong>原子性、隔离性、持久性是手段,一致性是目的</strong>。做到了前三点,数据库自然就停留在一个合法的一致状态。</p>
+<p>举例说明原子性:转账场景
+<code>UPDATE account SET balance = balance - 100 WHERE id = 1;</code> 和
+<code>UPDATE account SET balance = balance + 100 WHERE id = 2;</code>
+必须绑定在同一个事务里——如果第一条执行成功、第二条因为断电没有执行,Undo
+Log
+会在崩溃恢复时把第一条也撤销,保证不会出现”钱凭空消失”的中间状态。</p>
+<h2 id="四事务隔离级别">四、事务隔离级别</h2>
+<p>隔离性并非非黑即白,SQL
+标准定义了四个级别,级别越高并发性能越差,但能规避的并发问题越多。</p>
+<table>
+<colgroup>
+<col style="width: 22%" />
+<col style="width: 13%" />
+<col style="width: 27%" />
+<col style="width: 13%" />
+<col style="width: 22%" />
+</colgroup>
+<thead>
+<tr>
+<th>隔离级别</th>
+<th>脏读</th>
+<th>不可重复读</th>
+<th>幻读</th>
+<th>实现方式</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Read Uncommitted(读未提交)</td>
+<td>会发生</td>
+<td>会发生</td>
+<td>会发生</td>
+<td>几乎不加控制,直接读最新值</td>
+</tr>
+<tr>
+<td>Read Committed(读已提交)</td>
+<td>已解决</td>
+<td>会发生</td>
+<td>会发生</td>
+<td>每次 SELECT 生成新的 ReadView</td>
+</tr>
+<tr>
+<td>Repeatable Read(可重复读,<strong>MySQL InnoDB 默认</strong>)</td>
+<td>已解决</td>
+<td>已解决</td>
+<td>基本解决</td>
+<td>事务开始时生成一次 ReadView + Next-Key Lock</td>
+</tr>
+<tr>
+<td>Serializable(串行化)</td>
+<td>已解决</td>
+<td>已解决</td>
+<td>已解决</td>
+<td>所有读写操作都加锁,事实上串行执行</td>
+</tr>
+</tbody>
+</table>
+<p>三个并发问题的准确定义:</p>
+<ul>
+<li><strong>脏读</strong>:事务 A 读到了事务 B 尚未提交的修改,一旦 B
+回滚,A 读到的数据就是从未真实存在过的。</li>
+<li><strong>不可重复读</strong>:同一个事务内,两次读同一行,由于中间有其他事务提交了
+<code>UPDATE</code>,两次结果不一样。</li>
+<li><strong>幻读</strong>:同一个事务内,两次执行相同的范围查询,由于中间有其他事务
+<code>INSERT</code> 了新行,两次返回的行数不一样。</li>
+</ul>
+<p>MySQL 的 Repeatable Read 之所以能”基本解决”幻读(标准定义下 RR
+只解决前两个),是因为 InnoDB 用 MVCC
+的一致性视图挡住了快照读能看到的新行,再用 Next-Key
+Lock(行锁+间隙锁)挡住当前读场景下往间隙里插入新行的动作,两者配合把幻读问题也覆盖了,这一点会在下面的
+MVCC 一节详细展开。</p>
+<h2 id="五索引的种类">五、索引的种类</h2>
+<p>索引可以从三个维度分类,面试常问的”聚簇索引 vs
+非聚簇索引”和”联合索引最左前缀”都在这里。</p>
+<p><strong>按数据结构</strong></p>
+<ul>
+<li><strong>B+
+树索引</strong>:所有数据都在叶子节点,叶子节点之间用链表连接,适合范围查询和排序,是
+InnoDB 的默认结构。</li>
+<li><strong>哈希索引</strong>:通过哈希函数直接定位,等值查询是
+O(1),但不支持范围查询和排序;Memory 引擎使用,InnoDB
+内部也有自适应哈希索引(引擎自动维护,不能手动创建)。</li>
+<li><strong>全文索引</strong>:基于倒排索引,面向
+<code>CHAR</code>/<code>VARCHAR</code>/<code>TEXT</code>
+列的关键词检索,InnoDB 和 MyISAM 都支持。</li>
+</ul>
+<p><strong>按物理存储</strong></p>
+<ul>
+<li><strong>聚簇索引</strong>:索引和数据存在一起,索引的叶子节点直接就是数据行,决定了数据在磁盘上的物理顺序。InnoDB
+的选择规则是——有主键用主键;没有主键但有非空唯一索引,用它;都没有则由引擎生成一个隐藏的
+6 字节 <code>ROW_ID</code> 列做聚簇索引。一张表只能有一个聚簇索引。</li>
+<li><strong>非聚簇索引(二级索引)</strong>:叶子节点存的不是数据本身,而是聚簇索引的键值,查到之后还要拿这个键值再去聚簇索引查一次完整数据行,这个动作叫<strong>回表</strong>。一张表可以有多个非聚簇索引。</li>
+</ul>
+<p><strong>按逻辑特性</strong></p>
+<ul>
+<li><strong>主键索引</strong>:唯一且非空,一张表只有一个,InnoDB
+中即聚簇索引。</li>
+<li><strong>普通索引</strong>:没有唯一性限制,允许重复和空值。</li>
+<li><strong>唯一索引</strong>:值必须唯一,但允许出现空值。</li>
+<li><strong>联合索引(复合索引)</strong>:在多个列上建的索引,遵循<strong>最左前缀原则</strong>——索引
+<code>(a, b, c)</code> 只有查询条件从 <code>a</code>
+开始连续使用(<code>a</code>,或 <code>a+b</code>,或
+<code>a+b+c</code>)才能用上索引,单独用 <code>b</code> 或 <code>c</code>
+用不上。</li>
+<li><strong>覆盖索引</strong>:查询所需的列全部包含在索引里,不需要回表,直接从索引就能返回结果,是常见的性能优化手段。</li>
+<li><strong>前缀索引</strong>:对字符串类型只取前 N
+个字符建索引,节省空间,代价是区分度下降。</li>
+</ul>
+<h2 id="六为什么-mysql-索引用-b-树">六、为什么 MySQL 索引用 B+ 树</h2>
+<p>这是面试高频的原理题,核心是磁盘 I/O 次数。InnoDB
+的一个索引节点大小设计成和磁盘页(默认
+16KB)对齐,一次磁盘读取正好加载一个完整节点,查询代价基本等于”树的高度”这个数字。</p>
+<p><strong>B 树 vs B+ 树结构对比</strong></p>
+<pre><code>B 树(每个节点都存数据,含 key 和 data):
+
+                [ 17 | data ]
+               /             \
+      [ 8 | data ]      [ 25 | data ]
+       /       \           /        \
+   [3|data]  [12|data] [20|data]  [30|data]
+
+── 每个节点既存 key 又存 data,同样大小的磁盘页能装下的 key 数量少,
+   树更高,查询路径长且不稳定(数据可能在中间节点就命中,也可能要到叶子)
+
+
+B+ 树(非叶子节点只存 key,数据全部在叶子,叶子间用链表相连):
+
+                [ 17 ]
+               /       \
+          [ 8 ]         [ 17 | 25 ]
+         /     \            |    \
+   [3|data]→[8,12|data]→[17,20|data]→[25,30|data]
+        (叶子节点之间用双向链表串联,支持顺序遍历)
+
+── 非叶子节点不存 data,同样大小的页能装下更多 key(高扇出),
+   树更矮;所有数据在同一层叶子,任何一次查询的路径长度都相同,
+   性能稳定;范围查询只需定位起点,然后沿链表顺序读,无需回溯上层</code></pre>
+<p>具体到数字:假设一个 InnoDB 页 16KB,主键为 8 字节 bigint,指针 6
+字节,一个索引项约占 14 字节,一页大约能存 16384/14 ≈ 1170 个索引项。三层
+B+ 树可以表示 1170³ ≈ 16
+亿行数据,也就是说千万级甚至十亿级的表,查询一行数据通常只需要 3 次磁盘
+I/O(根节点通常常驻内存,实际只需 2 次)。如果用 B
+树存同样数据,由于每个节点还要存 data,同样页大小能容纳的 key 数远少于
+1170,树高会显著增加,I/O 次数随之增加。</p>
+<p><strong>和其他结构的对比</strong></p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>结构</th>
+<th>局限</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>哈希表</td>
+<td>等值查询 O(1)
+很快,但不支持范围查询、排序,<code>ORDER BY</code>/<code>BETWEEN</code>
+用不上</td>
+</tr>
+<tr>
+<td>二叉查找树</td>
+<td>数据有序插入时会退化成链表,查询复杂度退化到 O(n)</td>
+</tr>
+<tr>
+<td>红黑树</td>
+<td>平衡性比二叉树好,但本质是二叉结构,同样数据量下树高远大于 B+
+树的多叉结构,不适合做磁盘索引(内存索引如 Java <code>TreeMap</code>
+用它没问题,磁盘场景下 I/O 次数和树高强相关)</td>
+</tr>
+<tr>
+<td>B 树</td>
+<td>数据分散在所有节点,单节点扇出比 B+
+树低,树更高,范围查询需要中序遍历回溯多个节点</td>
+</tr>
+</tbody>
+</table>
+<p>一句话总结:B+
+树用”非叶子节点不存数据”换来更高的扇出、更矮的树、更少的磁盘
+I/O,又用”叶子节点链表相连”解决了范围查询效率的问题,这两点结合正好命中磁盘存储和
+SQL 查询模式(大量范围查询和排序)的需求。</p>
+<h2 id="七什么时候该建索引">七、什么时候该建索引</h2>
+<ul>
+<li><strong>WHERE
+条件列</strong>:高频过滤字段建索引可以避免全表扫描,直接定位符合条件的行。</li>
+<li><strong>JOIN
+的连接列</strong>:两表关联时,连接列有索引才能高效匹配,否则每次连接都要做嵌套扫描。</li>
+<li><strong>ORDER BY
+的排序列</strong>:如果索引顺序和排序顺序一致,可以直接按索引顺序读取,省掉额外的排序步骤。</li>
+<li><strong>GROUP BY
+的分组列</strong>:利用索引的有序性加速分组统计。</li>
+<li><strong>数据量大的表</strong>:表越大,索引带来的收益相对全表扫描越明显。</li>
+<li><strong>主键和唯一约束列</strong>:数据库会自动创建索引来保证唯一性并加速查找。</li>
+<li><strong>外键列</strong>:提升关联查询效率,也便于维护引用完整性。</li>
+</ul>
+<h2 id="八什么时候不该建索引">八、什么时候不该建索引</h2>
+<ul>
+<li><strong>数据量很小的表</strong>:全表扫描本身开销就很低,索引查找再回表反而更慢,索引维护成本得不偿失。</li>
+<li><strong>写多读少的表</strong>:每次
+<code>INSERT</code>/<code>UPDATE</code>/<code>DELETE</code>
+都要同步维护索引结构,索引越多写入越慢。</li>
+<li><strong>区分度很低的列</strong>:比如性别、布尔值这种只有几个取值的列,即使建了索引,一次查询也可能命中一半以上的数据,优化器往往直接放弃索引选择全表扫描。</li>
+<li><strong>很少出现在查询条件里的列</strong>:用不上的索引纯粹是浪费空间和维护成本。</li>
+<li><strong>查询会返回大部分数据的场景</strong>:结果集超过全表 20%~30%
+时,先走索引再回表的总成本可能超过直接顺序扫描全表。</li>
+<li><strong>索引列上做函数运算、模糊前缀匹配等注定用不上索引的场景</strong>:建了也白建,详见下一节。</li>
+</ul>
+<h2 id="九索引失效场景附反例">九、索引失效场景(附反例)</h2>
+<p>以下是索引建了却不会被优化器使用的典型 SQL,逐条给出反例和原因。</p>
+<p><strong>1. 对索引列做函数运算或表达式计算</strong></p>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode sql"><code class="sourceCode sql"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="co">-- 反例:DATE_FORMAT() 把索引列包在函数里,索引存的是原始值,函数结果对不上</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> <span class="op">*</span> <span class="kw">FROM</span> users <span class="kw">WHERE</span> DATE_FORMAT(create_time, <span class="st">&#39;%Y-%m-%d&#39;</span>) <span class="op">=</span> <span class="st">&#39;2023-10-26&#39;</span>;</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="co">-- 反例:对索引列做算术运算同样失效</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> <span class="op">*</span> <span class="kw">FROM</span> products <span class="kw">WHERE</span> price <span class="op">*</span> <span class="fl">0.8</span> <span class="op">&lt;</span> <span class="dv">100</span>;</span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a><span class="co">-- 正确写法:把运算移到常量一侧,索引列保持原始形态</span></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> <span class="op">*</span> <span class="kw">FROM</span> users <span class="kw">WHERE</span> create_time <span class="op">&gt;=</span> <span class="st">&#39;2023-10-26 00:00:00&#39;</span> <span class="kw">AND</span> create_time <span class="op">&lt;</span> <span class="st">&#39;2023-10-27 00:00:00&#39;</span>;</span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> <span class="op">*</span> <span class="kw">FROM</span> products <span class="kw">WHERE</span> price <span class="op">&lt;</span> <span class="dv">100</span> <span class="op">/</span> <span class="fl">0.8</span>;</span></code></pre></div>
+<p><strong>2. 模糊查询以通配符开头</strong></p>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode sql"><code class="sourceCode sql"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="co">-- 反例:% 在前,B+ 树的有序性用不上,只能全表扫描</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> <span class="op">*</span> <span class="kw">FROM</span> users <span class="kw">WHERE</span> user_name <span class="kw">LIKE</span> <span class="st">&#39;%zhang%&#39;</span>;</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="co">-- 可以走索引:% 在后,相当于范围查询</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> <span class="op">*</span> <span class="kw">FROM</span> users <span class="kw">WHERE</span> user_name <span class="kw">LIKE</span> <span class="st">&#39;zhang%&#39;</span>;</span></code></pre></div>
+<p><strong>3. 使用 <code>!=</code> 或 <code>&lt;&gt;</code></strong></p>
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode sql"><code class="sourceCode sql"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="co">-- 反例:不等于条件命中的数据范围不确定,优化器通常倾向全表扫描</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> <span class="op">*</span> <span class="kw">FROM</span> orders <span class="kw">WHERE</span> status <span class="op">!=</span> <span class="st">&#39;completed&#39;</span>;</span></code></pre></div>
+<p><strong>4. <code>OR</code> 连接了不同的列,且并非都有索引</strong></p>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode sql"><code class="sourceCode sql"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="co">-- 反例:product_name 有索引、category 没有索引,OR 会导致整体放弃索引</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> <span class="op">*</span> <span class="kw">FROM</span> products <span class="kw">WHERE</span> product_name <span class="op">=</span> <span class="st">&#39;honor&#39;</span> <span class="kw">OR</span> <span class="kw">category</span> <span class="op">=</span> <span class="st">&#39;electronics&#39;</span>;</span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a><span class="co">-- OR 连接同一列的不同取值通常可以正常走索引(等价于 IN)</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> <span class="op">*</span> <span class="kw">FROM</span> products <span class="kw">WHERE</span> product_name <span class="op">=</span> <span class="st">&#39;honor&#39;</span> <span class="kw">OR</span> product_name <span class="op">=</span> <span class="st">&#39;huawei&#39;</span>;</span></code></pre></div>
+<p><strong>5. 隐式类型转换</strong></p>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode sql"><code class="sourceCode sql"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="co">-- 反例:phone 是 VARCHAR,右侧写成数字,MySQL 会对索引列做隐式转换,索引失效</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> <span class="op">*</span> <span class="kw">FROM</span> users <span class="kw">WHERE</span> phone <span class="op">=</span> <span class="dv">12345678900</span>;</span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a><span class="co">-- 正确写法:保持类型一致</span></span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> <span class="op">*</span> <span class="kw">FROM</span> users <span class="kw">WHERE</span> phone <span class="op">=</span> <span class="st">&#39;12345678900&#39;</span>;</span></code></pre></div>
+<p><strong>6. 违反联合索引的最左前缀原则</strong></p>
+<p>假设联合索引为 <code>(a, b, c)</code>:</p>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode sql"><code class="sourceCode sql"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> <span class="op">*</span> <span class="kw">FROM</span> t <span class="kw">WHERE</span> b <span class="op">=</span> <span class="dv">2</span>;                 <span class="co">-- 失效:跳过了最左列 a</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> <span class="op">*</span> <span class="kw">FROM</span> t <span class="kw">WHERE</span> c <span class="op">=</span> <span class="dv">3</span>;                 <span class="co">-- 失效:同上</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> <span class="op">*</span> <span class="kw">FROM</span> t <span class="kw">WHERE</span> b <span class="op">=</span> <span class="dv">2</span> <span class="kw">AND</span> c <span class="op">=</span> <span class="dv">3</span>;       <span class="co">-- 失效:仍然没有从 a 开始</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> <span class="op">*</span> <span class="kw">FROM</span> t <span class="kw">WHERE</span> a <span class="op">=</span> <span class="dv">1</span> <span class="kw">AND</span> c <span class="op">=</span> <span class="dv">3</span>;       <span class="co">-- 部分生效:只能用上 a 这一列,c 用不上</span></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> <span class="op">*</span> <span class="kw">FROM</span> t <span class="kw">WHERE</span> a <span class="op">=</span> <span class="dv">1</span> <span class="kw">AND</span> b <span class="op">=</span> <span class="dv">2</span>;       <span class="co">-- 完全生效</span></span></code></pre></div>
+<p><strong>7. 范围查询之后的列失效</strong></p>
+<div class="sourceCode" id="cb15"><pre
+class="sourceCode sql"><code class="sourceCode sql"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="co">-- 联合索引 (a, b, c);对 a 做范围查询后,b 无法再利用索引的有序性</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> <span class="op">*</span> <span class="kw">FROM</span> t <span class="kw">WHERE</span> a <span class="op">&gt;</span> <span class="dv">1</span> <span class="kw">AND</span> b <span class="op">=</span> <span class="dv">2</span>;   <span class="co">-- a 用上索引,b 相当于在结果集里过滤,没有用上索引</span></span></code></pre></div>
+<p>原因是 B+ 树按 <code>a, b, c</code> 的顺序整体排序,一旦
+<code>a</code> 是范围条件,<code>b</code>
+在这个范围内不再是严格有序的,索引对 <code>b</code>
+失去了排序意义(等值查询除外,<code>a</code> 若是等值条件则 <code>b</code>
+仍然有效,这也是最左前缀原则的一部分)。</p>
+<p><strong>8. <code>IS NULL</code> /
+<code>IS NOT NULL</code></strong></p>
+<div class="sourceCode" id="cb16"><pre
+class="sourceCode sql"><code class="sourceCode sql"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="co">-- 索引对 NULL 值的处理因数据分布而异,NULL 较多时优化器可能放弃索引</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> <span class="op">*</span> <span class="kw">FROM</span> users <span class="kw">WHERE</span> phone <span class="kw">IS</span> <span class="kw">NULL</span>;</span></code></pre></div>
+<p>是否失效取决于 <code>NULL</code> 值在该列中的比例——如果
+<code>NULL</code>
+是少数,索引仍然有效;如果占比很高,和”区分度低”的道理一样,优化器会放弃索引。</p>
+<p><strong>9. 优化器基于成本判断主动放弃索引</strong></p>
+<p>即使索引本身可用,当查询会返回表中大部分数据、或索引列区分度过低、或统计信息不准确导致预估代价失真时,优化器也可能主动选择全表扫描——这不是索引”失效”,而是优化器判断全表扫描的成本更低。用
+<code>EXPLAIN</code> 观察 <code>possible_keys</code> 和 <code>key</code>
+是否一致,可以验证这种情况。</p>
+<h2 id="十mvcc-机制">十、MVCC 机制</h2>
+<p>MVCC(Multi-Version Concurrency Control,多版本并发控制)是 InnoDB
+用来实现”读不加锁、读写不冲突”的核心机制。它的核心思想只有一句话:<strong>给每一行数据保留多个历史版本,不同事务按各自的可见性规则读取属于自己的那个版本</strong>,而不是所有事务抢同一份最新数据。</p>
+<h3 id="版本链数据是怎么存多份的">版本链:数据是怎么”存多份”的</h3>
+<p>InnoDB 给每一行数据额外挂两个隐藏列:</p>
+<ul>
+<li><code>DB_TRX_ID</code>:最近一次修改这行数据的事务 ID。</li>
+<li><code>DB_ROLL_PTR</code>(回滚指针):指向 Undo Log
+里这一行的上一个版本。</li>
+</ul>
+<p>每次事务修改一行数据,旧版本不会被直接覆盖,而是写进 Undo
+Log,同时把这一行的 <code>DB_ROLL_PTR</code>
+指向刚写入的旧版本记录。多次修改之后,同一行数据在 Undo Log
+里形成一条链表:</p>
+<pre><code>当前行(最新版本,DB_TRX_ID = 103)
+   │ DB_ROLL_PTR
+   ▼
+Undo Log 版本(DB_TRX_ID = 102,name = &#39;v2&#39;)
+   │ DB_ROLL_PTR
+   ▼
+Undo Log 版本(DB_TRX_ID = 101,name = &#39;v1&#39;)
+   │ DB_ROLL_PTR
+   ▼
+NULL(链表终点,最初插入的版本或已不再需要的版本)</code></pre>
+<p>这就是”版本链”——最新版本在链头,顺着回滚指针往回找,能找到这一行历史上任意一次提交后的样子。</p>
+<h3
+id="readview决定我能看见链上的哪个版本">ReadView:决定”我能看见链上的哪个版本”</h3>
+<p>一个事务开始读数据时,会生成一个
+ReadView,它记录了当时数据库的”活跃事务快照”,包含四个字段:</p>
+<ul>
+<li><code>m_ids</code>:生成 ReadView
+那一刻,系统里所有<strong>未提交</strong>(活跃)事务的 ID 列表。</li>
+<li><code>min_trx_id</code>:<code>m_ids</code> 中最小的那个值。</li>
+<li><code>max_trx_id</code>:即将分配给下一个新事务的
+ID(比当前所有已存在事务 ID 都大)。</li>
+<li><code>creator_trx_id</code>:生成这个 ReadView 的事务自己的 ID。</li>
+</ul>
+<p>拿到某个版本的 <code>DB_TRX_ID</code>
+后,按下面的规则判断这个版本对当前事务是否可见:</p>
+<ol type="1">
+<li><code>DB_TRX_ID &lt; min_trx_id</code>:这个版本在 ReadView
+生成前就已经提交了,<strong>可见</strong>。</li>
+<li><code>DB_TRX_ID &gt;= max_trx_id</code>:这个版本是 ReadView
+生成之后才出现的事务改的,<strong>不可见</strong>。</li>
+<li><code>min_trx_id &lt;= DB_TRX_ID &lt; max_trx_id</code>:需要进一步判断——
+<ul>
+<li>如果 <code>DB_TRX_ID</code> 在 <code>m_ids</code>
+列表里,说明改这行数据的事务在 ReadView
+生成时还没提交,<strong>不可见</strong>;</li>
+<li>如果不在 <code>m_ids</code> 里,说明这个事务在 ReadView
+生成前就已经提交了,<strong>可见</strong>。</li>
+</ul></li>
+</ol>
+<p>如果当前版本判定不可见,就顺着 <code>DB_ROLL_PTR</code>
+往版本链的上一层走,重复上面的判断,直到找到一个可见版本为止(有可能一路找到链表尾部都没有可见版本,意味着这一行在事务开始前还不存在)。</p>
+<h3 id="rc-和-rr-的核心区别就是-readview-什么时候生成一次">RC 和 RR
+的核心区别就是 ReadView 什么时候生成一次</h3>
+<table>
+<colgroup>
+<col style="width: 27%" />
+<col style="width: 55%" />
+<col style="width: 16%" />
+</colgroup>
+<thead>
+<tr>
+<th>隔离级别</th>
+<th>ReadView 生成时机</th>
+<th>效果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Read Committed</td>
+<td><strong>每次 SELECT</strong> 都重新生成一个 ReadView</td>
+<td>每次都能看到最新已提交的数据,所以会出现不可重复读</td>
+</tr>
+<tr>
+<td>Repeatable Read</td>
+<td><strong>事务开始时生成一次</strong>,整个事务期间复用同一个
+ReadView</td>
+<td>事务全程看到的是同一个快照,不会有不可重复读</td>
+</tr>
+</tbody>
+</table>
+<p>这也是为什么面试常问”MVCC 是怎么实现可重复读的”——答案就是 RR
+只在事务第一次执行快照读时生成
+ReadView,之后所有的快照读都复用它,不管其间有没有别的事务提交新数据,当前事务看到的版本判断规则完全不变。</p>
+<h3 id="mvcc-解决幻读还要靠锁配合">MVCC 解决幻读,还要靠锁配合</h3>
+<p>单靠 MVCC 只能保证<strong>快照读</strong>(普通
+<code>SELECT</code>)不会看到幻读现象——因为读的是事务开始那一刻的快照,后续别的事务插入的新行天然不在快照里。但<strong>当前读</strong>(<code>SELECT ... FOR UPDATE</code>、<code>UPDATE</code>、<code>DELETE</code>)必须读最新数据,MVCC
+保护不了这种场景下的幻读,这时候要靠 <strong>Next-Key Lock</strong>(行锁
++
+间隙锁)在物理上锁住索引记录之间的间隙,阻止其他事务往这个范围里插入新行。所以准确的说法是:MySQL
+RR 级别下”基本解决”幻读,是 MVCC(负责快照读)和 Next-Key
+Lock(负责当前读)两种机制协同的结果,而不是 MVCC 单独做到的。</p>
+<p>普通 <code>SELECT</code>
+属于快照读,通常不加锁,可以和写操作并发执行;<code>SELECT ... FOR UPDATE</code>、<code>SELECT ... LOCK IN SHARE MODE</code>
+以及所有写操作属于当前读,仍然需要加锁。</p>
+<h2 id="十一数据库锁">十一、数据库锁</h2>
+<p>锁按作用范围从大到小分三层。</p>
+<p><strong>全局锁</strong>:锁住整个实例,让数据库变成只读,典型用途是全库逻辑备份。<code>FLUSH TABLES WITH READ LOCK</code>
+加锁,<code>UNLOCK TABLES</code> 或断开连接释放。</p>
+<p><strong>表级锁</strong></p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>类型</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>表锁</td>
+<td><code>LOCK TABLES table_name READ/WRITE</code>,开销最小但并发度最差,MyISAM
+默认用这个</td>
+</tr>
+<tr>
+<td>元数据锁(MDL)</td>
+<td>访问表时自动加,保证 DDL 不会和正在进行的 DML 冲突</td>
+</tr>
+<tr>
+<td>意向锁(IS/IX)</td>
+<td>表示”事务接下来要对表里的某些行加共享/排他锁”,让”要不要给整张表加锁”这类判断不必逐行扫描,提高兼容性检查效率</td>
+</tr>
+<tr>
+<td>AUTO-INC 锁</td>
+<td>插入自增列时使用,保证并发插入时自增值唯一且递增,插入完成立即释放</td>
+</tr>
+</tbody>
+</table>
+<p><strong>行级锁</strong>(InnoDB
+特有,基于索引实现,没有索引会退化成锁整张表)</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>类型</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>记录锁(Record Lock)</td>
+<td>锁住单条索引记录本身,读加共享锁、写加排他锁</td>
+</tr>
+<tr>
+<td>间隙锁(Gap Lock)</td>
+<td>锁住索引记录之间的”间隙”而非记录本身,专门用来防止幻读;两个事务的间隙锁之间互相兼容,但都会阻止第三方在间隙里插入新记录</td>
+</tr>
+<tr>
+<td>临键锁(Next-Key Lock)</td>
+<td>记录锁 + 间隙锁的组合,锁住一条记录本身以及它前面的间隙,是 InnoDB
+<strong>默认</strong>的行锁实现,兼顾”防止幻读”和”保证索引记录唯一性”</td>
+</tr>
+<tr>
+<td>插入意向锁</td>
+<td>一种特殊的间隙锁,执行 <code>INSERT</code>
+时产生;多个事务只要插入位置不冲突,可以同时持有同一间隙的插入意向锁</td>
+</tr>
+</tbody>
+</table>
+<p>从加锁方式的角度,行级锁还可以分成<strong>乐观锁</strong>(不预先加锁,更新时靠版本号或时间戳比对是否冲突,冲突就重试,适合读多写少)和<strong>悲观锁</strong>(<code>SELECT ... FOR UPDATE</code>,先加锁再操作,适合写冲突频繁的场景)两种实现思路,这属于应用层设计模式而不是
+InnoDB 内部的锁类型。</p>
+<h2 id="十二mysql-存储引擎">十二、MySQL 存储引擎</h2>
+<table>
+<colgroup>
+<col style="width: 18%" />
+<col style="width: 18%" />
+<col style="width: 25%" />
+<col style="width: 18%" />
+<col style="width: 18%" />
+</colgroup>
+<thead>
+<tr>
+<th>引擎</th>
+<th>事务</th>
+<th>锁粒度</th>
+<th>外键</th>
+<th>特点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>InnoDB</strong>(默认)</td>
+<td>支持 ACID</td>
+<td>行锁</td>
+<td>支持</td>
+<td>Redo Log + Undo Log 做崩溃恢复,自带缓冲池,高并发场景首选</td>
+</tr>
+<tr>
+<td>MyISAM</td>
+<td>不支持</td>
+<td>表锁</td>
+<td>不支持</td>
+<td>索引和数据分开存储,读取快,但写操作会锁整张表,不适合高并发写</td>
+</tr>
+<tr>
+<td>Memory</td>
+<td>不支持持久化</td>
+<td>表锁</td>
+<td>不支持</td>
+<td>数据全部在内存,重启即丢失,适合临时表和小规模缓存数据</td>
+</tr>
+<tr>
+<td>Archive</td>
+<td>不支持事务</td>
+<td>-</td>
+<td>不支持</td>
+<td>高压缩率、只支持插入和查询、不支持索引,适合归档只写不查的历史数据</td>
+</tr>
+</tbody>
+</table>
+<p>选择依据:需要事务和高并发写,选
+InnoDB(目前绝大多数场景的默认选择);纯读多写少且不要求数据一致性,可以考虑
+MyISAM;需要极致读写速度且能接受数据易失,用
+Memory;只是堆积日志类历史数据几乎不查,用 Archive。</p>
+<h2 id="十三mysql-日志文件">十三、MySQL 日志文件</h2>
+<p>MySQL 涉及的日志分为 Server 层和存储引擎层两部分。</p>
+<table>
+<colgroup>
+<col style="width: 30%" />
+<col style="width: 40%" />
+<col style="width: 30%" />
+</colgroup>
+<thead>
+<tr>
+<th>日志</th>
+<th>所在层</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>错误日志(Error Log)</td>
+<td>Server</td>
+<td>记录启动、运行、关闭过程中的错误与警告,是排查系统级问题的第一入口</td>
+</tr>
+<tr>
+<td>二进制日志(Binlog)</td>
+<td>Server</td>
+<td>记录所有对数据表的逻辑修改,支持 Statement/Row/Mixed
+三种格式,用于主从复制和基于时间点的数据恢复,只追加不覆盖</td>
+</tr>
+<tr>
+<td>慢查询日志(Slow Query Log)</td>
+<td>Server</td>
+<td>记录执行时间超过 <code>long_query_time</code> 阈值的 SQL,配合
+<code>mysqldumpslow</code> 定位性能瓶颈</td>
+</tr>
+<tr>
+<td>中继日志(Relay Log)</td>
+<td>Server(从库)</td>
+<td>从库的 I/O 线程把主库 Binlog 写入中继日志,再由 SQL
+线程读取执行,完成主从复制</td>
+</tr>
+<tr>
+<td>重做日志(Redo Log)</td>
+<td>InnoDB 引擎层</td>
+<td>记录事务对数据页做的物理修改,循环写,保证<strong>持久性</strong>,崩溃后靠它恢复已提交事务</td>
+</tr>
+<tr>
+<td>回滚日志(Undo Log)</td>
+<td>InnoDB 引擎层</td>
+<td>记录修改前的旧版本,支撑事务<strong>回滚</strong>和
+<strong>MVCC</strong> 的版本链,让读操作不必阻塞写操作</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Redo Log 与 Binlog 的本质区别</strong>:Redo Log 是 InnoDB
+引擎层的日志,只服务于崩溃恢复,采用固定大小的循环写(写满后从头覆盖);Binlog
+是 Server
+层的通用日志,不依赖具体存储引擎,面向复制和基于时间点恢复,只追加不覆盖。二者记录的粒度也不同——Redo
+Log 是物理级的数据页修改,Binlog 是逻辑级的 SQL 操作或行变更。</p>
+<p><strong>两阶段提交</strong>:因为 Redo Log 和 Binlog
+是两个独立的系统各自写日志,如果只写完其中一个就崩溃,主库自身的数据状态和它传播给从库/备份的记录就会不一致。InnoDB
+用两阶段提交解决:先写 Redo Log 并标记为 <code>prepare</code> 状态,再写
+Binlog,Binlog 写成功后才把 Redo Log 标记为
+<code>commit</code>。崩溃恢复时,如果 Redo Log 是 <code>prepare</code>
+状态且没有对应完整的 Binlog 记录,直接回滚这个事务;如果 Binlog 完整,则将
+Redo Log 提交,保证两份日志内容最终对齐。</p>
+<hr />
+<p><a href="index.html">返回索引</a></p>
+</div>
+</body>
+</html>

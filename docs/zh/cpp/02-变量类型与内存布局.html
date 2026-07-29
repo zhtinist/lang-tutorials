@@ -102,7 +102,9 @@
 <a href="../oodlld/index.html">OOD/LLD</a>
 <a href="../container/index.html">容器对照</a>
 <a href="../cpp/index.html" style="color:var(--accent-dark);font-weight:700">C++ 教程</a>
-<a href="../baguwen/index.html">面试八股</a></div></div>
+<a href="../baguwen/index.html">面试八股</a>
+<a href="../csbase/index.html">计算机基础</a>
+<a href="../javaeco/index.html">Java 生态</a></div></div>
 <div class="wrap">
 <nav id="TOC" role="doc-toc">
 <ul>
@@ -133,6 +135,17 @@ id="toc-八位域bit-field">八、位域(bit-field)</a></li>
 <li><a href="#十枚举-enum-enum-class"
 id="toc-十枚举-enum-enum-class">十、枚举 <code>enum</code> /
 <code>enum class</code></a></li>
+<li><a href="#十一new-与-mallocdelete-与-free"
+id="toc-十一new-与-mallocdelete-与-free">十一、<code>new</code> 与
+<code>malloc</code>、<code>delete</code> 与 <code>free</code></a></li>
+<li><a href="#十二placement-new"
+id="toc-十二placement-new">十二、placement new</a></li>
+<li><a href="#十三内存泄漏野指针与内存越界"
+id="toc-十三内存泄漏野指针与内存越界">十三、内存泄漏、野指针与内存越界</a></li>
+<li><a href="#十四内存碎片栈溢出与堆溢出"
+id="toc-十四内存碎片栈溢出与堆溢出">十四、内存碎片、栈溢出与堆溢出</a></li>
+<li><a href="#十五避免内存碎片的策略"
+id="toc-十五避免内存碎片的策略">十五、避免内存碎片的策略</a></li>
 </ul></li>
 </ul>
 </nav>
@@ -467,6 +480,23 @@ class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb13-1"><a href="#
 </tr>
 </tbody>
 </table>
+<p>栈和堆在效率上的差异不是实现细节,而是两种分配策略的结构性区别:栈严格遵循后进先出,分配和释放永远发生在栈顶,一条指令改一下栈指针寄存器(x86
+的 <code>rsp</code>、arm64 的 <code>sp</code>)就完成了整个操作,复杂度是
+O(1),且不会产生碎片——释放总是连续的。堆分配没有这种结构性约束:任意时刻可能释放任意大小、任意位置的块,分配器必须维护空闲块的组织结构(空闲链表、伙伴系统等)并在其中搜索合适大小的块,这个搜索本身至少是
+O(log n)
+级别的开销,多线程下还要为这个共享结构加锁——这才是”栈快堆慢”的根本原因,而不是”栈离寄存器更近”这类似是而非的说法。</p>
+<p>栈空间耗尽(无限递归、栈上开巨大数组)会触发栈溢出:操作系统通过缺页异常检测到写入超出了栈的保护页,发送
+<code>SIGSEGV</code>
+终止进程,这是确定性的崩溃,不存在”有时候还能跑”的中间状态(与堆溢出的完整对比见<a
+href="#十四内存碎片栈溢出与堆溢出">内存碎片、栈溢出与堆溢出</a>)。上面的地址演示对应的是经典的
+Linux/x86 内存布局模型;macOS、Windows 以及开启
+ASLR(地址空间布局随机化)后的现代系统不会把各区域摆在固定地址上(每次运行地址都会变),但各区域的职责划分、堆栈相向增长的相对关系是一致的。</p>
+<p>现代 C++ 管理堆内存的原则是尽量不手写
+<code>new</code>/<code>delete</code>:用
+<code>unique_ptr</code>/<code>shared_ptr</code>(见<a
+href="09-智能指针与现代内存管理.html">第 9
+章</a>)自动绑定生命周期,只有在性能敏感、需要绕开通用分配器开销的场景(游戏引擎、高频交易、数据库存储引擎)才手动实现内存池预分配大块内存(见本章<a
+href="#十五避免内存碎片的策略">避免内存碎片的策略</a>)。</p>
 <h2 id="七struct-内存对齐规则">七、<code>struct</code> 内存对齐规则</h2>
 <p>编译器会按成员类型的对齐要求在结构体里插入填充字节(padding),使每个成员的地址是其对齐值的整数倍,同时结构体整体大小是最大成员对齐值的整数倍。</p>
 <div class="sourceCode" id="cb15"><pre
@@ -580,6 +610,266 @@ sizeof(Status)=1</code></pre>
 的枚举值会直接进入外层作用域(容易和其他常量重名),且能隐式转
 <code>int</code>,是 C 遗留特性;<code>enum class</code>(C++11
 强类型枚举)不污染作用域、不隐式转换、可以显式指定底层整数类型,应作为默认首选。</p>
+<h2 id="十一new-与-mallocdelete-与-free">十一、<code>new</code> 与
+<code>malloc</code>、<code>delete</code> 与 <code>free</code></h2>
+<p><code>malloc</code> 是 C
+标准库函数,只做一件事:向系统申请一块指定字节数的原始内存,返回
+<code>void*</code>。这块内存里是未定义的垃圾值,没有类型、没有构造——不能把它当对象直接用,因为成员没有初始化、虚函数表指针没有设置。<code>new</code>
+是 C++ 运算符,在一次表达式里做两件事:调用
+<code>operator new(size_t)</code>
+分配一块足够大的原始内存(默认实现内部通常就是调
+<code>malloc</code>),再在这块内存上调用目标类型的构造函数完成初始化。<code>delete</code>
+反过来:先调用析构函数,再调用 <code>operator delete(void*)</code>
+释放内存(默认实现调 <code>free</code>)。完整链路:</p>
+<pre><code>new    → operator new    → malloc → mmap/brk(内核)
+delete → 析构函数 → operator delete → free</code></pre>
+<p>重载 <code>operator new</code>/<code>operator delete</code>
+可以直接观察到这条链路,同时验证 <code>malloc</code>
+分配的内存确实不会触发构造:</p>
+<div class="sourceCode" id="cb24"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span><span class="op">*</span> <span class="kw">operator</span> <span class="kw">new</span><span class="op">(</span><span class="bu">std::</span>size_t sz<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a>    printf<span class="op">(</span><span class="st">&quot;operator new(</span><span class="sc">%zu</span><span class="st">)</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">,</span> sz<span class="op">);</span></span>
+<span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">void</span><span class="op">*</span> p <span class="op">=</span> <span class="bu">std::</span>malloc<span class="op">(</span>sz<span class="op">);</span></span>
+<span id="cb24-4"><a href="#cb24-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(!</span>p<span class="op">)</span> <span class="cf">throw</span> <span class="bu">std::</span>bad_alloc<span class="op">();</span></span>
+<span id="cb24-5"><a href="#cb24-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> p<span class="op">;</span></span>
+<span id="cb24-6"><a href="#cb24-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb24-7"><a href="#cb24-7" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="kw">operator</span> <span class="kw">delete</span><span class="op">(</span><span class="dt">void</span><span class="op">*</span> p<span class="op">)</span> <span class="kw">noexcept</span> <span class="op">{</span></span>
+<span id="cb24-8"><a href="#cb24-8" aria-hidden="true" tabindex="-1"></a>    printf<span class="op">(</span><span class="st">&quot;operator delete(</span><span class="sc">%p</span><span class="st">)</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">,</span> p<span class="op">);</span></span>
+<span id="cb24-9"><a href="#cb24-9" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>free<span class="op">(</span>p<span class="op">);</span></span>
+<span id="cb24-10"><a href="#cb24-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb24-11"><a href="#cb24-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-12"><a href="#cb24-12" aria-hidden="true" tabindex="-1"></a>Widget<span class="op">*</span> w <span class="op">=</span> <span class="kw">new</span> Widget<span class="op">(</span><span class="dv">1</span><span class="op">);</span></span>
+<span id="cb24-13"><a href="#cb24-13" aria-hidden="true" tabindex="-1"></a><span class="kw">delete</span> w<span class="op">;</span></span>
+<span id="cb24-14"><a href="#cb24-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-15"><a href="#cb24-15" aria-hidden="true" tabindex="-1"></a>Widget<span class="op">*</span> raw <span class="op">=</span> <span class="op">(</span>Widget<span class="op">*)</span><span class="bu">std::</span>malloc<span class="op">(</span><span class="kw">sizeof</span><span class="op">(</span>Widget<span class="op">));</span></span>
+<span id="cb24-16"><a href="#cb24-16" aria-hidden="true" tabindex="-1"></a>raw<span class="op">-&gt;</span>id <span class="op">=</span> <span class="dv">999</span><span class="op">;</span>    <span class="co">// 只是写内存,没有走构造函数</span></span>
+<span id="cb24-17"><a href="#cb24-17" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>free<span class="op">(</span>raw<span class="op">);</span>   <span class="co">// 没有析构调用</span></span></code></pre></div>
+<pre><code>operator new(4)
+  construct Widget(1)
+  destruct Widget(1)
+operator delete(0x104919bd0)</code></pre>
+<p><a
+href="09-智能指针与现代内存管理.html#六newdelete-与-mallocfree-对比">第
+9 章</a>已经讲过 <code>new</code>/<code>delete</code> 与
+<code>malloc</code>/<code>free</code> 在失败处理(异常 vs 返回
+<code>nullptr</code>)、类型安全、能否自动计算大小上的差异,这里补充一层更底层的机制:<strong>数组分配的”cookie”</strong>。<code>new T[n]</code>
+会在返回指针之前的位置额外存储元素个数 <code>n</code>(俗称”数组
+cookie”),<code>delete[]</code> 靠读取这个数字才知道要析构几次:</p>
+<div class="sourceCode" id="cb26"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a>Widget<span class="op">*</span> arr <span class="op">=</span> <span class="kw">new</span> Widget<span class="op">[</span><span class="dv">3</span><span class="op">]{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">};</span></span>
+<span id="cb26-2"><a href="#cb26-2" aria-hidden="true" tabindex="-1"></a><span class="kw">delete</span><span class="op">[]</span> arr<span class="op">;</span></span></code></pre></div>
+<pre><code>operator new(28)     &lt;- 而不是 3 * sizeof(Widget) = 12,多出的 16 字节就是 cookie 加对齐填充
+construct Widget(1) construct Widget(2) construct Widget(3)
+destruct Widget(3) destruct Widget(2) destruct Widget(1)   &lt;- 逆序析构</code></pre>
+<p>如果用 <code>delete</code> 而不是 <code>delete[]</code>
+释放数组,编译器生成的代码只知道”析构一个对象”,于是只调用第一个元素的析构函数,剩下
+n-1 个元素持有的资源全部泄漏,而且因为释放地址没有考虑 cookie
+偏移,行为是未定义的,实践中经常直接导致堆损坏——这也是
+<code>new</code>/<code>malloc</code>
+不能混用的根本原因:<code>free</code> 的实现依赖 <code>malloc</code>
+在返回指针之前偷偷存的一段元数据(记录这块内存的大小及分配器内部簿记信息),如果传给它一个不是
+<code>malloc</code>
+直接返回的地址,这段元数据对不上,堆分配器内部结构就被破坏了。<code>delete nullptr</code>
+和 <code>free(NULL)</code>
+都是标准明确规定的合法空操作,释放前不需要额外判空。</p>
+<p>需要和 C 代码交互、分配不需要构造的 POD
+缓冲区、或者实现自定义分配器时才应该直接用
+<code>malloc</code>;其余场景现代 C++ 推荐用
+<code>new</code>,更进一步应该用
+<code>make_unique</code>/<code>make_shared</code> 把裸 <code>new</code>
+也一起消灭掉(见第 9 章)。</p>
+<h2 id="十二placement-new">十二、placement new</h2>
+<p>普通 <code>new</code> 做”分配 + 构造”两件事,placement new
+只做第二件事:在调用者指定的、已经存在的内存地址上调用构造函数,自己不分配任何内存。语法是
+<code>new (ptr) Type(args)</code>,底层依赖标准库预先定义好的一个特殊
+<code>operator new</code>
+重载——<code>void* operator new(size_t, void* ptr) noexcept { return ptr; }</code>,它什么都不做,原样返回传入的指针,因为不做任何可能失败的操作而标记为
+<code>noexcept</code>;但构造函数本身仍然可能抛异常,如果抛了,对象没有构造成功,不需要调用析构函数,内存依然要按原始方式释放。</p>
+<p>正因为 placement new 不分配内存,销毁时绝不能用
+<code>delete</code>——<code>delete</code> 会尝试对这块内存调用
+<code>operator delete</code>
+归还给堆分配器,但这块内存可能来自栈上的字节数组、内存池、共享内存段,根本不是堆分配器认识的地址,对它调用
+<code>operator delete</code>
+是未定义行为。正确顺序是先手动调用析构函数,再按内存的实际来源做相应释放:</p>
+<div class="sourceCode" id="cb28"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a><span class="kw">alignas</span><span class="op">(</span>MyClass<span class="op">)</span> <span class="dt">unsigned</span> <span class="dt">char</span> buf<span class="op">[</span><span class="kw">sizeof</span><span class="op">(</span>MyClass<span class="op">)];</span>   <span class="co">// 必须满足对齐要求</span></span>
+<span id="cb28-2"><a href="#cb28-2" aria-hidden="true" tabindex="-1"></a>MyClass<span class="op">*</span> obj <span class="op">=</span> <span class="kw">new</span> <span class="op">(</span>buf<span class="op">)</span> MyClass<span class="op">(</span><span class="dv">10</span><span class="op">);</span>   <span class="co">// 不分配,只在 buf 上构造</span></span>
+<span id="cb28-3"><a href="#cb28-3" aria-hidden="true" tabindex="-1"></a>obj<span class="op">-&gt;~</span>MyClass<span class="op">();</span>                          <span class="co">// 手动析构,不能用 delete</span></span>
+<span id="cb28-4"><a href="#cb28-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb28-5"><a href="#cb28-5" aria-hidden="true" tabindex="-1"></a>MyClass<span class="op">*</span> obj2 <span class="op">=</span> <span class="kw">new</span> <span class="op">(</span>buf<span class="op">)</span> MyClass<span class="op">(</span><span class="dv">20</span><span class="op">);</span>   <span class="co">// 同一块内存反复构造不同对象</span></span>
+<span id="cb28-6"><a href="#cb28-6" aria-hidden="true" tabindex="-1"></a>obj2<span class="op">-&gt;~</span>MyClass<span class="op">();</span></span></code></pre></div>
+<pre><code>construct MyClass(10) at 0x16db06e28
+obj-&gt;value = 10
+destruct MyClass(10) at 0x16db06e28
+construct MyClass(20) at 0x16db06e28
+obj2 地址与 obj 相同: 是
+destruct MyClass(20) at 0x16db06e28</code></pre>
+<p>实测两次构造使用的确实是同一个地址,验证了”同一块内存可以反复析构—构造不同对象”这个
+placement new 最典型的用法(<code>std::variant</code>
+切换持有类型时正是这么做的)。使用要求:提供的地址必须满足目标类型的对齐要求
+<code>alignof(Type)</code>,用
+<code>char</code>/<code>unsigned char</code> 数组做缓冲区时必须加
+<code>alignas(Type)</code>,否则某些架构上会触发对齐异常或严重的性能损失。</p>
+<p>不能用 <code>memcpy</code> 替代 placement new:<code>memcpy</code>
+只是逐字节搬运,不会调用构造函数——对于带虚函数的类,虚函数表指针不会被正确设置;对于内部持有指针的类(<code>string</code>、<code>vector</code>
+成员),拷贝过去的指针仍然指向源对象的内部缓冲区,两个对象的析构都会释放同一块内存,直接导致
+double free。只有真正的 POD 类型(trivially copyable)才能安全地用
+<code>memcpy</code>。</p>
+<p>标准库内部大量依赖 placement new:<code>std::vector</code>
+扩容时在新分配的更大内存块上用 placement new
+移动构造旧元素;<code>std::optional</code>/<code>std::variant</code>
+内部持有一块对齐好的存储,有值时用 placement new
+构造、无值时手动析构;所有内存池、对象池的实现都靠”预分配一大块内存,需要构造对象时用
+placement new
+切一小块出来用”这套思路,从而避免每次都触发系统调用和产生碎片(见下文<a
+href="#十五避免内存碎片的策略">避免内存碎片的策略</a>)。</p>
+<h2
+id="十三内存泄漏野指针与内存越界">十三、内存泄漏、野指针与内存越界</h2>
+<p>三个问题的核心区别可以概括成一句话:内存泄漏是”忘了还”,野指针是”用了已经作废的”,内存越界是”写到了不属于自己的地方”。三者都可能导致崩溃或安全漏洞,但触发机制完全不同。</p>
+<p><strong>内存泄漏</strong>:程序通过
+<code>new</code>/<code>malloc</code>
+申请了堆内存,但因为指针被覆盖、函数提前返回、异常跳出等原因,丢失了这块内存唯一的地址,从此再也无法释放它。短期内程序不会崩溃——泄漏的内存只是”占着不用”,逻辑仍然正确;但长期运行(服务器、嵌入式设备)会持续消耗内存,最终分配失败或被操作系统
+OOM Killer
+杀掉。避免手段是让每一次分配都被一个具备确定性析构的所有者持有:<code>unique_ptr</code>/<code>shared_ptr</code>
+离开作用域自动释放,比人工在每条代码路径(包括异常路径)上补
+<code>delete</code> 可靠得多。<code>shared_ptr</code>
+的循环引用是内存泄漏里一个值得单独强调的特例——引用计数永远不会归零,<code>weak_ptr</code>
+是标准解法(见<a
+href="09-智能指针与现代内存管理.html#三循环引用问题与-weak_ptr-解决方案">第
+9 章</a>)。</p>
+<p><strong>野指针</strong>:指针变量本身还在,但它指向的内存已经被
+<code>delete</code>/<code>free</code>
+释放。释放操作只是把内存标记为可回收,通常不会立即清零或归还给操作系统,所以短期内原地的数据可能看起来”还是对的”——这恰恰是最危险的情况,bug
+潜伏下来,直到这块内存被重新分配给别的对象才会以一种毫不相关的方式爆发出来。再次通过野指针读写属于未定义行为,可能读到旧值、可能读到垃圾、也可能直接触发
+<code>SIGSEGV</code>。避免手段:<code>delete</code> 之后立即把指针置
+<code>nullptr</code>(再次 <code>delete nullptr</code>
+是安全的空操作);不返回局部变量的地址或引用;用智能指针彻底代替裸指针。</p>
+<p><strong>内存越界</strong>:访问数组下标超出
+<code>[0, size-1]</code>,或者往 <code>malloc</code>/<code>new</code>
+分配的块之外写数据。越界写入可能覆盖相邻变量、堆分配器的内部元数据、甚至(在栈上)函数的返回地址,是缓冲区溢出类安全漏洞的根源。避免手段:用
+<code>std::vector</code> 等容器代替裸数组(<code>.at()</code>
+越界访问会抛异常);编译时开启 <code>-fsanitize=address</code>
+在运行期检测越界;对手写的下标运算严格核对边界条件。智能指针也管不到非内存资源(文件描述符、socket、锁),这些需要用
+RAII 包装类或者智能指针的自定义 deleter 来管理生命周期。</p>
+<h2 id="十四内存碎片栈溢出与堆溢出">十四、内存碎片、栈溢出与堆溢出</h2>
+<p>内存碎片、栈溢出、堆溢出经常被放在一起比较,但它们分别对应”装不下”和”写出界”两类完全不同的失效模式。</p>
+<p><strong>内存碎片</strong>分两种:</p>
+<ul>
+<li><strong>外部碎片</strong>:反复分配释放不同大小的内存块之后,空闲内存被切成许多互不相邻的小块。单个小块都不够大,但加起来的总量足够满足一次新的大分配请求——这是”有钱但花不出去”。C/C++
+里这个问题格外突出,因为指针是裸地址,语言不支持像托管语言那样搬移已分配对象来做内存压缩(一旦移动对象,所有指向它的指针都要跟着更新,在
+C++ 里几乎不可行)。</li>
+<li><strong>内部碎片</strong>:分配器按固定粒度对齐分配(比如 8
+字节对齐),请求 5 字节实际拿到 8
+字节,多出来的部分就浪费了。内存池也有同样的问题——池内块大小固定,小请求依然占满整块。</li>
+</ul>
+<p>内部碎片是”已知的浪费”,上限可以通过选择合适的对齐粒度或内存池块大小来控制;外部碎片则取决于分配释放序列的随机性,本质上无法预测,只能靠合适的分配策略(best-fit、buddy
+system)缓解,无法根治。</p>
+<p>栈溢出与堆溢出的对比:</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>维度</th>
+<th>栈溢出</th>
+<th>堆溢出</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>发生区域</td>
+<td>栈内存</td>
+<td>堆内存(动态分配区)</td>
+</tr>
+<tr>
+<td>根本原因</td>
+<td>空间耗尽——递归过深或局部变量过大,超出栈容量</td>
+<td>越界写入——往 <code>malloc</code>/<code>new</code>
+分配的块之外写数据</td>
+</tr>
+<tr>
+<td>触发方式</td>
+<td>通常是编程错误(无限递归、栈上大数组)</td>
+<td>可能是无意错误,也常被用作恶意攻击手段</td>
+</tr>
+<tr>
+<td>后果</td>
+<td>程序立即崩溃(<code>SIGSEGV</code>),行为确定</td>
+<td>可能立即崩溃,也可能潜伏——覆盖的具体内容决定后果</td>
+</tr>
+<tr>
+<td>安全影响</td>
+<td>影响可用性(程序挂了)</td>
+<td>影响安全性(可能被利用来执行任意代码)</td>
+</tr>
+</tbody>
+</table>
+<p>堆溢出是危险的安全问题,本质原因是它让攻击者能够精确控制覆盖堆里相邻的数据:覆盖函数指针使其指向恶意代码、覆盖对象的虚函数表(vtable)劫持虚函数调用、篡改相邻对象的关键字段改变程序逻辑。配合
+ROP(Return-Oriented Programming)链,即便系统开启了
+DEP/NX(数据不可执行)保护,依然可能拼凑出可执行的攻击链。</p>
+<p>避免栈溢出的手段:把无限制深度的递归改写成迭代;不在栈上放大数组,改用堆分配的
+<code>vector</code>;给递归设置显式的深度上限;编译时开启
+<code>-fstack-protector</code>
+之类的栈保护机制。并非所有递归都会栈溢出——只要递归深度在栈容量范围内就不会有问题(遍历一棵高度为
+1000
+的平衡树没有风险,因为栈深度约等于树高),但用递归遍历百万节点的链表就会栈深度线性增长直至溢出。尾递归理论上可以被编译器优化成循环从而不增长栈帧,但
+C++ 标准不保证尾调用优化一定发生,不能把正确性依赖在这个优化上。</p>
+<h2 id="十五避免内存碎片的策略">十五、避免内存碎片的策略</h2>
+<p>避免内存碎片的核心思路是减少”不同生命周期、不同大小的内存块交替申请与释放”这种最容易产生碎片的模式,具体手段层层递进:</p>
+<p><strong>1.
+减少动态内存分配本身</strong>:能用栈内存、静态存储期对象或类的成员变量解决的,就不要动态分配——栈分配速度快,且天然不产生碎片(原因见<a
+href="#六四大内存分区栈-堆-全局静态区-常量区">四大内存分区</a>)。</p>
+<p><strong>2. 用 STL
+容器管理连续内存</strong>:<code>std::vector</code>、<code>std::string</code>、<code>std::array</code>
+内部管理一整块连续、按需增长的内存,大幅减少外部碎片;如果能提前估计大致规模,用
+<code>reserve()</code>
+预分配容量,避免反复扩容带来的多次分配/拷贝/释放(每次扩容都会在堆上留下一块被放弃的旧内存,是外部碎片的直接来源)。<code>std::list</code>
+每个节点独立分配,频繁插入删除会在堆上留下大量零散的小块,碎片敏感场景应当避免。</p>
+<p><strong>3.
+用智能指针防止因泄漏导致的”永久碎片”</strong>:泄漏的内存对系统来说是永远无法回收利用的碎片,<code>unique_ptr</code>/<code>shared_ptr</code>
+通过 RAII 确保内存总能被正确释放,是对碎片问题的间接但关键的贡献。</p>
+<p><strong>4. 对象池(Object
+Pool)</strong>:对于频繁申请释放的固定大小小对象(链表节点、网络数据包),对象池是最彻底的方案——一次性分配一大块内存,内部维护一个空闲槽位链表,分配和归还都退化成对链表头指针的
+O(1) 操作,构造/析构靠 placement new
+完成,完全避免了向系统申请/归还内存产生的外部碎片:</p>
+<div class="sourceCode" id="cb30"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb30-1"><a href="#cb30-1" aria-hidden="true" tabindex="-1"></a><span class="kw">template</span> <span class="op">&lt;</span><span class="kw">typename</span> T<span class="op">,</span> <span class="dt">size_t</span> N<span class="op">&gt;</span></span>
+<span id="cb30-2"><a href="#cb30-2" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> ObjectPool <span class="op">{</span></span>
+<span id="cb30-3"><a href="#cb30-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">alignas</span><span class="op">(</span>T<span class="op">)</span> <span class="dt">unsigned</span> <span class="dt">char</span> <span class="va">storage_</span><span class="op">[</span><span class="kw">sizeof</span><span class="op">(</span>T<span class="op">)</span> <span class="op">*</span> N<span class="op">];</span></span>
+<span id="cb30-4"><a href="#cb30-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">void</span><span class="op">*</span> <span class="va">free_list_</span><span class="op">[</span>N<span class="op">];</span></span>
+<span id="cb30-5"><a href="#cb30-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">size_t</span> <span class="va">free_count_</span> <span class="op">=</span> N<span class="op">;</span></span>
+<span id="cb30-6"><a href="#cb30-6" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span><span class="op">:</span></span>
+<span id="cb30-7"><a href="#cb30-7" aria-hidden="true" tabindex="-1"></a>    ObjectPool<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb30-8"><a href="#cb30-8" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span><span class="dt">size_t</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> N<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span></span>
+<span id="cb30-9"><a href="#cb30-9" aria-hidden="true" tabindex="-1"></a>            <span class="va">free_list_</span><span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> <span class="va">storage_</span> <span class="op">+</span> i <span class="op">*</span> <span class="kw">sizeof</span><span class="op">(</span>T<span class="op">);</span></span>
+<span id="cb30-10"><a href="#cb30-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb30-11"><a href="#cb30-11" aria-hidden="true" tabindex="-1"></a>    <span class="kw">template</span> <span class="op">&lt;</span><span class="kw">typename</span><span class="op">...</span> Args<span class="op">&gt;</span></span>
+<span id="cb30-12"><a href="#cb30-12" aria-hidden="true" tabindex="-1"></a>    T<span class="op">*</span> acquire<span class="op">(</span>Args<span class="op">&amp;&amp;...</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb30-13"><a href="#cb30-13" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span><span class="va">free_count_</span> <span class="op">==</span> <span class="dv">0</span><span class="op">)</span> <span class="cf">return</span> <span class="kw">nullptr</span><span class="op">;</span></span>
+<span id="cb30-14"><a href="#cb30-14" aria-hidden="true" tabindex="-1"></a>        <span class="dt">void</span><span class="op">*</span> mem <span class="op">=</span> <span class="va">free_list_</span><span class="op">[--</span><span class="va">free_count_</span><span class="op">];</span></span>
+<span id="cb30-15"><a href="#cb30-15" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="kw">new</span> <span class="op">(</span>mem<span class="op">)</span> T<span class="op">(</span><span class="bu">std::</span>forward<span class="op">&lt;</span>Args<span class="op">&gt;(</span>args<span class="op">)...);</span>  <span class="co">// placement new 构造</span></span>
+<span id="cb30-16"><a href="#cb30-16" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb30-17"><a href="#cb30-17" aria-hidden="true" tabindex="-1"></a>    <span class="dt">void</span> release<span class="op">(</span>T<span class="op">*</span> obj<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb30-18"><a href="#cb30-18" aria-hidden="true" tabindex="-1"></a>        obj<span class="op">-&gt;~</span>T<span class="op">();</span>                        <span class="co">// 手动析构</span></span>
+<span id="cb30-19"><a href="#cb30-19" aria-hidden="true" tabindex="-1"></a>        <span class="va">free_list_</span><span class="op">[</span><span class="va">free_count_</span><span class="op">++]</span> <span class="op">=</span> obj<span class="op">;</span>  <span class="co">// 槽位放回空闲链表,不调 delete</span></span>
+<span id="cb30-20"><a href="#cb30-20" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb30-21"><a href="#cb30-21" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<pre><code>p1=0x16d48ee0c v=1
+p2=0x16d48ee0c v=2 same_addr=yes</code></pre>
+<p><code>release(p1)</code> 之后 <code>acquire()</code> 拿到的地址与
+<code>p1</code>
+完全相同,说明这个池子从未向系统申请第二次内存,也就不存在外部碎片。</p>
+<p><strong>5. 自定义分配器(Custom Allocator)</strong>:STL
+容器的模板参数支持替换默认分配器,可以把上面的对象池思想接入
+<code>vector</code>/<code>map</code>
+等容器,为特定类型提供无碎片的分配策略,而不必改动容器本身的接口。</p>
+<p>线程安全的对象池实现上通常用 <code>mutex</code>
+保护空闲链表;对性能要求更高的场景会用线程本地存储(TLS)给每个线程一份独立的空闲列表,避免锁竞争,只有本线程池耗尽时才回落到加锁的全局池。总结起来,这一整套策略是”能不分配就不分配
+→ 分配了就保证连续 →
+分配也无法避免时就自己接管分配”层层递进的治理思路。</p>
 <hr />
 <p><a href="index.html">← 返回索引</a></p>
 </div>

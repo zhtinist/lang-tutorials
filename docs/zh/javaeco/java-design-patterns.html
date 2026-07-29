@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="zh-CN" xml:lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Java 设计模式实现细节</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../../assets/style.css" />
+</head>
+<body>
+<div class="topbar"><div class="wrap"><a class="home" href="../index.html"><span class="logo">📚</span><span class="brand">面向 C/C++ 程序员的其他语言教程</span></a>
+<a href="../python/index.html">Python</a>
+<a href="../java/index.html">Java</a>
+<a href="../go/index.html">Go</a>
+<a href="../algo/index.html">算法笔记</a>
+<a href="../architecture/index.html">架构设计</a>
+<a href="../oodlld/index.html">OOD/LLD</a>
+<a href="../container/index.html">容器对照</a>
+<a href="../cpp/index.html">C++ 教程</a>
+<a href="../baguwen/index.html">面试八股</a>
+<a href="../csbase/index.html">计算机基础</a>
+<a href="../javaeco/index.html" style="color:var(--accent-dark);font-weight:700">Java 生态</a></div></div>
+<div class="wrap">
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#java-设计模式实现细节" id="toc-java-设计模式实现细节">Java
+设计模式实现细节</a>
+<ul>
+<li><a href="#单例模式-singleton" id="toc-单例模式-singleton">单例模式 ·
+Singleton</a></li>
+<li><a href="#工厂模式-factory" id="toc-工厂模式-factory">工厂模式 ·
+Factory</a></li>
+<li><a href="#建造者模式-builder" id="toc-建造者模式-builder">建造者模式
+· Builder</a></li>
+<li><a href="#代理模式-proxy" id="toc-代理模式-proxy">代理模式 ·
+Proxy</a></li>
+<li><a href="#策略模式-strategy" id="toc-策略模式-strategy">策略模式 ·
+Strategy</a></li>
+<li><a href="#装饰器模式-decorator"
+id="toc-装饰器模式-decorator">装饰器模式 · Decorator</a></li>
+<li><a href="#观察者模式-observer"
+id="toc-观察者模式-observer">观察者模式 · Observer</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1 id="java-设计模式实现细节">Java 设计模式实现细节</h1>
+<blockquote>
+<p>概念、意图、UML 结构已经在 <a
+href="../ood-lld-notes/index.html">ood-lld-notes</a>
+专题讲透，本篇不重复。这里只聚焦一件事：<strong>同一个模式，Java
+语言层面到底怎么写、有哪些坑</strong>——线程安全怎么判断、JDK
+自带哪些实现、Spring 里落在哪个类上。每段代码都用本机 JDK
+25（<code>javac</code> / <code>java</code>）实际编译运行过。</p>
+</blockquote>
+<hr />
+<h2 id="单例模式-singleton">单例模式 · Singleton</h2>
+<p>核心思想见<a
+href="../ood-lld-notes/patterns-creational.html">「创建型模式」</a>的
+Singleton 一节。Java
+里因为要面对多线程、反射、序列化这三个”破坏单例”的攻击面，衍生出 5
+种写法，安全等级完全不同。</p>
+<table>
+<colgroup>
+<col style="width: 12%" />
+<col style="width: 16%" />
+<col style="width: 20%" />
+<col style="width: 16%" />
+<col style="width: 24%" />
+<col style="width: 12%" />
+</colgroup>
+<thead>
+<tr>
+<th>写法</th>
+<th>懒加载</th>
+<th>线程安全</th>
+<th>防反射</th>
+<th>防反序列化</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>饿汉式</td>
+<td>否</td>
+<td>是（类加载机制保证）</td>
+<td>否</td>
+<td>否</td>
+<td>类加载时就 <code>new</code>，简单但无法延迟</td>
+</tr>
+<tr>
+<td>懒汉式（不加锁）</td>
+<td>是</td>
+<td><strong>否</strong></td>
+<td>否</td>
+<td>否</td>
+<td><code>getInstance()</code> 里裸判断
+<code>null</code>，多线程下会创建出多个实例</td>
+</tr>
+<tr>
+<td>双重检查锁 DCL</td>
+<td>是</td>
+<td>是</td>
+<td>否</td>
+<td>否</td>
+<td><code>synchronized</code> + <code>volatile</code> 组合</td>
+</tr>
+<tr>
+<td>静态内部类</td>
+<td>是</td>
+<td>是（JVM 类加载锁保证）</td>
+<td>否</td>
+<td>否</td>
+<td>不需要手写锁，性能最好的懒加载方案</td>
+</tr>
+<tr>
+<td>枚举</td>
+<td>否</td>
+<td>是</td>
+<td><strong>是</strong></td>
+<td><strong>是</strong></td>
+<td>JVM 保证枚举常量全局唯一，天然免疫反射和反序列化攻击</td>
+</tr>
+</tbody>
+</table>
+<p><strong>双重检查锁为什么必须加
+<code>volatile</code></strong>：<code>instance = new DclSingleton()</code>
+不是原子操作，会被拆成三步——① 分配内存，② 执行构造方法初始化字段，③
+把引用赋给 <code>instance</code>。JVM 和 CPU 出于优化目的可能对 ②③
+重排序，于是另一个线程可能看到 <code>instance != null</code>
+但对象字段还没初始化完，即拿到一个”半初始化”对象。<code>volatile</code>
+通过内存屏障禁止这种重排序，代价是每次读写都有一点点额外开销。</p>
+<p><strong>为什么枚举单例最安全</strong>：<code>instance.getClass().getDeclaredConstructor()</code>
+这类反射攻击可以强行 <code>setAccessible(true)</code>
+后调用私有构造器，绕过饿汉式、静态内部类等写法的单例保证；序列化场景下如果不手动重写
+<code>readResolve()</code>，反序列化会走底层 <code>Unsafe</code>
+分配内存，绕开构造器，生成第二个实例。而枚举类型的实例化被写死在 JVM
+规范里（<code>Enum</code>
+没有公开构造器可反射调用，<code>readObject()</code> 也被 JDK
+针对枚举类型特殊处理成按名字查找已有常量），这两条路在语言层面直接被堵死，不需要业务代码额外防御。</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">lang</span><span class="op">.</span><span class="im">reflect</span><span class="op">.</span><span class="im">Constructor</span><span class="op">;</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> SingletonDemo <span class="op">{</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 静态内部类：懒加载 + 线程安全，依赖 JVM 类加载锁</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">class</span> HolderSingleton <span class="op">{</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>        <span class="kw">private</span> <span class="fu">HolderSingleton</span><span class="op">()</span> <span class="op">{}</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>        <span class="kw">private</span> <span class="dt">static</span> <span class="kw">class</span> <span class="bu">Holder</span> <span class="op">{</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>            <span class="kw">private</span> <span class="dt">static</span> <span class="dt">final</span> HolderSingleton INSTANCE <span class="op">=</span> <span class="kw">new</span> <span class="fu">HolderSingleton</span><span class="op">();</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>        <span class="kw">public</span> <span class="dt">static</span> HolderSingleton <span class="fu">getInstance</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="bu">Holder</span><span class="op">.</span><span class="fu">INSTANCE</span><span class="op">;</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 枚举单例：JVM 保证枚举常量只会被实例化一次</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="kw">enum</span> EnumSingleton <span class="op">{</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>        INSTANCE<span class="op">;</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>        <span class="kw">public</span> <span class="dt">void</span> <span class="fu">doWork</span><span class="op">()</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;枚举单例工作中&quot;</span><span class="op">);</span> <span class="op">}</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="kw">throws</span> <span class="bu">Exception</span> <span class="op">{</span></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>        <span class="co">// 对静态内部类单例做反射攻击：能绕过私有构造器，破坏单例</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>        HolderSingleton normal1 <span class="op">=</span> HolderSingleton<span class="op">.</span><span class="fu">getInstance</span><span class="op">();</span></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Constructor</span><span class="op">&lt;</span>HolderSingleton<span class="op">&gt;</span> ctor <span class="op">=</span> HolderSingleton<span class="op">.</span><span class="fu">class</span><span class="op">.</span><span class="fu">getDeclaredConstructor</span><span class="op">();</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>        ctor<span class="op">.</span><span class="fu">setAccessible</span><span class="op">(</span><span class="kw">true</span><span class="op">);</span></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>        HolderSingleton normal2 <span class="op">=</span> ctor<span class="op">.</span><span class="fu">newInstance</span><span class="op">();</span></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;普通单例反射后仍相同? &quot;</span> <span class="op">+</span> <span class="op">(</span>normal1 <span class="op">==</span> normal2<span class="op">));</span> <span class="co">// false，已被破坏</span></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a>        <span class="co">// 对枚举单例做同样的反射攻击：JVM 层面直接拒绝</span></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">{</span></span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a>            <span class="bu">Constructor</span><span class="op">&lt;</span>EnumSingleton<span class="op">&gt;</span> enumCtor <span class="op">=</span></span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a>                    EnumSingleton<span class="op">.</span><span class="fu">class</span><span class="op">.</span><span class="fu">getDeclaredConstructor</span><span class="op">(</span><span class="bu">String</span><span class="op">.</span><span class="fu">class</span><span class="op">,</span> <span class="dt">int</span><span class="op">.</span><span class="fu">class</span><span class="op">);</span></span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a>            enumCtor<span class="op">.</span><span class="fu">setAccessible</span><span class="op">(</span><span class="kw">true</span><span class="op">);</span></span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a>            enumCtor<span class="op">.</span><span class="fu">newInstance</span><span class="op">(</span><span class="st">&quot;FAKE&quot;</span><span class="op">,</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="cf">catch</span> <span class="op">(</span><span class="bu">IllegalArgumentException</span> e<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;枚举单例反射攻击被拒绝: &quot;</span> <span class="op">+</span> e<span class="op">.</span><span class="fu">getMessage</span><span class="op">());</span></span>
+<span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb1-39"><a href="#cb1-39" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-40"><a href="#cb1-40" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>运行结果：<code>普通单例反射后仍相同? false</code>，<code>枚举单例反射攻击被拒绝: Cannot reflectively create enum objects</code>——一行代码就能证明为什么《Effective
+Java》推荐用枚举实现单例。</p>
+<hr />
+<h2 id="工厂模式-factory">工厂模式 · Factory</h2>
+<p>核心思想见<a
+href="../ood-lld-notes/patterns-creational.html">「创建型模式」</a>的
+Factory Method / Abstract Factory 一节。Java
+里三种工厂（简单工厂、工厂方法、抽象工厂）的落地差异主要在”新增产品类型要不要改工厂代码”。</p>
+<p>简单工厂最常见的写法是 <code>if-else</code> 或 <code>switch</code>
+按参数分发，但新增类型必须回来改这个方法体，违反开闭原则；Java
+里更地道的做法是用 <code>Map&lt;String, Supplier&lt;T&gt;&gt;</code>
+做注册表，把类型标识和构造函数引用（<code>ClassName::new</code>）存成键值对，新增类型只需要多注册一行，工厂方法本身不用改：</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">HashMap</span><span class="op">;</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">Map</span><span class="op">;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">function</span><span class="op">.</span><span class="im">Supplier</span><span class="op">;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> FactoryDemo <span class="op">{</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">interface</span> Notifier <span class="op">{</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>        <span class="dt">void</span> <span class="fu">send</span><span class="op">(</span><span class="bu">String</span> msg<span class="op">);</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">class</span> EmailNotifier <span class="kw">implements</span> Notifier <span class="op">{</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>        <span class="kw">public</span> <span class="dt">void</span> <span class="fu">send</span><span class="op">(</span><span class="bu">String</span> msg<span class="op">)</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;邮件发送: &quot;</span> <span class="op">+</span> msg<span class="op">);</span> <span class="op">}</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">class</span> SmsNotifier <span class="kw">implements</span> Notifier <span class="op">{</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>        <span class="kw">public</span> <span class="dt">void</span> <span class="fu">send</span><span class="op">(</span><span class="bu">String</span> msg<span class="op">)</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;短信发送: &quot;</span> <span class="op">+</span> msg<span class="op">);</span> <span class="op">}</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">class</span> NotifierFactory <span class="op">{</span></span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>        <span class="kw">private</span> <span class="dt">static</span> <span class="dt">final</span> <span class="bu">Map</span><span class="op">&lt;</span><span class="bu">String</span><span class="op">,</span> Supplier<span class="op">&lt;</span>Notifier<span class="op">&gt;&gt;</span> REGISTRY <span class="op">=</span> <span class="kw">new</span> <span class="bu">HashMap</span><span class="op">&lt;&gt;();</span></span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>        <span class="dt">static</span> <span class="op">{</span></span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>            REGISTRY<span class="op">.</span><span class="fu">put</span><span class="op">(</span><span class="st">&quot;email&quot;</span><span class="op">,</span> EmailNotifier<span class="op">::</span><span class="kw">new</span><span class="op">);</span></span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>            REGISTRY<span class="op">.</span><span class="fu">put</span><span class="op">(</span><span class="st">&quot;sms&quot;</span><span class="op">,</span> SmsNotifier<span class="op">::</span><span class="kw">new</span><span class="op">);</span></span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a>        <span class="dt">static</span> Notifier <span class="fu">create</span><span class="op">(</span><span class="bu">String</span> type<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>            Supplier<span class="op">&lt;</span>Notifier<span class="op">&gt;</span> supplier <span class="op">=</span> REGISTRY<span class="op">.</span><span class="fu">get</span><span class="op">(</span>type<span class="op">);</span></span>
+<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> <span class="op">(</span>supplier <span class="op">==</span> <span class="kw">null</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a>                <span class="cf">throw</span> <span class="kw">new</span> <span class="bu">IllegalArgumentException</span><span class="op">(</span><span class="st">&quot;未知通知类型: &quot;</span> <span class="op">+</span> type<span class="op">);</span></span>
+<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
+<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> supplier<span class="op">.</span><span class="fu">get</span><span class="op">();</span></span>
+<span id="cb2-31"><a href="#cb2-31" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb2-32"><a href="#cb2-32" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-33"><a href="#cb2-33" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-34"><a href="#cb2-34" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-35"><a href="#cb2-35" aria-hidden="true" tabindex="-1"></a>        NotifierFactory<span class="op">.</span><span class="fu">create</span><span class="op">(</span><span class="st">&quot;email&quot;</span><span class="op">).</span><span class="fu">send</span><span class="op">(</span><span class="st">&quot;订单已创建&quot;</span><span class="op">);</span></span>
+<span id="cb2-36"><a href="#cb2-36" aria-hidden="true" tabindex="-1"></a>        NotifierFactory<span class="op">.</span><span class="fu">create</span><span class="op">(</span><span class="st">&quot;sms&quot;</span><span class="op">).</span><span class="fu">send</span><span class="op">(</span><span class="st">&quot;验证码 123456&quot;</span><span class="op">);</span></span>
+<span id="cb2-37"><a href="#cb2-37" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-38"><a href="#cb2-38" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p><strong>JDK 与 Spring
+里的真实例子</strong>：<code>Calendar.getInstance()</code>、<code>DateFormat.getInstance()</code>
+都是简单工厂，按地区/风格参数返回不同实现；<code>Collection</code>
+体系里每种集合类都对应一个 <code>Iterator</code>
+实现，<code>iterator()</code> 方法就是工厂方法模式。Spring 的
+<code>BeanFactory</code> 是简单工厂与工厂方法的结合体——统一定义了
+<code>getBean()</code> 这套获取 Bean 的接口，具体到某个 Bean
+怎么实例化、怎么注入依赖，则由容器内部的各种 <code>BeanDefinition</code>
+和后置处理器决定；<code>FactoryBean&lt;T&gt;</code>
+接口则是典型的工厂方法模式，业务方实现 <code>getObject()</code>
+封装复杂的创建逻辑（比如连接池、代理对象这种不能直接用无参构造器
+<code>new</code> 出来的对象），Spring 容器负责在合适的时机调用它。</p>
+<hr />
+<h2 id="建造者模式-builder">建造者模式 · Builder</h2>
+<p>核心思想见<a
+href="../ood-lld-notes/patterns-creational.html">「创建型模式」</a>的
+Builder 一节。Java 没有关键字参数（keyword argument），构造函数一旦超过
+4、5 个参数，调用处全靠位置传参，可读性和安全性都会崩——这是 Java 里
+Builder 模式格外常见的直接原因。</p>
+<p>Java 里最地道的写法是<strong>把 Builder 做成目标类的
+<code>static</code> 内部类</strong>，而不是独立的一个类：这样 Builder
+可以直接访问外部类的私有构造器，构造出来的对象可以做成不可变（所有字段
+<code>final</code>，只在私有构造器里赋值一次），线程安全顺带就解决了。<code>java.lang.StringBuilder</code>、<code>Stream.Builder</code>、<code>java.net.http.HttpRequest.Builder</code>（JDK
+11 内置的 HTTP 客户端）都是这个套路的标准实现。</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> BuilderDemo <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">final</span> <span class="kw">class</span> HttpRequest <span class="op">{</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>        <span class="kw">private</span> <span class="dt">final</span> <span class="bu">String</span> url<span class="op">;</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>        <span class="kw">private</span> <span class="dt">final</span> <span class="bu">String</span> method<span class="op">;</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>        <span class="kw">private</span> <span class="dt">final</span> <span class="dt">int</span> timeout<span class="op">;</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>        <span class="kw">private</span> <span class="dt">final</span> <span class="dt">boolean</span> retry<span class="op">;</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>        <span class="kw">private</span> <span class="fu">HttpRequest</span><span class="op">(</span>Builder b<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>            <span class="kw">this</span><span class="op">.</span><span class="fu">url</span> <span class="op">=</span> b<span class="op">.</span><span class="fu">url</span><span class="op">;</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>            <span class="kw">this</span><span class="op">.</span><span class="fu">method</span> <span class="op">=</span> b<span class="op">.</span><span class="fu">method</span><span class="op">;</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>            <span class="kw">this</span><span class="op">.</span><span class="fu">timeout</span> <span class="op">=</span> b<span class="op">.</span><span class="fu">timeout</span><span class="op">;</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>            <span class="kw">this</span><span class="op">.</span><span class="fu">retry</span> <span class="op">=</span> b<span class="op">.</span><span class="fu">retry</span><span class="op">;</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>        <span class="at">@Override</span></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>        <span class="kw">public</span> <span class="bu">String</span> <span class="fu">toString</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">&quot;HttpRequest{url=%s, method=%s, timeout=%d, retry=%b}&quot;</span></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>                    <span class="op">.</span><span class="fu">formatted</span><span class="op">(</span>url<span class="op">,</span> method<span class="op">,</span> timeout<span class="op">,</span> retry<span class="op">);</span></span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>        <span class="dt">static</span> <span class="dt">final</span> <span class="kw">class</span> Builder <span class="op">{</span></span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>            <span class="kw">private</span> <span class="bu">String</span> url<span class="op">;</span></span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>            <span class="kw">private</span> <span class="bu">String</span> method <span class="op">=</span> <span class="st">&quot;GET&quot;</span><span class="op">;</span></span>
+<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>            <span class="kw">private</span> <span class="dt">int</span> timeout <span class="op">=</span> <span class="dv">30</span><span class="op">;</span></span>
+<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a>            <span class="kw">private</span> <span class="dt">boolean</span> retry <span class="op">=</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a>            Builder <span class="fu">url</span><span class="op">(</span><span class="bu">String</span> url<span class="op">)</span> <span class="op">{</span> <span class="kw">this</span><span class="op">.</span><span class="fu">url</span> <span class="op">=</span> url<span class="op">;</span> <span class="cf">return</span> <span class="kw">this</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a>            Builder <span class="fu">method</span><span class="op">(</span><span class="bu">String</span> method<span class="op">)</span> <span class="op">{</span> <span class="kw">this</span><span class="op">.</span><span class="fu">method</span> <span class="op">=</span> method<span class="op">;</span> <span class="cf">return</span> <span class="kw">this</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb3-30"><a href="#cb3-30" aria-hidden="true" tabindex="-1"></a>            Builder <span class="fu">timeout</span><span class="op">(</span><span class="dt">int</span> seconds<span class="op">)</span> <span class="op">{</span> <span class="kw">this</span><span class="op">.</span><span class="fu">timeout</span> <span class="op">=</span> seconds<span class="op">;</span> <span class="cf">return</span> <span class="kw">this</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb3-31"><a href="#cb3-31" aria-hidden="true" tabindex="-1"></a>            Builder <span class="fu">retry</span><span class="op">(</span><span class="dt">boolean</span> retry<span class="op">)</span> <span class="op">{</span> <span class="kw">this</span><span class="op">.</span><span class="fu">retry</span> <span class="op">=</span> retry<span class="op">;</span> <span class="cf">return</span> <span class="kw">this</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb3-32"><a href="#cb3-32" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-33"><a href="#cb3-33" aria-hidden="true" tabindex="-1"></a>            HttpRequest <span class="fu">build</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb3-34"><a href="#cb3-34" aria-hidden="true" tabindex="-1"></a>                <span class="cf">if</span> <span class="op">(</span>url <span class="op">==</span> <span class="kw">null</span> <span class="op">||</span> url<span class="op">.</span><span class="fu">isEmpty</span><span class="op">())</span> <span class="op">{</span></span>
+<span id="cb3-35"><a href="#cb3-35" aria-hidden="true" tabindex="-1"></a>                    <span class="cf">throw</span> <span class="kw">new</span> <span class="bu">IllegalStateException</span><span class="op">(</span><span class="st">&quot;url 必填&quot;</span><span class="op">);</span></span>
+<span id="cb3-36"><a href="#cb3-36" aria-hidden="true" tabindex="-1"></a>                <span class="op">}</span></span>
+<span id="cb3-37"><a href="#cb3-37" aria-hidden="true" tabindex="-1"></a>                <span class="cf">return</span> <span class="kw">new</span> <span class="fu">HttpRequest</span><span class="op">(</span><span class="kw">this</span><span class="op">);</span></span>
+<span id="cb3-38"><a href="#cb3-38" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
+<span id="cb3-39"><a href="#cb3-39" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb3-40"><a href="#cb3-40" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-41"><a href="#cb3-41" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-42"><a href="#cb3-42" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-43"><a href="#cb3-43" aria-hidden="true" tabindex="-1"></a>        HttpRequest req <span class="op">=</span> <span class="kw">new</span> HttpRequest<span class="op">.</span><span class="fu">Builder</span><span class="op">()</span></span>
+<span id="cb3-44"><a href="#cb3-44" aria-hidden="true" tabindex="-1"></a>                <span class="op">.</span><span class="fu">url</span><span class="op">(</span><span class="st">&quot;https://api.example.com/pay&quot;</span><span class="op">)</span></span>
+<span id="cb3-45"><a href="#cb3-45" aria-hidden="true" tabindex="-1"></a>                <span class="op">.</span><span class="fu">method</span><span class="op">(</span><span class="st">&quot;POST&quot;</span><span class="op">)</span></span>
+<span id="cb3-46"><a href="#cb3-46" aria-hidden="true" tabindex="-1"></a>                <span class="op">.</span><span class="fu">timeout</span><span class="op">(</span><span class="dv">10</span><span class="op">)</span></span>
+<span id="cb3-47"><a href="#cb3-47" aria-hidden="true" tabindex="-1"></a>                <span class="op">.</span><span class="fu">retry</span><span class="op">(</span><span class="kw">true</span><span class="op">)</span></span>
+<span id="cb3-48"><a href="#cb3-48" aria-hidden="true" tabindex="-1"></a>                <span class="op">.</span><span class="fu">build</span><span class="op">();</span></span>
+<span id="cb3-49"><a href="#cb3-49" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>req<span class="op">);</span></span>
+<span id="cb3-50"><a href="#cb3-50" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-51"><a href="#cb3-51" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p><strong>实践提醒</strong>：手写这套模板代码重复度很高，实际项目里通常用
+Lombok 的 <code>@Builder</code> 注解自动生成上面这一整套 Builder
+代码，省去样板代码；本篇不引入 Lombok
+依赖，但了解手写版本的结构，才看得懂 <code>@Builder</code>
+展开之后生成了什么。<code>build()</code> 里做非空/非法值校验（如上面的
+<code>url</code> 必填检查）是 Java Builder 的惯例，比 Python
+版本更强调”构造完成前就要拦住非法状态”，因为 Java 对象一旦
+<code>new</code> 出来通常被当作已经可用。</p>
+<hr />
+<h2 id="代理模式-proxy">代理模式 · Proxy</h2>
+<p>核心思想见<a
+href="../ood-lld-notes/patterns-structural.html">「结构型模式」</a>的
+Proxy 一节。Java
+里代理有三种实现路径，区别主要在”代理类什么时候生成”和”能不能代理没有接口的类”。</p>
+<table>
+<colgroup>
+<col style="width: 4%" />
+<col style="width: 23%" />
+<col style="width: 33%" />
+<col style="width: 38%" />
+</colgroup>
+<thead>
+<tr>
+<th></th>
+<th>静态代理</th>
+<th>JDK 动态代理</th>
+<th>CGLIB 动态代理</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>代理类生成时机</td>
+<td>编译期，手写代码</td>
+<td>运行期，反射生成 <code>.class</code></td>
+<td>运行期，字节码生成子类</td>
+</tr>
+<tr>
+<td>依赖</td>
+<td>无</td>
+<td>JDK 自带 <code>java.lang.reflect.Proxy</code></td>
+<td>第三方库（Spring 内嵌了一份）</td>
+</tr>
+<tr>
+<td>前提条件</td>
+<td>手动实现同一接口</td>
+<td>目标类必须实现至少一个接口</td>
+<td>目标类不能是 <code>final</code>，方法不能是
+<code>final</code>/<code>private</code>/<code>static</code></td>
+</tr>
+<tr>
+<td>原理</td>
+<td>手写一个类实现相同接口，持有目标对象引用</td>
+<td>生成 <code>$ProxyN</code> 类实现目标接口，方法调用转发给
+<code>InvocationHandler.invoke()</code></td>
+<td>生成目标类的子类，重写方法插入增强逻辑，<code>super.method()</code>
+调用原方法</td>
+</tr>
+<tr>
+<td>扩展性</td>
+<td>差，每个真实类对应一个代理类</td>
+<td>好，一个 <code>InvocationHandler</code> 可代理任意接口</td>
+<td>好，但无法代理没有接口且被 <code>final</code> 修饰的类</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Spring AOP 用哪种、什么时候降级到 CGLIB</strong>：Spring AOP
+默认规则是”目标类实现了至少一个接口就用 JDK 动态代理，否则自动降级为
+CGLIB”；但从 Spring Boot 2.0
+开始，<code>spring.aop.proxy-target-class</code> 默认被设为
+<code>true</code>，也就是<strong>默认统一使用
+CGLIB</strong>，即便目标类实现了接口——这是为了避免”注入的字段类型是具体类、但容器里放的是只实现了接口的
+JDK 代理”导致的
+<code>ClassCastException</code>，用一致的行为换取更少的踩坑。这也是为什么
+<code>@Transactional</code>、<code>@Cacheable</code>
+标注的类<strong>不能是 <code>final</code> 类，方法也不能是
+<code>final</code>/<code>private</code></strong>——CGLIB
+需要能继承并重写这些方法，一旦是 <code>final</code> 或
+<code>private</code>，代理会静默失效（方法调用不经过代理，直接执行原始逻辑，事务/缓存增强逻辑不生效）。</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">lang</span><span class="op">.</span><span class="im">reflect</span><span class="op">.</span><span class="im">InvocationHandler</span><span class="op">;</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">lang</span><span class="op">.</span><span class="im">reflect</span><span class="op">.</span><span class="im">Method</span><span class="op">;</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">lang</span><span class="op">.</span><span class="im">reflect</span><span class="op">.</span><span class="im">Proxy</span><span class="op">;</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> ProxyDemo <span class="op">{</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">interface</span> UserService <span class="op">{</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>        <span class="dt">void</span> <span class="fu">save</span><span class="op">(</span><span class="bu">String</span> name<span class="op">);</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">class</span> UserServiceImpl <span class="kw">implements</span> UserService <span class="op">{</span></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>        <span class="at">@Override</span></span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>        <span class="kw">public</span> <span class="dt">void</span> <span class="fu">save</span><span class="op">(</span><span class="bu">String</span> name<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;保存用户: &quot;</span> <span class="op">+</span> name<span class="op">);</span></span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a>    <span class="co">// JDK 动态代理必须实现 InvocationHandler，所有接口方法调用都会走 invoke</span></span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">class</span> LogInvocationHandler <span class="kw">implements</span> <span class="bu">InvocationHandler</span> <span class="op">{</span></span>
+<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a>        <span class="kw">private</span> <span class="dt">final</span> <span class="bu">Object</span> target<span class="op">;</span></span>
+<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a>        <span class="fu">LogInvocationHandler</span><span class="op">(</span><span class="bu">Object</span> target<span class="op">)</span> <span class="op">{</span> <span class="kw">this</span><span class="op">.</span><span class="fu">target</span> <span class="op">=</span> target<span class="op">;</span> <span class="op">}</span></span>
+<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a>        <span class="at">@Override</span></span>
+<span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a>        <span class="kw">public</span> <span class="bu">Object</span> <span class="fu">invoke</span><span class="op">(</span><span class="bu">Object</span> proxy<span class="op">,</span> <span class="bu">Method</span> method<span class="op">,</span> <span class="bu">Object</span><span class="op">[]</span> args<span class="op">)</span> <span class="kw">throws</span> <span class="bu">Throwable</span> <span class="op">{</span></span>
+<span id="cb4-25"><a href="#cb4-25" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;[JDK代理] 前置日志: 调用 &quot;</span> <span class="op">+</span> method<span class="op">.</span><span class="fu">getName</span><span class="op">());</span></span>
+<span id="cb4-26"><a href="#cb4-26" aria-hidden="true" tabindex="-1"></a>            <span class="bu">Object</span> result <span class="op">=</span> method<span class="op">.</span><span class="fu">invoke</span><span class="op">(</span>target<span class="op">,</span> args<span class="op">);</span></span>
+<span id="cb4-27"><a href="#cb4-27" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;[JDK代理] 后置日志: 调用完成&quot;</span><span class="op">);</span></span>
+<span id="cb4-28"><a href="#cb4-28" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> result<span class="op">;</span></span>
+<span id="cb4-29"><a href="#cb4-29" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb4-30"><a href="#cb4-30" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb4-31"><a href="#cb4-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-32"><a href="#cb4-32" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-33"><a href="#cb4-33" aria-hidden="true" tabindex="-1"></a>        UserService target <span class="op">=</span> <span class="kw">new</span> <span class="fu">UserServiceImpl</span><span class="op">();</span></span>
+<span id="cb4-34"><a href="#cb4-34" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-35"><a href="#cb4-35" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Proxy.newProxyInstance 三个参数：类加载器、要实现的接口数组、InvocationHandler</span></span>
+<span id="cb4-36"><a href="#cb4-36" aria-hidden="true" tabindex="-1"></a>        UserService proxy <span class="op">=</span> <span class="op">(</span>UserService<span class="op">)</span> <span class="bu">Proxy</span><span class="op">.</span><span class="fu">newProxyInstance</span><span class="op">(</span></span>
+<span id="cb4-37"><a href="#cb4-37" aria-hidden="true" tabindex="-1"></a>                UserService<span class="op">.</span><span class="fu">class</span><span class="op">.</span><span class="fu">getClassLoader</span><span class="op">(),</span></span>
+<span id="cb4-38"><a href="#cb4-38" aria-hidden="true" tabindex="-1"></a>                <span class="kw">new</span> <span class="bu">Class</span><span class="op">&lt;?&gt;[]{</span>UserService<span class="op">.</span><span class="fu">class</span><span class="op">},</span></span>
+<span id="cb4-39"><a href="#cb4-39" aria-hidden="true" tabindex="-1"></a>                <span class="kw">new</span> <span class="fu">LogInvocationHandler</span><span class="op">(</span>target<span class="op">)</span></span>
+<span id="cb4-40"><a href="#cb4-40" aria-hidden="true" tabindex="-1"></a>        <span class="op">);</span></span>
+<span id="cb4-41"><a href="#cb4-41" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-42"><a href="#cb4-42" aria-hidden="true" tabindex="-1"></a>        proxy<span class="op">.</span><span class="fu">save</span><span class="op">(</span><span class="st">&quot;Ada&quot;</span><span class="op">);</span></span>
+<span id="cb4-43"><a href="#cb4-43" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;是否为 Proxy 生成的类: &quot;</span> <span class="op">+</span> <span class="bu">Proxy</span><span class="op">.</span><span class="fu">isProxyClass</span><span class="op">(</span>proxy<span class="op">.</span><span class="fu">getClass</span><span class="op">()));</span></span>
+<span id="cb4-44"><a href="#cb4-44" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb4-45"><a href="#cb4-45" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>运行结果确认了 <code>proxy.getClass().getName()</code> 是 JVM 生成的
+<code>$Proxy0</code>，<code>Proxy.isProxyClass(...)</code> 返回
+<code>true</code>——代理类是运行期真实生成的一个类，不是简单的转发包装。</p>
+<hr />
+<h2 id="策略模式-strategy">策略模式 · Strategy</h2>
+<p>核心思想见<a
+href="../ood-lld-notes/patterns-behavioral.html">「行为型模式」</a>的
+Strategy 一节。Java 8 之前，策略模式几乎总是”一个策略接口 + N
+个实现类”；有了函数式接口和 Lambda
+之后，只要策略逻辑是单一方法、无状态的，完全可以用
+<code>java.util.function</code>
+包下的现成接口（<code>Function</code>、<code>Predicate</code>、<code>DoubleUnaryOperator</code>……）配合
+Lambda 表达式代替具体策略类，省掉一整批只有一个方法的样板类。</p>
+<p>Java 标准库里最经典的策略模式实践是
+<code>Comparator</code>：它本身就是一个策略接口，<code>List.sort(Comparator)</code>、<code>Collections.sort</code>
+都是依赖这个策略接口的
+Context；<code>Comparator.comparingInt(...).thenComparing(...)</code>
+这类链式组合方法，本质是把多个策略组合成一个新策略。</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">Comparator</span><span class="op">;</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">List</span><span class="op">;</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">function</span><span class="op">.</span><span class="im">DoubleUnaryOperator</span><span class="op">;</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> StrategyDemo <span class="op">{</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>        <span class="co">// 1. 用函数式接口 + Lambda 表达策略，省掉具体策略类</span></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>        DoubleUnaryOperator noDiscount <span class="op">=</span> price <span class="op">-&gt;</span> price<span class="op">;</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>        DoubleUnaryOperator ninePercentOff <span class="op">=</span> price <span class="op">-&gt;</span> price <span class="op">*</span> <span class="fl">0.9</span><span class="op">;</span></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>        DoubleUnaryOperator cashback50 <span class="op">=</span> price <span class="op">-&gt;</span> price <span class="op">&gt;=</span> <span class="dv">200</span> <span class="op">?</span> price <span class="op">-</span> <span class="dv">50</span> <span class="op">:</span> price<span class="op">;</span></span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;原价策略: &quot;</span> <span class="op">+</span> noDiscount<span class="op">.</span><span class="fu">applyAsDouble</span><span class="op">(</span><span class="dv">100</span><span class="op">));</span></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;九折策略: &quot;</span> <span class="op">+</span> ninePercentOff<span class="op">.</span><span class="fu">applyAsDouble</span><span class="op">(</span><span class="dv">100</span><span class="op">));</span></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;满减策略: &quot;</span> <span class="op">+</span> cashback50<span class="op">.</span><span class="fu">applyAsDouble</span><span class="op">(</span><span class="dv">200</span><span class="op">));</span></span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>        <span class="co">// 2. JDK 自带的策略模式实践：Comparator 本身就是一个策略接口</span></span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>        <span class="bu">List</span><span class="op">&lt;</span><span class="bu">String</span><span class="op">&gt;</span> names <span class="op">=</span> <span class="kw">new</span> java<span class="op">.</span><span class="fu">util</span><span class="op">.</span><span class="fu">ArrayList</span><span class="op">&lt;&gt;(</span><span class="bu">List</span><span class="op">.</span><span class="fu">of</span><span class="op">(</span><span class="st">&quot;Charlie&quot;</span><span class="op">,</span> <span class="st">&quot;Ada&quot;</span><span class="op">,</span> <span class="st">&quot;Bob&quot;</span><span class="op">));</span></span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>        names<span class="op">.</span><span class="fu">sort</span><span class="op">(</span><span class="bu">Comparator</span><span class="op">.</span><span class="fu">comparingInt</span><span class="op">(</span><span class="bu">String</span><span class="op">::</span>length<span class="op">).</span><span class="fu">thenComparing</span><span class="op">(</span><span class="bu">Comparator</span><span class="op">.</span><span class="fu">naturalOrder</span><span class="op">()));</span></span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;按长度再按字典序: &quot;</span> <span class="op">+</span> names<span class="op">);</span></span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p><strong>什么时候仍然要用具体策略类而不是
+Lambda</strong>：策略本身需要维护内部状态、需要被 Spring
+容器管理（依赖注入、切面增强）、或者策略逻辑本身很复杂需要拆成多个私有方法时，Lambda
+会力不从心，这时仍然应该退回”策略接口 + 具体实现类 + Spring 按
+<code>@Qualifier</code>/<code>Map&lt;String, Strategy&gt;</code>
+注入”这套写法，用类型安全换取可维护性。</p>
+<hr />
+<h2 id="装饰器模式-decorator">装饰器模式 · Decorator</h2>
+<p>核心思想见<a
+href="../ood-lld-notes/patterns-structural.html">「结构型模式」</a>的
+Decorator 一节。Java
+里要特别分清两个同名不同义的概念：<strong>注解（<code>@Override</code>、自定义
+<code>@interface</code>）编译期装饰的是类/方法的元数据</strong>，而<strong>本模式装饰的是运行时对象</strong>，两者除了都叫”装饰”外没有任何关系，面试容易被搞混。</p>
+<p>Java 标准库里最经典、也是解释装饰器模式时最常被引用的实现就是
+<code>java.io</code>
+的流体系：<code>FileInputStream</code>/<code>ByteArrayInputStream</code>
+是基础组件，只提供最原始的字节读取；<code>BufferedInputStream</code>
+是缓冲装饰器，叠加了缓冲区批量读取的能力；<code>InputStreamReader</code>
+把字节流装饰成字符流；再往外套一层 <code>BufferedReader</code> 才有
+<code>readLine()</code>
+这种按行读取的能力。每一层都实现同一套读取语义（都能当作输入源使用），却在原有能力上叠加了新职责——这正是装饰器模式”不改变接口、层层叠加”的意图。</p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> DecoratorDemo <span class="op">{</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">interface</span> Coffee <span class="op">{</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>        <span class="bu">String</span> <span class="fu">describe</span><span class="op">();</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>        <span class="dt">double</span> <span class="fu">cost</span><span class="op">();</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">class</span> Espresso <span class="kw">implements</span> Coffee <span class="op">{</span></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>        <span class="kw">public</span> <span class="bu">String</span> <span class="fu">describe</span><span class="op">()</span> <span class="op">{</span> <span class="cf">return</span> <span class="st">&quot;Espresso&quot;</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>        <span class="kw">public</span> <span class="dt">double</span> <span class="fu">cost</span><span class="op">()</span> <span class="op">{</span> <span class="cf">return</span> <span class="fl">10.0</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">abstract</span> <span class="kw">class</span> CoffeeDecorator <span class="kw">implements</span> Coffee <span class="op">{</span></span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a>        <span class="kw">protected</span> <span class="dt">final</span> Coffee inner<span class="op">;</span></span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>        <span class="fu">CoffeeDecorator</span><span class="op">(</span>Coffee inner<span class="op">)</span> <span class="op">{</span> <span class="kw">this</span><span class="op">.</span><span class="fu">inner</span> <span class="op">=</span> inner<span class="op">;</span> <span class="op">}</span></span>
+<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">class</span> Milk <span class="kw">extends</span> CoffeeDecorator <span class="op">{</span></span>
+<span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a>        <span class="fu">Milk</span><span class="op">(</span>Coffee inner<span class="op">)</span> <span class="op">{</span> <span class="kw">super</span><span class="op">(</span>inner<span class="op">);</span> <span class="op">}</span></span>
+<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a>        <span class="kw">public</span> <span class="bu">String</span> <span class="fu">describe</span><span class="op">()</span> <span class="op">{</span> <span class="cf">return</span> inner<span class="op">.</span><span class="fu">describe</span><span class="op">()</span> <span class="op">+</span> <span class="st">&quot; + Milk&quot;</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb6-21"><a href="#cb6-21" aria-hidden="true" tabindex="-1"></a>        <span class="kw">public</span> <span class="dt">double</span> <span class="fu">cost</span><span class="op">()</span> <span class="op">{</span> <span class="cf">return</span> inner<span class="op">.</span><span class="fu">cost</span><span class="op">()</span> <span class="op">+</span> <span class="fl">2.0</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb6-22"><a href="#cb6-22" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb6-23"><a href="#cb6-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-24"><a href="#cb6-24" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">class</span> Sugar <span class="kw">extends</span> CoffeeDecorator <span class="op">{</span></span>
+<span id="cb6-25"><a href="#cb6-25" aria-hidden="true" tabindex="-1"></a>        <span class="fu">Sugar</span><span class="op">(</span>Coffee inner<span class="op">)</span> <span class="op">{</span> <span class="kw">super</span><span class="op">(</span>inner<span class="op">);</span> <span class="op">}</span></span>
+<span id="cb6-26"><a href="#cb6-26" aria-hidden="true" tabindex="-1"></a>        <span class="kw">public</span> <span class="bu">String</span> <span class="fu">describe</span><span class="op">()</span> <span class="op">{</span> <span class="cf">return</span> inner<span class="op">.</span><span class="fu">describe</span><span class="op">()</span> <span class="op">+</span> <span class="st">&quot; + Sugar&quot;</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb6-27"><a href="#cb6-27" aria-hidden="true" tabindex="-1"></a>        <span class="kw">public</span> <span class="dt">double</span> <span class="fu">cost</span><span class="op">()</span> <span class="op">{</span> <span class="cf">return</span> inner<span class="op">.</span><span class="fu">cost</span><span class="op">()</span> <span class="op">+</span> <span class="fl">1.0</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb6-28"><a href="#cb6-28" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb6-29"><a href="#cb6-29" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-30"><a href="#cb6-30" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="kw">throws</span> <span class="bu">Exception</span> <span class="op">{</span></span>
+<span id="cb6-31"><a href="#cb6-31" aria-hidden="true" tabindex="-1"></a>        Coffee order <span class="op">=</span> <span class="kw">new</span> <span class="fu">Sugar</span><span class="op">(</span><span class="kw">new</span> <span class="fu">Milk</span><span class="op">(</span><span class="kw">new</span> <span class="fu">Espresso</span><span class="op">()));</span></span>
+<span id="cb6-32"><a href="#cb6-32" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>order<span class="op">.</span><span class="fu">describe</span><span class="op">()</span> <span class="op">+</span> <span class="st">&quot; -&gt; &quot;</span> <span class="op">+</span> order<span class="op">.</span><span class="fu">cost</span><span class="op">());</span></span>
+<span id="cb6-33"><a href="#cb6-33" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-34"><a href="#cb6-34" aria-hidden="true" tabindex="-1"></a>        <span class="co">// JDK 自身最经典的装饰器案例：java.io 里 InputStream 家族层层包装</span></span>
+<span id="cb6-35"><a href="#cb6-35" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">(</span>java<span class="op">.</span><span class="fu">io</span><span class="op">.</span><span class="fu">BufferedReader</span> reader <span class="op">=</span> <span class="kw">new</span> java<span class="op">.</span><span class="fu">io</span><span class="op">.</span><span class="fu">BufferedReader</span><span class="op">(</span></span>
+<span id="cb6-36"><a href="#cb6-36" aria-hidden="true" tabindex="-1"></a>                <span class="kw">new</span> java<span class="op">.</span><span class="fu">io</span><span class="op">.</span><span class="fu">InputStreamReader</span><span class="op">(</span></span>
+<span id="cb6-37"><a href="#cb6-37" aria-hidden="true" tabindex="-1"></a>                        <span class="kw">new</span> java<span class="op">.</span><span class="fu">io</span><span class="op">.</span><span class="fu">ByteArrayInputStream</span><span class="op">(</span><span class="st">&quot;line1</span><span class="sc">\n</span><span class="st">line2&quot;</span><span class="op">.</span><span class="fu">getBytes</span><span class="op">()))))</span> <span class="op">{</span></span>
+<span id="cb6-38"><a href="#cb6-38" aria-hidden="true" tabindex="-1"></a>            <span class="bu">String</span> line<span class="op">;</span></span>
+<span id="cb6-39"><a href="#cb6-39" aria-hidden="true" tabindex="-1"></a>            <span class="cf">while</span> <span class="op">((</span>line <span class="op">=</span> reader<span class="op">.</span><span class="fu">readLine</span><span class="op">())</span> <span class="op">!=</span> <span class="kw">null</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb6-40"><a href="#cb6-40" aria-hidden="true" tabindex="-1"></a>                <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;读到一行: &quot;</span> <span class="op">+</span> line<span class="op">);</span></span>
+<span id="cb6-41"><a href="#cb6-41" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
+<span id="cb6-42"><a href="#cb6-42" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb6-43"><a href="#cb6-43" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb6-44"><a href="#cb6-44" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p><code>Sugar(Milk(Espresso()))</code> 输出
+<code>Espresso + Milk + Sugar -&gt; 13.0</code>；<code>BufferedReader</code>
+包 <code>InputStreamReader</code> 包 <code>ByteArrayInputStream</code>
+这三层嵌套，成功按行读出了字节数组里的内容——两段代码验证的是同一个结构。Spring
+里 <code>BeanWrapper</code>、<code>DecoratingProxy</code>
+这类接口也是用装饰器思路给 Bean 动态叠加访问能力。</p>
+<hr />
+<h2 id="观察者模式-observer">观察者模式 · Observer</h2>
+<p>核心思想见<a
+href="../ood-lld-notes/patterns-behavioral.html">「行为型模式」</a>的
+Observer 一节。JDK 曾经在 <code>java.util</code>
+包内置过一套观察者模式的现成实现——<code>Observable</code> 类 +
+<code>Observer</code> 接口——但从 <strong>Java 9 开始被标记为
+<code>@Deprecated</code></strong>，原因是设计上的硬伤：<code>Observable</code>
+是一个具体类而不是接口，Java
+不支持多继承，一旦业务类已经继承了别的父类就无法再继承
+<code>Observable</code>；状态变更还必须先手动调用
+<code>setChanged()</code> 做标记，再调 <code>notifyObservers()</code>
+才会真正触发通知，这一步很容易被忘记，通知也没有分级、没有异步支持。</p>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">List</span><span class="op">;</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">concurrent</span><span class="op">.</span><span class="im">CopyOnWriteArrayList</span><span class="op">;</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> ObserverDemo <span class="op">{</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">interface</span> OrderObserver <span class="op">{</span></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>        <span class="dt">void</span> <span class="fu">onOrderPlaced</span><span class="op">(</span><span class="bu">String</span> orderId<span class="op">);</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 用 CopyOnWriteArrayList 而不是 ArrayList：遍历通知的同时允许安全地增删观察者，</span></span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 避免并发场景下抛 ConcurrentModificationException</span></span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">class</span> OrderSubject <span class="op">{</span></span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>        <span class="kw">private</span> <span class="dt">final</span> <span class="bu">List</span><span class="op">&lt;</span>OrderObserver<span class="op">&gt;</span> observers <span class="op">=</span> <span class="kw">new</span> <span class="bu">CopyOnWriteArrayList</span><span class="op">&lt;&gt;();</span></span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a>        <span class="dt">void</span> <span class="fu">attach</span><span class="op">(</span>OrderObserver o<span class="op">)</span> <span class="op">{</span> observers<span class="op">.</span><span class="fu">add</span><span class="op">(</span>o<span class="op">);</span> <span class="op">}</span></span>
+<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a>        <span class="dt">void</span> <span class="fu">detach</span><span class="op">(</span>OrderObserver o<span class="op">)</span> <span class="op">{</span> observers<span class="op">.</span><span class="fu">remove</span><span class="op">(</span>o<span class="op">);</span> <span class="op">}</span></span>
+<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a>        <span class="dt">void</span> <span class="fu">place</span><span class="op">(</span><span class="bu">String</span> orderId<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;创建订单 &quot;</span> <span class="op">+</span> orderId<span class="op">);</span></span>
+<span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> <span class="op">(</span>OrderObserver o <span class="op">:</span> observers<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb7-21"><a href="#cb7-21" aria-hidden="true" tabindex="-1"></a>                o<span class="op">.</span><span class="fu">onOrderPlaced</span><span class="op">(</span>orderId<span class="op">);</span></span>
+<span id="cb7-22"><a href="#cb7-22" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
+<span id="cb7-23"><a href="#cb7-23" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb7-24"><a href="#cb7-24" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb7-25"><a href="#cb7-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-26"><a href="#cb7-26" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb7-27"><a href="#cb7-27" aria-hidden="true" tabindex="-1"></a>        OrderSubject subject <span class="op">=</span> <span class="kw">new</span> <span class="fu">OrderSubject</span><span class="op">();</span></span>
+<span id="cb7-28"><a href="#cb7-28" aria-hidden="true" tabindex="-1"></a>        OrderObserver email <span class="op">=</span> id <span class="op">-&gt;</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;[邮件] 订单 &quot;</span> <span class="op">+</span> id <span class="op">+</span> <span class="st">&quot; 已创建&quot;</span><span class="op">);</span></span>
+<span id="cb7-29"><a href="#cb7-29" aria-hidden="true" tabindex="-1"></a>        OrderObserver metrics <span class="op">=</span> id <span class="op">-&gt;</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;[指标] order_placed +1&quot;</span><span class="op">);</span></span>
+<span id="cb7-30"><a href="#cb7-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-31"><a href="#cb7-31" aria-hidden="true" tabindex="-1"></a>        subject<span class="op">.</span><span class="fu">attach</span><span class="op">(</span>email<span class="op">);</span></span>
+<span id="cb7-32"><a href="#cb7-32" aria-hidden="true" tabindex="-1"></a>        subject<span class="op">.</span><span class="fu">attach</span><span class="op">(</span>metrics<span class="op">);</span></span>
+<span id="cb7-33"><a href="#cb7-33" aria-hidden="true" tabindex="-1"></a>        subject<span class="op">.</span><span class="fu">place</span><span class="op">(</span><span class="st">&quot;A1001&quot;</span><span class="op">);</span></span>
+<span id="cb7-34"><a href="#cb7-34" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-35"><a href="#cb7-35" aria-hidden="true" tabindex="-1"></a>        subject<span class="op">.</span><span class="fu">detach</span><span class="op">(</span>metrics<span class="op">);</span></span>
+<span id="cb7-36"><a href="#cb7-36" aria-hidden="true" tabindex="-1"></a>        subject<span class="op">.</span><span class="fu">place</span><span class="op">(</span><span class="st">&quot;A1002&quot;</span><span class="op">);</span></span>
+<span id="cb7-37"><a href="#cb7-37" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb7-38"><a href="#cb7-38" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>现代 Java
+项目里，<code>java.util.Observable</code>/<code>Observer</code>
+已经不建议使用，实践中的替代方案：自己定义观察者接口（如上）是最直接的方式；GUI/Bean
+场景可以用 <code>java.beans.PropertyChangeSupport</code> +
+<code>PropertyChangeListener</code>，语义上专门针对”某个属性变化时通知”；Spring
+容器里 <code>ApplicationEvent</code> + <code>ApplicationListener</code>
+是框架级的发布-订阅实现，<code>ApplicationContext.publishEvent()</code>
+对应发布动作，标了 <code>@EventListener</code>
+的方法对应观察者，<code>ApplicationContext</code> 本身承担了原来
+<code>Subject</code> 维护观察者列表并遍历通知的职责。</p>
+<hr />
+<p><a href="index.html">返回索引</a></p>
+</div>
+</body>
+</html>

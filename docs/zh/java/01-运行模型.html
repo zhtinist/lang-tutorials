@@ -102,7 +102,9 @@
 <a href="../oodlld/index.html">OOD/LLD</a>
 <a href="../container/index.html">容器对照</a>
 <a href="../cpp/index.html">C++ 教程</a>
-<a href="../baguwen/index.html">面试八股</a></div></div>
+<a href="../baguwen/index.html">面试八股</a>
+<a href="../csbase/index.html">计算机基础</a>
+<a href="../javaeco/index.html">Java 生态</a></div></div>
 <div class="wrap">
 <nav id="TOC" role="doc-toc">
 <ul>
@@ -125,6 +127,8 @@ id="toc-五运行时内存区域">五、运行时内存区域</a></li>
 <li><a href="#六aotgraalvm-native-image"
 id="toc-六aotgraalvm-native-image">六、AOT：GraalVM
 native-image</a></li>
+<li><a href="#七jvm-常见参数速查" id="toc-七jvm-常见参数速查">七、JVM
+常见参数速查</a></li>
 <li><a href="#小结" id="toc-小结">小结</a></li>
 </ul></li>
 </ul>
@@ -362,6 +366,28 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb12-1"><a href=
 <p>注意 <code>[Config &lt;clinit&gt; runs]</code> 出现在
 <code>before touching Config</code>
 <strong>之后</strong>——类加载确实推迟到了用到它的那一刻。</p>
+<h3
+id="完整生命周期触发初始化的场景与类的卸载">完整生命周期:触发初始化的场景与类的卸载</h3>
+<p>上面演示的是”首次主动使用”触发
+<code>&lt;clinit&gt;</code>，完整列出来 JVM
+规范定义的<strong>主动使用</strong>场景其实有好几种：虚拟机启动时初始化含
+<code>main</code> 方法的主类；首次 <code>new</code>
+一个类的实例；首次访问某个类的静态字段或调用静态方法（<strong>不包括</strong>编译期就能确定的
+<code>final</code>
+常量——它在编译期就被直接内联进了调用方的常量池，不会触发被引用类的初始化）；首次通过反射（<code>Class.forName</code>
+默认参数即触发）访问某个类；初始化一个类时，如果它的父类还没初始化，先递归初始化父类。除此之外的”被动引用”（比如通过子类引用父类的静态字段、定义数组但不实例化、引用上面说的编译期常量）都不会触发初始化——这是”懒加载”原则贯彻到底的体现，也是”类加载惰性”这一设计目标在细节上的具体落地。</p>
+<p>链接阶段的<strong>准备（Preparation）</strong>也有一个例外需要注意：普通静态字段在这一步只拿到零值，但被
+<code>static final</code>
+修饰、且值在编译期就能确定的<strong>常量</strong>，会在编译时直接被内联进引用它的类自己的常量池，准备阶段根本不会为它单独分配内存、也不需要等目标类初始化完成——这正是”一个类的
+<code>static final int</code>
+常量值被修改后，没重新编译的调用方代码仍然用旧值”这个经典陷阱的成因：调用方拿到的从来就不是”运行时读一次”的值，而是编译期就已经拷贝进自己常量池的字面量。</p>
+<p>类同样会被<strong>卸载</strong>：当同时满足三个条件——该类的所有实例都已被回收、加载它的类加载器本身已被回收、且它的
+<code>java.lang.Class</code>
+对象在任何地方都没有引用（无法再通过反射访问）——方法区里的类元数据才会被
+GC 回收。Bootstrap ClassLoader 加载的核心类实际上永远不会被卸载，因为
+Bootstrap ClassLoader 本身的生命周期等同于整个 JVM
+进程；能被卸载的通常只是自定义类加载器加载的类（常见于容器/插件热部署场景，卸载失败正是”类加载器泄漏”的根源）。注意类的卸载回收的是<strong>方法区里的元数据</strong>，与堆里对象实例的垃圾回收是两回事——一个类被卸载不代表它曾经创建过的所有实例都跟着消失，那些实例仍由堆的可达性分析单独判断（见<a
+href="09-错误处理与资源管理.html">「错误处理与资源管理」</a>）。</p>
 <h3 id="双亲委派模型-parent-delegation">双亲委派模型 Parent
 Delegation</h3>
 <p>JVM 里有多个类加载器，形成层级：</p>
@@ -377,6 +403,107 @@ Delegation</h3>
 <code>java.lang.String</code>
 顶替系统类——这是一种安全与一致性保证。C/C++ 里若两个 <code>.so</code>
 各自带同名符号，行为取决于链接顺序，容易出问题；双亲委派从机制上避免了核心类被”劫持”。</p>
+<h4 id="类的唯一性全限定名-类加载器">类的唯一性：全限定名 +
+类加载器</h4>
+<p>JVM 判断两个类”是不是同一个类”，不只看类名，而是<strong>全限定名 +
+加载它的类加载器</strong>共同决定。哪怕字节码完全相同，只要被两个不同的类加载器分别
+<code>defineClass</code>，JVM
+就认为这是两个互不相干的类型——<code>instanceof</code> 判断为
+<code>false</code>，互相强转会抛
+<code>ClassCastException</code>。下面用两个自定义类加载器分别加载同一份
+<code>.class</code> 字节码验证这一点（先单独编译一个最简单的
+<code>Sample.java</code> 得到
+<code>Sample.class</code>，再运行下面的加载器）：</p>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Sample.java —— 先 javac 编译好，下面的加载器直接读它的字节码</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Sample <span class="op">{}</span></span></code></pre></div>
+<div class="sourceCode" id="cb15"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">io</span><span class="op">.*;</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">nio</span><span class="op">.</span><span class="im">file</span><span class="op">.*;</span></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a><span class="co">// 自定义类加载器：重写 loadClass()（而不是通常建议的 findClass()），</span></span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a><span class="co">// 对指定类名&quot;跳过向上委派&quot;，直接自己加载字节流——这是打破双亲委派最直接的手段。</span></span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> BreakingLoader <span class="kw">extends</span> <span class="bu">ClassLoader</span> <span class="op">{</span></span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">private</span> <span class="dt">final</span> <span class="bu">String</span> targetClassName<span class="op">;</span></span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>    <span class="fu">BreakingLoader</span><span class="op">(</span><span class="bu">String</span> targetClassName<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a>        <span class="kw">super</span><span class="op">(</span><span class="kw">null</span><span class="op">);</span> <span class="co">// 不设 parent，模拟&quot;完全不委派&quot;的极端情形</span></span>
+<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a>        <span class="kw">this</span><span class="op">.</span><span class="fu">targetClassName</span> <span class="op">=</span> targetClassName<span class="op">;</span></span>
+<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a>    <span class="at">@Override</span></span>
+<span id="cb15-13"><a href="#cb15-13" aria-hidden="true" tabindex="-1"></a>    <span class="kw">protected</span> <span class="bu">Class</span><span class="op">&lt;?&gt;</span> <span class="fu">loadClass</span><span class="op">(</span><span class="bu">String</span> name<span class="op">,</span> <span class="dt">boolean</span> resolve<span class="op">)</span> <span class="kw">throws</span> <span class="bu">ClassNotFoundException</span> <span class="op">{</span></span>
+<span id="cb15-14"><a href="#cb15-14" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(!</span>name<span class="op">.</span><span class="fu">equals</span><span class="op">(</span>targetClassName<span class="op">))</span> <span class="op">{</span></span>
+<span id="cb15-15"><a href="#cb15-15" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="bu">ClassLoader</span><span class="op">.</span><span class="fu">getSystemClassLoader</span><span class="op">().</span><span class="fu">loadClass</span><span class="op">(</span>name<span class="op">);</span></span>
+<span id="cb15-16"><a href="#cb15-16" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb15-17"><a href="#cb15-17" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">{</span></span>
+<span id="cb15-18"><a href="#cb15-18" aria-hidden="true" tabindex="-1"></a>            <span class="dt">byte</span><span class="op">[]</span> bytes <span class="op">=</span> Files<span class="op">.</span><span class="fu">readAllBytes</span><span class="op">(</span>Paths<span class="op">.</span><span class="fu">get</span><span class="op">(</span><span class="st">&quot;Sample.class&quot;</span><span class="op">));</span></span>
+<span id="cb15-19"><a href="#cb15-19" aria-hidden="true" tabindex="-1"></a>            <span class="bu">Class</span><span class="op">&lt;?&gt;</span> c <span class="op">=</span> <span class="fu">defineClass</span><span class="op">(</span>name<span class="op">,</span> bytes<span class="op">,</span> <span class="dv">0</span><span class="op">,</span> bytes<span class="op">.</span><span class="fu">length</span><span class="op">);</span></span>
+<span id="cb15-20"><a href="#cb15-20" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> <span class="op">(</span>resolve<span class="op">)</span> <span class="fu">resolveClass</span><span class="op">(</span>c<span class="op">);</span></span>
+<span id="cb15-21"><a href="#cb15-21" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> c<span class="op">;</span></span>
+<span id="cb15-22"><a href="#cb15-22" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="cf">catch</span> <span class="op">(</span><span class="bu">IOException</span> e<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb15-23"><a href="#cb15-23" aria-hidden="true" tabindex="-1"></a>            <span class="cf">throw</span> <span class="kw">new</span> <span class="bu">ClassNotFoundException</span><span class="op">(</span>name<span class="op">,</span> e<span class="op">);</span></span>
+<span id="cb15-24"><a href="#cb15-24" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb15-25"><a href="#cb15-25" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb15-26"><a href="#cb15-26" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb15-27"><a href="#cb15-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-28"><a href="#cb15-28" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> BreakDelegation <span class="op">{</span></span>
+<span id="cb15-29"><a href="#cb15-29" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="kw">throws</span> <span class="bu">Exception</span> <span class="op">{</span></span>
+<span id="cb15-30"><a href="#cb15-30" aria-hidden="true" tabindex="-1"></a>        BreakingLoader loader1 <span class="op">=</span> <span class="kw">new</span> <span class="fu">BreakingLoader</span><span class="op">(</span><span class="st">&quot;Sample&quot;</span><span class="op">);</span></span>
+<span id="cb15-31"><a href="#cb15-31" aria-hidden="true" tabindex="-1"></a>        BreakingLoader loader2 <span class="op">=</span> <span class="kw">new</span> <span class="fu">BreakingLoader</span><span class="op">(</span><span class="st">&quot;Sample&quot;</span><span class="op">);</span></span>
+<span id="cb15-32"><a href="#cb15-32" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Class</span><span class="op">&lt;?&gt;</span> c1 <span class="op">=</span> loader1<span class="op">.</span><span class="fu">loadClass</span><span class="op">(</span><span class="st">&quot;Sample&quot;</span><span class="op">);</span></span>
+<span id="cb15-33"><a href="#cb15-33" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Class</span><span class="op">&lt;?&gt;</span> c2 <span class="op">=</span> loader2<span class="op">.</span><span class="fu">loadClass</span><span class="op">(</span><span class="st">&quot;Sample&quot;</span><span class="op">);</span></span>
+<span id="cb15-34"><a href="#cb15-34" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-35"><a href="#cb15-35" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;c1 == c2 ? &quot;</span> <span class="op">+</span> <span class="op">(</span>c1 <span class="op">==</span> c2<span class="op">));</span></span>
+<span id="cb15-36"><a href="#cb15-36" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Object</span> o1 <span class="op">=</span> c1<span class="op">.</span><span class="fu">getDeclaredConstructor</span><span class="op">().</span><span class="fu">newInstance</span><span class="op">();</span></span>
+<span id="cb15-37"><a href="#cb15-37" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Object</span> o2 <span class="op">=</span> c2<span class="op">.</span><span class="fu">getDeclaredConstructor</span><span class="op">().</span><span class="fu">newInstance</span><span class="op">();</span></span>
+<span id="cb15-38"><a href="#cb15-38" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;o1.getClass() == o2.getClass() ? &quot;</span> <span class="op">+</span> <span class="op">(</span>o1<span class="op">.</span><span class="fu">getClass</span><span class="op">()</span> <span class="op">==</span> o2<span class="op">.</span><span class="fu">getClass</span><span class="op">()));</span></span>
+<span id="cb15-39"><a href="#cb15-39" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb15-40"><a href="#cb15-40" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb15-41"><a href="#cb15-41" aria-hidden="true" tabindex="-1"></a><span class="co">// c1 == c2 ? false</span></span>
+<span id="cb15-42"><a href="#cb15-42" aria-hidden="true" tabindex="-1"></a><span class="co">// o1.getClass() == o2.getClass() ? false</span></span>
+<span id="cb15-43"><a href="#cb15-43" aria-hidden="true" tabindex="-1"></a><span class="co">// （强行互相 cast 会抛 ClassCastException：Cannot cast Sample to Sample）</span></span></code></pre></div>
+<p>这不是 bug，是双亲委派要保护的核心性质本身：<strong>类加载器 +
+全限定名共同构成类型的身份证</strong>。也正因为如此，双亲委派把”核心类库只能由
+Bootstrap 加载”变成了一个可强制的约束——用户即便自定义了一个同名的
+<code>java.lang.String</code>，双亲委派会先把加载请求委托给
+Bootstrap，最终生效的还是 JDK
+自带的那个；伪造版本就算真被加载出来，也和系统里其它地方用到的
+<code>String</code>
+不是同一个类型，互不兼容，自然起不到”顶替”的作用。</p>
+<h4 id="如何打破双亲委派">如何打破双亲委派</h4>
+<p>双亲委派不是语言强制的规则，而是 <code>ClassLoader.loadClass()</code>
+默认实现里的一种约定——只要重写这个方法，就可以不走”先问父亲”这条路。三种常见方式：</p>
+<ol type="1">
+<li><p><strong>自定义类加载器重写
+<code>loadClass()</code></strong>：上面的 demo 就是最直接的方式——不调用
+<code>super.loadClass()</code>，自己决定要不要委派、从哪里读字节码。JDK
+官方推荐的常规做法通常只重写
+<code>findClass()</code>（父加载器失败后才会被调用），这样仍保留双亲委派”先问父亲”的顺序；像上面这样直接重写
+<code>loadClass()</code> 本身，才是真正意义上的”打破”。</p></li>
+<li><p><strong>SPI 机制 + 线程上下文类加载器</strong>：典型矛盾场景是
+JDBC——<code>java.sql.DriverManager</code> 由 Bootstrap
+加载，但具体的数据库驱动实现（比如
+<code>com.mysql.cj.jdbc.Driver</code>）在应用的 classpath 下，由
+Application ClassLoader 加载。按标准双亲委派，Bootstrap 加载的
+<code>DriverManager</code> 没法反向委派给”儿子”Application ClassLoader
+去加载驱动类。JDK
+的解法是给每个线程挂一个<strong>线程上下文类加载器（Thread Context
+ClassLoader）</strong>，默认就是 Application
+ClassLoader；<code>DriverManager</code> 内部通过
+<code>Thread.currentThread().getContextClassLoader()</code>
+拿到它，反向”借用”子加载器加载驱动——这是一种从顶层向下层反向查找的变通。<code>java.util.ServiceLoader</code>（Java
+SPI
+机制的核心）用的也是同一套上下文类加载器，解决”接口定义在核心库、具体实现在应用层”的加载问题。</p></li>
+<li><p><strong>Tomcat 的类加载器隔离</strong>：同一个 Tomcat 里部署多个
+Web
+应用，各自可能依赖同一个类库的不同版本。如果严格走双亲委派，所有类最终都会委派到同一个
+Application ClassLoader，不同版本的同名类会互相冲突。Tomcat
+的解法是给每个 Web 应用配一个独立的
+<code>WebappClassLoader</code>，并且<strong>反转默认查找顺序</strong>：优先加载自己
+<code>WEB-INF/classes</code> 和 <code>WEB-INF/lib</code>
+下的类，找不到才向上委派给公共父加载器——这样每个应用的类互相隔离，同名不同版本的库可以在同一个
+Tomcat
+进程里共存。这是”打破双亲委派”在生产环境里最常见的落地案例。</p></li>
+</ol>
 <h2 id="四执行解释-jit-混合模式">四、执行：解释 + JIT 混合模式</h2>
 <p>拿到字节码后，JVM 怎么执行？两种手段并用（HotSpot
 的默认”混合模式”）：</p>
@@ -518,6 +645,62 @@ href="03-变量与内存模型.html">「变量与内存模型」</a>。</p>
 </tr>
 </tbody>
 </table>
+<p>上表是运行时<strong>数据</strong>怎么摆放；调用这些 native
+方法靠的是另外两个组件——<strong>本地方法接口（Native Method
+Interface，即 JNI）</strong>：当某个方法被 <code>native</code>
+关键字标记，执行引擎不会去解释/编译它的字节码（它压根没有字节码体），而是通过
+JNI 这层接口跳转到本地实现；<strong>本地方法库（Native Method
+Library）</strong>：存放这些 native
+方法真正的实现（<code>.so</code>/<code>.dll</code>），比如
+<code>java.io.FileInputStream</code>
+的读文件操作、线程的创建与调度，最终都要通过本地方法库调用操作系统提供的系统调用完成——Java
+语言本身不能直接碰触操作系统内核资源，这是它跨平台设计必然的代价，native
+接口 + 本地方法库正是补上这块”必须和具体 OS
+打交道”的缺口。至此，类加载器（本节”类加载”）、运行时数据区（上表）、执行引擎（解释器
++ JIT，上一节）、本地方法接口、本地方法库——JVM
+规范定义的五大组成部分，在本章里都各自有了对应的落地位置。</p>
+<h3
+id="堆内部怎么切tlabsurvivor-比例大对象字符串常量池">堆内部怎么切：TLAB、Survivor
+比例、大对象、字符串常量池</h3>
+<p>上表把堆看作一整块”对象存放地”，实际实现里 HotSpot
+对堆做了更细的切分，这些细节在<a
+href="09-错误处理与资源管理.html">「错误处理与资源管理」</a>的 GC
+章节会被反复用到，这里先建立静态认识：</p>
+<ul>
+<li><strong>默认堆大小</strong>：不显式指定
+<code>-Xmx</code>/<code>-Xms</code> 时，HotSpot
+会按物理内存的比例给出默认值——初始堆大小约为物理内存的
+1/64，最大堆大小约为物理内存的 1/4（具体比例随 JDK
+版本和平台略有调整）。生产环境几乎总是显式设置这两个参数，不依赖默认值，原因见下一节。</li>
+<li><strong>TLAB（Thread Local Allocation Buffer）</strong>：Eden
+区会划出一小部分（默认约占 Eden 的
+1%），给每个线程私有独占的一小块”本地分配缓冲区”。新对象优先在自己线程的
+TLAB 里通过指针碰撞分配，不需要加锁；只有 TLAB 用满了才去竞争整个 Eden
+的分配锁。这是”多线程同时 <code>new</code>
+对象”避免锁竞争的关键优化，也是”对象分配很快”这个印象背后的具体机制。</li>
+<li><strong>Eden : Survivor0 : Survivor1 默认比例是 8 : 1 :
+1</strong>（<code>-XX:SurvivorRatio=8</code>）：这个比例基于”大多数对象活不过一次
+Minor GC”的弱分代假设——留给存活对象的 Survivor
+空间不需要很大，把更多空间留给 Eden 能让 Minor GC 触发得更少。</li>
+<li><strong>大对象直接进老年代</strong>：超过
+<code>-XX:PretenureSizeThreshold</code>
+阈值的对象（典型场景是大数组），会跳过新生代，直接分配进老年代——避免大对象在
+Eden/Survivor
+之间来回复制的开销，也避免新生代因为塞不下大对象而被迫提前触发 Minor
+GC。</li>
+<li><strong>字符串常量池（String Pool）</strong>：JDK7
+起从永久代移入堆，用于存放 <code>String.intern()</code>
+之后的字符串，保证内容相同的字符串字面量在池里只有一份拷贝，避免重复对象——<code>"a" + "b"</code>
+这种编译期能确定的字面量拼接会自动进池，但 <code>new String("ab")</code>
+不会。</li>
+<li><strong>直接内存（Direct
+Memory）</strong>：<code>ByteBuffer.allocateDirect()</code>
+分配的是<strong>堆外</strong>内存，不受 <code>-Xmx</code> 限制、不被 GC
+直接管理，靠虚引用/<code>Cleaner</code> 机制在关联的 Java
+对象被回收时顺带释放（<a
+href="09-错误处理与资源管理.html">「错误处理与资源管理」</a>有虚引用的完整例子）。<code>-XX:MaxDirectMemorySize</code>
+专门限制它的上限，和堆内存是两套独立的记账体系。</li>
+</ul>
 <p>几点与 C 的对照： - <strong>元空间在本地内存（native
 memory）</strong>，不在 GC 堆里（这是 JDK8 起的设计，取代了旧的”永久代
 PermGen”）。 - <strong>堆的回收是自动的</strong>：没有
@@ -550,6 +733,129 @@ C2。</p>
 原生码，绑定平台，构建期定死（快启动短命进程的选择）。 -
 <code>gcc/clang</code> → 原生码，绑定平台，编译期定死（C/C++
 的唯一路径）。</p>
+<h2 id="七jvm-常见参数速查">七、JVM 常见参数速查</h2>
+<p>上面几节分别解释了堆分代、元空间、类加载的原理，这里把对应的启动参数集中列一张速查表——<code>java</code>
+命令后面这些 <code>-X</code>/<code>-XX</code>
+前缀的参数，就是把前几节讲的”概念”变成”可调的旋钮”。</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>类别</th>
+<th>参数</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>堆内存</td>
+<td><code>-Xms&lt;size&gt;</code></td>
+<td>初始堆大小</td>
+</tr>
+<tr>
+<td>堆内存</td>
+<td><code>-Xmx&lt;size&gt;</code></td>
+<td>最大堆大小（生产建议与 <code>-Xms</code>
+设为相同值，避免运行时动态扩容触发额外停顿）</td>
+</tr>
+<tr>
+<td>堆内存</td>
+<td><code>-Xmn&lt;size&gt;</code></td>
+<td>新生代大小（直接指定，优先级高于 <code>-XX:NewRatio</code>）</td>
+</tr>
+<tr>
+<td>堆内存</td>
+<td><code>-XX:NewRatio=&lt;n&gt;</code></td>
+<td>老年代/新生代比例，默认 2（老年代占约 2/3）</td>
+</tr>
+<tr>
+<td>堆内存</td>
+<td><code>-XX:SurvivorRatio=&lt;n&gt;</code></td>
+<td>Eden/单个 Survivor 比例，默认 8</td>
+</tr>
+<tr>
+<td>栈</td>
+<td><code>-Xss&lt;size&gt;</code></td>
+<td>每线程 JVM 栈大小，调小可以在总内存有限时开更多线程，调大是应对
+<code>StackOverflowError</code>（深递归）的直接手段</td>
+</tr>
+<tr>
+<td>方法区</td>
+<td><code>-XX:MetaspaceSize=&lt;size&gt;</code></td>
+<td>元空间<strong>触发 Full GC
+的初始阈值</strong>（不是硬上限），用量超过它会先触发一次 GC
+尝试回收类元数据，之后 JVM 按情况动态调大阈值</td>
+</tr>
+<tr>
+<td>方法区</td>
+<td><code>-XX:MaxMetaspaceSize=&lt;size&gt;</code></td>
+<td>元空间硬上限，超过才真正
+OOM；不设置默认几乎不受限（仅受本机内存约束）</td>
+</tr>
+<tr>
+<td>方法区（已废弃）</td>
+<td><code>-XX:PermSize</code> / <code>-XX:MaxPermSize</code></td>
+<td>JDK7 及以前的永久代参数，JDK8
+起永久代被元空间取代，这两个参数不再生效</td>
+</tr>
+<tr>
+<td>GC 选择</td>
+<td><code>-XX:+UseSerialGC</code> / <code>-XX:+UseParallelGC</code> /
+<code>-XX:+UseG1GC</code> / <code>-XX:+UseZGC</code></td>
+<td>选择收集器，见<a
+href="09-错误处理与资源管理.html">「错误处理与资源管理·收集器演进」</a></td>
+</tr>
+<tr>
+<td>GC 调优</td>
+<td><code>-XX:MaxGCPauseMillis=&lt;ms&gt;</code></td>
+<td>G1/ZGC 的目标停顿时间（软目标，不是硬保证）</td>
+</tr>
+<tr>
+<td>GC 调优</td>
+<td><code>-XX:ParallelGCThreads=&lt;n&gt;</code></td>
+<td>并行 GC 阶段的线程数，默认等于 CPU 核心数</td>
+</tr>
+<tr>
+<td>GC 调优</td>
+<td><code>-XX:MaxTenuringThreshold=&lt;n&gt;</code></td>
+<td>对象在 Survivor 里熬过几次 Minor GC 才晋升老年代，默认 15</td>
+</tr>
+<tr>
+<td>诊断</td>
+<td><code>-Xlog:gc*</code></td>
+<td>打印 GC 日志（JDK9+ 统一日志框架），调优第一步永远是先看日志</td>
+</tr>
+<tr>
+<td>诊断</td>
+<td><code>-verbose:class</code></td>
+<td>打印类加载信息，排查”这个类到底是谁加载的”“为什么被加载了两次”这类双亲委派相关问题</td>
+</tr>
+<tr>
+<td>诊断</td>
+<td><code>-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=&lt;path&gt;</code></td>
+<td>OOM 时自动导出堆快照，配合 MAT/VisualVM 找内存泄漏</td>
+</tr>
+</tbody>
+</table>
+<p><strong>为什么 <code>-Xms</code> 和 <code>-Xmx</code>
+生产环境要设成相等</strong>：堆从初始大小扩容到最大大小的过程，本身需要向操作系统申请新内存、重新计算分代边界，这个动作会触发一次额外停顿；如果堆大小在运行中反复震荡（先长大，GC
+后又收缩），等于在正常的 GC
+停顿之外又叠加了一层扩缩容开销。固定为同一个值，相当于启动时就把”以后要用的内存”一次性占住，用空间换稳定性——这也是为什么高并发、对延迟敏感的场景（比如秒杀），调优的第一步永远是先把
+<code>-Xms</code>/<code>-Xmx</code>
+锁死为同一个值，再谈其它参数；同理，<code>-Xmn</code> 通常会调大到
+<code>-Xms</code> 的 1/2 到
+2/3，因为这类场景会产生大量生命周期极短的临时对象，让它们尽量在新生代里用复制算法回收掉，避免过早晋升到老年代拖慢
+Major GC。</p>
+<p><strong><code>-XX:MetaspaceSize</code> 和 <code>-Xmx</code>
+的区别值得单独强调</strong>：它不是”最大值”而是”第一次触发 Full GC
+去回收类元数据的阈值”——元空间用量到达这个值，JVM 会先尝试一次 Full GC
+卸载不再使用的类，回收不够再动态调大这个阈值，如此反复；真正的硬上限是
+<code>-XX:MaxMetaspaceSize</code>。这也是”类加载了很多但没配
+<code>MaxMetaspaceSize</code>“的服务在长期运行后本地内存被元空间无限吃掉的常见原因（典型场景：大量动态生成类的框架，字节码增强库不断产生新类而对应的类加载器又没有被回收，即前面提到的”类加载器泄漏”）。</p>
 <h2 id="小结">小结</h2>
 <ul>
 <li><strong>流程</strong>：<code>javac 文件名.java</code>
@@ -559,11 +865,21 @@ C2。</p>
 产出<strong>平台无关字节码</strong>而非机器码，代价是运行时需要 JVM
 这台栈式虚拟机再翻译一遍，换来的是同一份 <code>.class</code>
 到处运行；这是可移植性与 AOT 峰值性能之间的取舍。</li>
-<li>类加载是<strong>运行时、惰性、分层（双亲委派）</strong>的——懒加载把开销分摊到真正用到某个类的那一刻，避免为用不到的类付出启动成本；双亲委派保证核心类不会被伪造版本顶替。</li>
+<li>类加载是<strong>运行时、惰性、分层（双亲委派）</strong>的——懒加载把开销分摊到真正用到某个类的那一刻，避免为用不到的类付出启动成本；双亲委派保证核心类不会被伪造版本顶替，且类的唯一性由”全限定名
++ 类加载器”共同决定。</li>
+<li>双亲委派可以被打破：自定义类加载器重写 <code>loadClass()</code>、SPI
+机制借助线程上下文类加载器反向查找、Tomcat 给每个 Web 应用配独立
+<code>WebappClassLoader</code>
+并反转查找顺序，三种方式服务于三种不同的实际诉求。</li>
 <li>HotSpot <strong>先解释、探测热点后 JIT</strong>（C1 快编译顶上、C2
 深度优化最热代码），分层编译正是”启动延迟”与”峰值吞吐”这对矛盾的调和；逃逸分析能对不逃逸对象做<strong>标量替换</strong>（拆成标量放栈帧/寄存器，而非整体栈上分配）。</li>
 <li>运行时内存分<strong>共享的堆/元空间</strong>与<strong>每线程的 JVM
-栈/PC/本地栈</strong>；堆由 GC 自动回收。</li>
+栈/PC/本地栈</strong>；堆由 GC 自动回收；堆内部还有 TLAB、Survivor 8:1:1
+比例、大对象直接进老年代、字符串常量池等更细的分区，都是弱分代假设的具体落地。</li>
+<li>JVM 参数把”概念”变成”旋钮”：<code>-Xms</code>/<code>-Xmx</code>
+生产建议锁死为同一个值避免动态扩容停顿，<code>-XX:MetaspaceSize</code>
+是触发 Full GC
+的阈值而非硬上限，二者的区别是排查内存问题时最容易搞混的一点。</li>
 <li>需要 C 式的快启动原生二进制时，用 GraalVM <code>native-image</code>
 做 AOT，代价是牺牲运行时动态性与峰值优化。</li>
 </ul>

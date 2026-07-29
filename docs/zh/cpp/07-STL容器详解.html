@@ -102,7 +102,9 @@
 <a href="../oodlld/index.html">OOD/LLD</a>
 <a href="../container/index.html">容器对照</a>
 <a href="../cpp/index.html" style="color:var(--accent-dark);font-weight:700">C++ 教程</a>
-<a href="../baguwen/index.html">面试八股</a></div></div>
+<a href="../baguwen/index.html">面试八股</a>
+<a href="../csbase/index.html">计算机基础</a>
+<a href="../javaeco/index.html">Java 生态</a></div></div>
 <div class="wrap">
 <nav id="TOC" role="doc-toc">
 <ul>
@@ -319,18 +321,65 @@ class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb7-1"><a href="#c
 —— erase 之后 it 已经失效，再 ++it 是未定义行为。正确写法必须用 erase
 的返回值。</p>
 </blockquote>
+<h3 id="底层实现三个指针扩容因子与移动语义的取舍">2.5
+底层实现：三个指针、扩容因子与移动语义的取舍</h3>
+<p><code>vector</code> 内部本质上只是三个指针（以 libstdc++
+为例，<code>_M_start</code>/<code>_M_finish</code>/<code>_M_end_of_storage</code>，不同实现叫法不同但结构通用）：</p>
+<pre><code>[a][b][c][d][_][_][_]
+ ^                  ^
+start        end_of_storage
+        ^
+     finish（size() = finish - start，capacity() = end_of_storage - start）</code></pre>
+<p><code>push_back</code> 遇到 <code>finish == end_of_storage</code>
+时触发扩容，过程固定四步：分配一块更大的新内存 →
+把旧元素逐个搬到新内存（拷贝或移动，见下）→
+析构旧内存里的对象、释放旧内存 → 三个指针重新指向新内存。</p>
+<p>增长因子标准不做规定，由实现自行选择：libstdc++（GCC）和
+libc++（Clang）用 2 倍，MSVC 用 1.5
+倍。选指数增长而不是固定步长（每次只多分配 k
+个）是均摊复杂度的直接要求——固定步长下 n 次 push_back 的总拷贝量是
+O(n²/k)，均摊到每次是 O(n)；指数增长让总拷贝量收敛成几何级数
+O(n)，均摊到每次是 O(1)。1.5 倍与 2
+倍是空间和时间的具体权衡：因子越小扩容越频繁但峰值浪费的内存越少，这也是为什么”倍数具体是多少”从来不是语言标准强制的内容——它是实现可以自由调节的性能旋钮，而不是复杂度承诺的一部分。</p>
+<p>扩容时”拷贝还是移动”背后有一层容易被忽略的正确性考量。如果元素类型的移动构造函数标了
+<code>noexcept</code>，vector
+扩容会优先用移动（把旧元素”倒”进新内存，不做深拷贝）；但如果移动构造函数<strong>可能抛异常</strong>且该类型同时提供了拷贝构造函数，vector
+会退回去做拷贝。原因是异常安全：扩容做到一半抛出异常，拷贝路径下原始数据完好无损、可以安全回滚；移动却是破坏性操作——元素一旦被移动走，原对象就处于被掏空的状态，无法恢复。为了保证”扩容失败不破坏原数据”这个强异常安全保证，标准要求这里用
+<code>std::move_if_noexcept</code>，只有移动构造函数确定不抛异常（或者这个类型压根没有拷贝构造函数可退）时才允许移动：</p>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> RiskyMove <span class="op">{</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>    RiskyMove<span class="op">(</span><span class="at">const</span> RiskyMove<span class="op">&amp;)</span> <span class="op">{</span> <span class="co">/* 拷贝构造 */</span> <span class="op">}</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>    RiskyMove<span class="op">(</span>RiskyMove<span class="op">&amp;&amp;)</span> <span class="op">{</span> <span class="co">/* 没标 noexcept，可能抛异常 */</span> <span class="op">}</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a><span class="kw">struct</span> SafeMove <span class="op">{</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>    SafeMove<span class="op">(</span><span class="at">const</span> SafeMove<span class="op">&amp;)</span> <span class="op">{</span> <span class="co">/* 拷贝构造 */</span> <span class="op">}</span></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>    SafeMove<span class="op">(</span>SafeMove<span class="op">&amp;&amp;)</span> <span class="kw">noexcept</span> <span class="op">{</span> <span class="co">/* 明确承诺不抛异常 */</span> <span class="op">}</span></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>vector<span class="op">&lt;</span>RiskyMove<span class="op">&gt;</span> v1<span class="op">;</span>  <span class="co">// 扩容时静默退化成拷贝，即使写了移动构造函数</span></span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>vector<span class="op">&lt;</span>SafeMove<span class="op">&gt;</span>  v2<span class="op">;</span>  <span class="co">// 扩容时才会真正用移动</span></span></code></pre></div>
+<p>这就是为什么自定义类型的移动构造函数应当尽量标
+<code>noexcept</code>——不标的话，vector
+扩容时会静默地退化成更慢的拷贝路径，编译器不会给任何警告。</p>
+<p>内存收缩上，C++11 提供的 <code>shrink_to_fit()</code>
+只是一个<strong>非强制请求</strong>，标准允许实现忽略它；更保险的写法是经典的
+swap 技巧：</p>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> v<span class="op">;</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="co">// ... v 曾经很大，现在只剩少量元素，capacity() 远大于 size() ...</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a><span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;(</span>v<span class="op">).</span>swap<span class="op">(</span>v<span class="op">);</span>  <span class="co">// 拷贝构造一个刚好等于当前 size 的临时 vector，交换后临时对象析构释放旧内存</span></span></code></pre></div>
 <hr />
 <h2 id="三deque双端队列">三、<code>deque</code>：双端队列</h2>
-<div class="sourceCode" id="cb8"><pre
-class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;deque&gt;</span></span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>deque<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> dq <span class="op">=</span> <span class="op">{</span><span class="dv">2</span><span class="op">,</span><span class="dv">3</span><span class="op">,</span><span class="dv">4</span><span class="op">};</span></span>
-<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>dq<span class="op">.</span>push_front<span class="op">(</span><span class="dv">1</span><span class="op">);</span>   <span class="co">// 头部插入 O(1)（vector 做不到）</span></span>
-<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>dq<span class="op">.</span>push_back<span class="op">(</span><span class="dv">5</span><span class="op">);</span>    <span class="co">// 尾部插入 O(1)</span></span>
-<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>dq<span class="op">[</span><span class="dv">2</span><span class="op">];</span>               <span class="co">// 支持随机访问 O(1)，但比 vector 稍慢（多一次间接寻址）</span></span>
-<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>dq<span class="op">.</span>pop_front<span class="op">();</span>      <span class="co">// 头部删除 O(1)</span></span>
-<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>dq<span class="op">.</span>pop_back<span class="op">();</span>       <span class="co">// 尾部删除 O(1)</span></span>
-<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a>dq<span class="op">.</span>empty<span class="op">();</span> dq<span class="op">.</span>size<span class="op">();</span> dq<span class="op">.</span>clear<span class="op">();</span>  <span class="co">// 和 vector 用法一致</span></span></code></pre></div>
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;deque&gt;</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>deque<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> dq <span class="op">=</span> <span class="op">{</span><span class="dv">2</span><span class="op">,</span><span class="dv">3</span><span class="op">,</span><span class="dv">4</span><span class="op">};</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>dq<span class="op">.</span>push_front<span class="op">(</span><span class="dv">1</span><span class="op">);</span>   <span class="co">// 头部插入 O(1)（vector 做不到）</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>dq<span class="op">.</span>push_back<span class="op">(</span><span class="dv">5</span><span class="op">);</span>    <span class="co">// 尾部插入 O(1)</span></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>dq<span class="op">[</span><span class="dv">2</span><span class="op">];</span>               <span class="co">// 支持随机访问 O(1)，但比 vector 稍慢（多一次间接寻址）</span></span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>dq<span class="op">.</span>pop_front<span class="op">();</span>      <span class="co">// 头部删除 O(1)</span></span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>dq<span class="op">.</span>pop_back<span class="op">();</span>       <span class="co">// 尾部删除 O(1)</span></span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a>dq<span class="op">.</span>empty<span class="op">();</span> dq<span class="op">.</span>size<span class="op">();</span> dq<span class="op">.</span>clear<span class="op">();</span>  <span class="co">// 和 vector 用法一致</span></span></code></pre></div>
 <blockquote>
 <p><strong>查找</strong>：<code>deque</code> 同样没有成员
 <code>.find()</code>，跟 <code>vector</code> 一样要用
@@ -342,19 +391,45 @@ class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb8-1"><a href="#c
 但也因此不是完全连续内存，随机访问比 vector 多一次间接寻址（先定位buffer，再定位buffer内偏移）。
 
 std::stack 和 std::queue 默认就是基于 deque 实现的容器适配器。</code></pre>
+<h3 id="分段连续的实现细节">3.1 分段连续的实现细节</h3>
+<p><code>deque</code> 的中控数组（部分实现称为
+<code>map</code>，注意和关联容器 <code>std::map</code>
+是两回事）本身是一段连续内存，里面存的是若干个指向”定长缓冲区块”的指针，每个块内部才是真正连续存放元素的地方：</p>
+<pre><code>中控数组(连续，存指向各缓冲区块的指针):
+        ┌────┬────┬────┬────┬────┐
+        │ p0 │ p1 │ p2 │ p3 │ p4 │
+        └─┬──┴─┬──┴─┬──┴────┴────┘
+          v     v     v
+        ┌────┐┌────┐┌────┐
+        │abcd││efgh││ijkl│   ← 每个块内部连续
+        └────┘└────┘└────┘</code></pre>
+<p>libstdc++
+里定长块的大小不是固定字节数，而是按元素大小反推：<code>sizeof(T) &lt; 512</code>
+时一块能装 <code>512 / sizeof(T)</code>
+个元素，<code>sizeof(T) &gt;= 512</code> 时一块只装 1
+个元素（退化情况）。块大小与”两端 O(1)
+插入”的关系是：块写满时不需要移动已有元素，只需要在中控数组末尾/开头追加一个新块的指针（中控数组本身满了才需要扩容，但那时只搬指针不搬元素，代价很小）。随机访问
+<code>dq[i]</code>
+需要两步定位：<code>块索引 = (i + 起始偏移) / 块大小</code>，<code>块内偏移 = (i + 起始偏移) % 块大小</code>——这正是
+deque 随机访问比 vector 多一次间接寻址的原因。</p>
+<p>deque
+的迭代器因此不是普通指针，它需要同时持有”当前元素指针、当前块的起止位置、指向中控数组对应槽位的指针”这几项信息，才能在走到块边界时知道该跳到哪个新块。这也是为什么
+deque 迭代器比 vector
+迭代器”重”得多——解引用和自增的常数开销更大，即使复杂度标注都是
+O(1)。</p>
 <hr />
 <h2 id="四list-forward_list链表">四、<code>list</code> /
 <code>forward_list</code>：链表</h2>
-<div class="sourceCode" id="cb10"><pre
-class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;list&gt;</span></span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>list<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> lst <span class="op">=</span> <span class="op">{</span><span class="dv">1</span><span class="op">,</span><span class="dv">2</span><span class="op">,</span><span class="dv">3</span><span class="op">};</span></span>
-<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>lst<span class="op">.</span>push_front<span class="op">(</span><span class="dv">0</span><span class="op">);</span></span>
-<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>lst<span class="op">.</span>push_back<span class="op">(</span><span class="dv">4</span><span class="op">);</span></span>
-<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a><span class="kw">auto</span> it <span class="op">=</span> lst<span class="op">.</span>begin<span class="op">();</span></span>
-<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>advance<span class="op">(</span>it<span class="op">,</span> <span class="dv">2</span><span class="op">);</span></span>
-<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>lst<span class="op">.</span>insert<span class="op">(</span>it<span class="op">,</span> <span class="dv">99</span><span class="op">);</span>  <span class="co">// 已知迭代器位置时，插入/删除是 O(1)（只改指针，不搬移元素）</span></span>
-<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>lst<span class="op">.</span>pop_front<span class="op">();</span> lst<span class="op">.</span>pop_back<span class="op">();</span></span>
-<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>lst<span class="op">.</span>empty<span class="op">();</span> lst<span class="op">.</span>size<span class="op">();</span> lst<span class="op">.</span>clear<span class="op">();</span></span></code></pre></div>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;list&gt;</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>list<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> lst <span class="op">=</span> <span class="op">{</span><span class="dv">1</span><span class="op">,</span><span class="dv">2</span><span class="op">,</span><span class="dv">3</span><span class="op">};</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>lst<span class="op">.</span>push_front<span class="op">(</span><span class="dv">0</span><span class="op">);</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>lst<span class="op">.</span>push_back<span class="op">(</span><span class="dv">4</span><span class="op">);</span></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a><span class="kw">auto</span> it <span class="op">=</span> lst<span class="op">.</span>begin<span class="op">();</span></span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>advance<span class="op">(</span>it<span class="op">,</span> <span class="dv">2</span><span class="op">);</span></span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>lst<span class="op">.</span>insert<span class="op">(</span>it<span class="op">,</span> <span class="dv">99</span><span class="op">);</span>  <span class="co">// 已知迭代器位置时，插入/删除是 O(1)（只改指针，不搬移元素）</span></span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a>lst<span class="op">.</span>pop_front<span class="op">();</span> lst<span class="op">.</span>pop_back<span class="op">();</span></span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a>lst<span class="op">.</span>empty<span class="op">();</span> lst<span class="op">.</span>size<span class="op">();</span> lst<span class="op">.</span>clear<span class="op">();</span></span></code></pre></div>
 <h3 id="list-独有的成员函数不能用通用算法替代">4.1 list
 独有的成员函数（不能用通用算法替代）</h3>
 <blockquote>
@@ -363,23 +438,23 @@ class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb10-1"><a href="#
 随机访问迭代器的通用算法<strong>用不了</strong>——<code>list</code>
 因此自带了一套同名但更高效的成员函数版本：</p>
 </blockquote>
-<div class="sourceCode" id="cb11"><pre
-class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>list<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> lst <span class="op">=</span> <span class="op">{</span><span class="dv">5</span><span class="op">,</span><span class="dv">3</span><span class="op">,</span><span class="dv">1</span><span class="op">,</span><span class="dv">4</span><span class="op">,</span><span class="dv">1</span><span class="op">,</span><span class="dv">5</span><span class="op">,</span><span class="dv">9</span><span class="op">,</span><span class="dv">2</span><span class="op">,</span><span class="dv">6</span><span class="op">};</span></span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>lst<span class="op">.</span>sort<span class="op">();</span>            <span class="co">// list 自己的排序（基于链表节点重排指针，不是随机访问版的快排）</span></span>
-<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="co">// {1,1,2,3,4,5,5,6,9}</span></span>
-<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>lst<span class="op">.</span>unique<span class="op">();</span>           <span class="co">// 去除相邻重复，直接修改容器，不需要像 vector 那样配合 erase</span></span>
-<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a><span class="co">// {1,2,3,4,5,6,9}</span></span>
-<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>lst<span class="op">.</span>remove<span class="op">(</span><span class="dv">9</span><span class="op">);</span>          <span class="co">// 删除所有等于 9 的元素（比 remove_if + erase 更直接）</span></span>
-<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a><span class="co">// {1,2,3,4,5,6}</span></span>
-<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a>lst<span class="op">.</span>remove_if<span class="op">([](</span><span class="dt">int</span> x<span class="op">){</span> <span class="cf">return</span> x <span class="op">%</span> <span class="dv">2</span> <span class="op">==</span> <span class="dv">0</span><span class="op">;</span> <span class="op">});</span> <span class="co">// 条件删除</span></span>
-<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a><span class="co">// {1,3,5}</span></span>
-<span id="cb11-13"><a href="#cb11-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-14"><a href="#cb11-14" aria-hidden="true" tabindex="-1"></a>list<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> a <span class="op">=</span> <span class="op">{</span><span class="dv">100</span><span class="op">,</span> <span class="dv">200</span><span class="op">},</span> b <span class="op">=</span> <span class="op">{</span><span class="dv">1</span><span class="op">,</span><span class="dv">2</span><span class="op">,</span><span class="dv">3</span><span class="op">};</span></span>
-<span id="cb11-15"><a href="#cb11-15" aria-hidden="true" tabindex="-1"></a>b<span class="op">.</span>splice<span class="op">(</span>b<span class="op">.</span>begin<span class="op">(),</span> a<span class="op">);</span>  <span class="co">// O(1)：把 a 的所有节点整体接到 b 开头（只改指针，不拷贝元素）</span></span>
-<span id="cb11-16"><a href="#cb11-16" aria-hidden="true" tabindex="-1"></a><span class="co">// b = {100,200,1,2,3}，a 变空</span></span></code></pre></div>
+<div class="sourceCode" id="cb15"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>list<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> lst <span class="op">=</span> <span class="op">{</span><span class="dv">5</span><span class="op">,</span><span class="dv">3</span><span class="op">,</span><span class="dv">1</span><span class="op">,</span><span class="dv">4</span><span class="op">,</span><span class="dv">1</span><span class="op">,</span><span class="dv">5</span><span class="op">,</span><span class="dv">9</span><span class="op">,</span><span class="dv">2</span><span class="op">,</span><span class="dv">6</span><span class="op">};</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>lst<span class="op">.</span>sort<span class="op">();</span>            <span class="co">// list 自己的排序（基于链表节点重排指针，不是随机访问版的快排）</span></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a><span class="co">// {1,1,2,3,4,5,5,6,9}</span></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>lst<span class="op">.</span>unique<span class="op">();</span>           <span class="co">// 去除相邻重复，直接修改容器，不需要像 vector 那样配合 erase</span></span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a><span class="co">// {1,2,3,4,5,6,9}</span></span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>lst<span class="op">.</span>remove<span class="op">(</span><span class="dv">9</span><span class="op">);</span>          <span class="co">// 删除所有等于 9 的元素（比 remove_if + erase 更直接）</span></span>
+<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a><span class="co">// {1,2,3,4,5,6}</span></span>
+<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a>lst<span class="op">.</span>remove_if<span class="op">([](</span><span class="dt">int</span> x<span class="op">){</span> <span class="cf">return</span> x <span class="op">%</span> <span class="dv">2</span> <span class="op">==</span> <span class="dv">0</span><span class="op">;</span> <span class="op">});</span> <span class="co">// 条件删除</span></span>
+<span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a><span class="co">// {1,3,5}</span></span>
+<span id="cb15-13"><a href="#cb15-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-14"><a href="#cb15-14" aria-hidden="true" tabindex="-1"></a>list<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> a <span class="op">=</span> <span class="op">{</span><span class="dv">100</span><span class="op">,</span> <span class="dv">200</span><span class="op">},</span> b <span class="op">=</span> <span class="op">{</span><span class="dv">1</span><span class="op">,</span><span class="dv">2</span><span class="op">,</span><span class="dv">3</span><span class="op">};</span></span>
+<span id="cb15-15"><a href="#cb15-15" aria-hidden="true" tabindex="-1"></a>b<span class="op">.</span>splice<span class="op">(</span>b<span class="op">.</span>begin<span class="op">(),</span> a<span class="op">);</span>  <span class="co">// O(1)：把 a 的所有节点整体接到 b 开头（只改指针，不拷贝元素）</span></span>
+<span id="cb15-16"><a href="#cb15-16" aria-hidden="true" tabindex="-1"></a><span class="co">// b = {100,200,1,2,3}，a 变空</span></span></code></pre></div>
 <pre><code>forward_list：单向链表，比 list 省一个 prev 指针的内存，只能单向遍历，C++11 引入，
               专门为了&quot;极致省内存&quot;的场景设计（比如实现哈希表的桶链表），
               同样有自己的 sort()/unique()/remove()/splice_after() 等成员函数。
@@ -387,32 +462,47 @@ class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb11-1"><a href="#
 vector vs list 怎么选：
   绝大多数场景选 vector（缓存局部性好，连续内存对现代 CPU 更友好）；
   只有&quot;频繁在中间/头部插入删除，且不需要随机访问&quot;时才考虑 list。</code></pre>
+<h3 id="双向链表的哨兵节点实现">4.2 双向链表的哨兵节点实现</h3>
+<p>libstdc++ 的 <code>list</code>
+是<strong>带哨兵节点的循环双向链表</strong>：多分配一个不存有效数据的哨兵节点，<code>end()</code>
+返回的迭代器指向它，链表首尾通过它连接成环：</p>
+<pre><code>[sentinel] &lt;-&gt; [a] &lt;-&gt; [b] &lt;-&gt; [c] &lt;-&gt; 回到 sentinel
+      ^
+      └── begin() 指向 a，end() 指向 sentinel</code></pre>
+<p>哨兵节点存在的理由是消除边界分支：如果没有它，<code>begin()</code>/<code>end()</code>、头插/尾插都需要对”链表是否为空”单独判断；有了哨兵，所有插入统一处理成”在某节点前插入一个新节点”，空链表只是”哨兵指向自己”这一种特殊情形，不需要任何
+if 分支。</p>
+<p><code>forward_list</code>
+省掉了每个节点的前驱指针，内存更省，但只能单向遍历——标准干脆没有为它定义
+<code>size()</code> 成员，因为要维护一个 O(1) 的 <code>size()</code>
+就必须在每次插入删除时额外维护一个计数器，这与
+<code>forward_list</code>“极致省内存、不为用不到的功能付费”的设计目标冲突；需要长度就只能自己
+<code>std::distance(begin(), end())</code>，代价是 O(n)。</p>
 <hr />
 <h2
 id="五容器适配器stack-queue-priority_queue">五、容器适配器：<code>stack</code>
 / <code>queue</code> / <code>priority_queue</code></h2>
-<div class="sourceCode" id="cb13"><pre
-class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;stack&gt;</span></span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;queue&gt;</span></span>
-<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>stack<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> st<span class="op">;</span></span>
-<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>st<span class="op">.</span>push<span class="op">(</span><span class="dv">1</span><span class="op">);</span> st<span class="op">.</span>push<span class="op">(</span><span class="dv">2</span><span class="op">);</span> st<span class="op">.</span>push<span class="op">(</span><span class="dv">3</span><span class="op">);</span></span>
-<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>st<span class="op">.</span>top<span class="op">();</span>  <span class="co">// 3</span></span>
-<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>st<span class="op">.</span>pop<span class="op">();</span>  <span class="co">// 弹出，无返回值（和 vector 的 pop_back 语义一致：分离了&quot;看&quot;和&quot;弹&quot;）</span></span>
-<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>st<span class="op">.</span>empty<span class="op">();</span> st<span class="op">.</span>size<span class="op">();</span></span>
-<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a>queue<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> q<span class="op">;</span></span>
-<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a>q<span class="op">.</span>push<span class="op">(</span><span class="dv">1</span><span class="op">);</span> q<span class="op">.</span>push<span class="op">(</span><span class="dv">2</span><span class="op">);</span> q<span class="op">.</span>push<span class="op">(</span><span class="dv">3</span><span class="op">);</span></span>
-<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a>q<span class="op">.</span>front<span class="op">();</span> q<span class="op">.</span>back<span class="op">();</span>  <span class="co">// 1, 3</span></span>
-<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a>q<span class="op">.</span>pop<span class="op">();</span>  <span class="co">// 弹出队首</span></span>
-<span id="cb13-14"><a href="#cb13-14" aria-hidden="true" tabindex="-1"></a>q<span class="op">.</span>empty<span class="op">();</span> q<span class="op">.</span>size<span class="op">();</span></span>
-<span id="cb13-15"><a href="#cb13-15" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-16"><a href="#cb13-16" aria-hidden="true" tabindex="-1"></a>priority_queue<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> pq<span class="op">;</span>             <span class="co">// 默认大顶堆</span></span>
-<span id="cb13-17"><a href="#cb13-17" aria-hidden="true" tabindex="-1"></a>pq<span class="op">.</span>push<span class="op">(</span><span class="dv">3</span><span class="op">);</span> pq<span class="op">.</span>push<span class="op">(</span><span class="dv">1</span><span class="op">);</span> pq<span class="op">.</span>push<span class="op">(</span><span class="dv">4</span><span class="op">);</span></span>
-<span id="cb13-18"><a href="#cb13-18" aria-hidden="true" tabindex="-1"></a>pq<span class="op">.</span>top<span class="op">();</span>  <span class="co">// 4（当前最大值）</span></span>
-<span id="cb13-19"><a href="#cb13-19" aria-hidden="true" tabindex="-1"></a>pq<span class="op">.</span>empty<span class="op">();</span> pq<span class="op">.</span>size<span class="op">();</span></span>
-<span id="cb13-20"><a href="#cb13-20" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-21"><a href="#cb13-21" aria-hidden="true" tabindex="-1"></a>priority_queue<span class="op">&lt;</span><span class="dt">int</span><span class="op">,</span> vector<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;,</span> greater<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;&gt;</span> minpq<span class="op">;</span>  <span class="co">// 小顶堆写法</span></span></code></pre></div>
+<div class="sourceCode" id="cb18"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;stack&gt;</span></span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;queue&gt;</span></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>stack<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> st<span class="op">;</span></span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>st<span class="op">.</span>push<span class="op">(</span><span class="dv">1</span><span class="op">);</span> st<span class="op">.</span>push<span class="op">(</span><span class="dv">2</span><span class="op">);</span> st<span class="op">.</span>push<span class="op">(</span><span class="dv">3</span><span class="op">);</span></span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>st<span class="op">.</span>top<span class="op">();</span>  <span class="co">// 3</span></span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>st<span class="op">.</span>pop<span class="op">();</span>  <span class="co">// 弹出，无返回值（和 vector 的 pop_back 语义一致：分离了&quot;看&quot;和&quot;弹&quot;）</span></span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a>st<span class="op">.</span>empty<span class="op">();</span> st<span class="op">.</span>size<span class="op">();</span></span>
+<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a>queue<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> q<span class="op">;</span></span>
+<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a>q<span class="op">.</span>push<span class="op">(</span><span class="dv">1</span><span class="op">);</span> q<span class="op">.</span>push<span class="op">(</span><span class="dv">2</span><span class="op">);</span> q<span class="op">.</span>push<span class="op">(</span><span class="dv">3</span><span class="op">);</span></span>
+<span id="cb18-12"><a href="#cb18-12" aria-hidden="true" tabindex="-1"></a>q<span class="op">.</span>front<span class="op">();</span> q<span class="op">.</span>back<span class="op">();</span>  <span class="co">// 1, 3</span></span>
+<span id="cb18-13"><a href="#cb18-13" aria-hidden="true" tabindex="-1"></a>q<span class="op">.</span>pop<span class="op">();</span>  <span class="co">// 弹出队首</span></span>
+<span id="cb18-14"><a href="#cb18-14" aria-hidden="true" tabindex="-1"></a>q<span class="op">.</span>empty<span class="op">();</span> q<span class="op">.</span>size<span class="op">();</span></span>
+<span id="cb18-15"><a href="#cb18-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-16"><a href="#cb18-16" aria-hidden="true" tabindex="-1"></a>priority_queue<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> pq<span class="op">;</span>             <span class="co">// 默认大顶堆</span></span>
+<span id="cb18-17"><a href="#cb18-17" aria-hidden="true" tabindex="-1"></a>pq<span class="op">.</span>push<span class="op">(</span><span class="dv">3</span><span class="op">);</span> pq<span class="op">.</span>push<span class="op">(</span><span class="dv">1</span><span class="op">);</span> pq<span class="op">.</span>push<span class="op">(</span><span class="dv">4</span><span class="op">);</span></span>
+<span id="cb18-18"><a href="#cb18-18" aria-hidden="true" tabindex="-1"></a>pq<span class="op">.</span>top<span class="op">();</span>  <span class="co">// 4（当前最大值）</span></span>
+<span id="cb18-19"><a href="#cb18-19" aria-hidden="true" tabindex="-1"></a>pq<span class="op">.</span>empty<span class="op">();</span> pq<span class="op">.</span>size<span class="op">();</span></span>
+<span id="cb18-20"><a href="#cb18-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-21"><a href="#cb18-21" aria-hidden="true" tabindex="-1"></a>priority_queue<span class="op">&lt;</span><span class="dt">int</span><span class="op">,</span> vector<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;,</span> greater<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;&gt;</span> minpq<span class="op">;</span>  <span class="co">// 小顶堆写法</span></span></code></pre></div>
 <blockquote>
 <p><code>stack</code>/<code>queue</code>/<code>priority_queue</code>
 不是独立的数据结构，是”容器适配器”—— 内部包一个真正的容器（默认
@@ -424,13 +514,13 @@ class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb13-1"><a href="#
 </blockquote>
 <hr />
 <h2 id="六array定长数组">六、<code>array</code>：定长数组</h2>
-<div class="sourceCode" id="cb14"><pre
-class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;array&gt;</span></span>
-<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>array<span class="op">&lt;</span><span class="dt">int</span><span class="op">,</span> <span class="dv">5</span><span class="op">&gt;</span> arr <span class="op">=</span> <span class="op">{</span><span class="dv">1</span><span class="op">,</span><span class="dv">2</span><span class="op">,</span><span class="dv">3</span><span class="op">,</span><span class="dv">4</span><span class="op">,</span><span class="dv">5</span><span class="op">};</span>  <span class="co">// 编译期定长数组，栈上分配，比裸数组多了 size()/迭代器等接口</span></span>
-<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>arr<span class="op">.</span>size<span class="op">();</span>          <span class="co">// 5（固定不变）</span></span>
-<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>arr<span class="op">.</span>at<span class="op">(</span><span class="dv">2</span><span class="op">);</span>           <span class="co">// 带边界检查的访问</span></span>
-<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>arr<span class="op">.</span>data<span class="op">();</span>          <span class="co">// 拿到底层裸指针</span></span>
-<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>arr<span class="op">.</span>fill<span class="op">(</span><span class="dv">7</span><span class="op">);</span>         <span class="co">// 把所有元素都设成同一个值：{7,7,7,7,7}</span></span></code></pre></div>
+<div class="sourceCode" id="cb19"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;array&gt;</span></span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>array<span class="op">&lt;</span><span class="dt">int</span><span class="op">,</span> <span class="dv">5</span><span class="op">&gt;</span> arr <span class="op">=</span> <span class="op">{</span><span class="dv">1</span><span class="op">,</span><span class="dv">2</span><span class="op">,</span><span class="dv">3</span><span class="op">,</span><span class="dv">4</span><span class="op">,</span><span class="dv">5</span><span class="op">};</span>  <span class="co">// 编译期定长数组，栈上分配，比裸数组多了 size()/迭代器等接口</span></span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>arr<span class="op">.</span>size<span class="op">();</span>          <span class="co">// 5（固定不变）</span></span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a>arr<span class="op">.</span>at<span class="op">(</span><span class="dv">2</span><span class="op">);</span>           <span class="co">// 带边界检查的访问</span></span>
+<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a>arr<span class="op">.</span>data<span class="op">();</span>          <span class="co">// 拿到底层裸指针</span></span>
+<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a>arr<span class="op">.</span>fill<span class="op">(</span><span class="dv">7</span><span class="op">);</span>         <span class="co">// 把所有元素都设成同一个值：{7,7,7,7,7}</span></span></code></pre></div>
 <blockquote>
 <p><strong>查找</strong>：<code>array</code> 同样没有
 <code>.find()</code>，跟 <code>vector</code> 一样用
@@ -439,87 +529,103 @@ class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb14-1"><a href="#
 <hr />
 <h2 id="七map-set有序关联容器红黑树">七、<code>map</code> /
 <code>set</code>：有序关联容器（红黑树）</h2>
-<div class="sourceCode" id="cb15"><pre
-class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;map&gt;</span></span>
-<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>map<span class="op">&lt;</span>string<span class="op">,</span><span class="dt">int</span><span class="op">&gt;</span> m<span class="op">;</span></span>
-<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>m<span class="op">[</span><span class="st">&quot;a&quot;</span><span class="op">]</span> <span class="op">=</span> <span class="dv">1</span><span class="op">;</span>                    <span class="co">// [] 找不到 key 时会插入一个默认值（这是常见的坑！）</span></span>
-<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>m<span class="op">.</span>insert<span class="op">({</span><span class="st">&quot;b&quot;</span><span class="op">,</span> <span class="dv">2</span><span class="op">});</span></span>
-<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>m<span class="op">.</span>emplace<span class="op">(</span><span class="st">&quot;c&quot;</span><span class="op">,</span> <span class="dv">3</span><span class="op">);</span>             <span class="co">// 原地构造，避免临时 pair 对象</span></span>
-<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="kw">auto</span><span class="op">&amp;</span> <span class="op">[</span>k<span class="op">,</span> v<span class="op">]</span> <span class="op">:</span> m<span class="op">)</span> <span class="op">{</span> <span class="co">/* 按 key 字典序遍历 */</span> <span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb20"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;map&gt;</span></span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>map<span class="op">&lt;</span>string<span class="op">,</span><span class="dt">int</span><span class="op">&gt;</span> m<span class="op">;</span></span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>m<span class="op">[</span><span class="st">&quot;a&quot;</span><span class="op">]</span> <span class="op">=</span> <span class="dv">1</span><span class="op">;</span>                    <span class="co">// [] 找不到 key 时会插入一个默认值（这是常见的坑！）</span></span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>m<span class="op">.</span>insert<span class="op">({</span><span class="st">&quot;b&quot;</span><span class="op">,</span> <span class="dv">2</span><span class="op">});</span></span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>m<span class="op">.</span>emplace<span class="op">(</span><span class="st">&quot;c&quot;</span><span class="op">,</span> <span class="dv">3</span><span class="op">);</span>             <span class="co">// 原地构造，避免临时 pair 对象</span></span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="kw">auto</span><span class="op">&amp;</span> <span class="op">[</span>k<span class="op">,</span> v<span class="op">]</span> <span class="op">:</span> m<span class="op">)</span> <span class="op">{</span> <span class="co">/* 按 key 字典序遍历 */</span> <span class="op">}</span></span></code></pre></div>
 <h3 id="查找与存在性判断">7.1 查找与存在性判断</h3>
-<div class="sourceCode" id="cb16"><pre
-class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>map<span class="op">&lt;</span>string<span class="op">,</span><span class="dt">int</span><span class="op">&gt;</span> m <span class="op">=</span> <span class="op">{{</span><span class="st">&quot;a&quot;</span><span class="op">,</span><span class="dv">1</span><span class="op">},{</span><span class="st">&quot;b&quot;</span><span class="op">,</span><span class="dv">2</span><span class="op">},{</span><span class="st">&quot;c&quot;</span><span class="op">,</span><span class="dv">3</span><span class="op">}};</span></span>
-<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a><span class="co">// 方式一：contains()（C++20，最推荐，语义最直观）</span></span>
-<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="op">(</span>m<span class="op">.</span>contains<span class="op">(</span><span class="st">&quot;a&quot;</span><span class="op">))</span> <span class="op">{</span> <span class="co">/* ... */</span> <span class="op">}</span></span>
-<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a><span class="co">// 方式二：find()，找到时可以顺手拿到 value，找不到返回 end()</span></span>
-<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a><span class="kw">auto</span> it <span class="op">=</span> m<span class="op">.</span>find<span class="op">(</span><span class="st">&quot;b&quot;</span><span class="op">);</span></span>
-<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="op">(</span>it <span class="op">!=</span> m<span class="op">.</span>end<span class="op">())</span> cout <span class="op">&lt;&lt;</span> it<span class="op">-&gt;</span>second<span class="op">;</span></span>
-<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a><span class="co">// 方式三：count()，map/set 的 count 只会是 0 或 1（因为 key 唯一）</span></span>
-<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="op">(</span>m<span class="op">.</span>count<span class="op">(</span><span class="st">&quot;x&quot;</span><span class="op">)</span> <span class="op">==</span> <span class="dv">0</span><span class="op">)</span> <span class="op">{</span> <span class="co">/* 不存在 */</span> <span class="op">}</span></span>
-<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a><span class="co">// ⚠️ 不要用 m[&quot;key&quot;] 来判断是否存在！找不到时 [] 会自动插入一个默认值再返回引用，</span></span>
-<span id="cb16-14"><a href="#cb16-14" aria-hidden="true" tabindex="-1"></a><span class="co">//    副作用是让 size() 变大、还塞进了一条垃圾数据。</span></span></code></pre></div>
+<div class="sourceCode" id="cb21"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>map<span class="op">&lt;</span>string<span class="op">,</span><span class="dt">int</span><span class="op">&gt;</span> m <span class="op">=</span> <span class="op">{{</span><span class="st">&quot;a&quot;</span><span class="op">,</span><span class="dv">1</span><span class="op">},{</span><span class="st">&quot;b&quot;</span><span class="op">,</span><span class="dv">2</span><span class="op">},{</span><span class="st">&quot;c&quot;</span><span class="op">,</span><span class="dv">3</span><span class="op">}};</span></span>
+<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a><span class="co">// 方式一：contains()（C++20，最推荐，语义最直观）</span></span>
+<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="op">(</span>m<span class="op">.</span>contains<span class="op">(</span><span class="st">&quot;a&quot;</span><span class="op">))</span> <span class="op">{</span> <span class="co">/* ... */</span> <span class="op">}</span></span>
+<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a><span class="co">// 方式二：find()，找到时可以顺手拿到 value，找不到返回 end()</span></span>
+<span id="cb21-7"><a href="#cb21-7" aria-hidden="true" tabindex="-1"></a><span class="kw">auto</span> it <span class="op">=</span> m<span class="op">.</span>find<span class="op">(</span><span class="st">&quot;b&quot;</span><span class="op">);</span></span>
+<span id="cb21-8"><a href="#cb21-8" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="op">(</span>it <span class="op">!=</span> m<span class="op">.</span>end<span class="op">())</span> cout <span class="op">&lt;&lt;</span> it<span class="op">-&gt;</span>second<span class="op">;</span></span>
+<span id="cb21-9"><a href="#cb21-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-10"><a href="#cb21-10" aria-hidden="true" tabindex="-1"></a><span class="co">// 方式三：count()，map/set 的 count 只会是 0 或 1（因为 key 唯一）</span></span>
+<span id="cb21-11"><a href="#cb21-11" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="op">(</span>m<span class="op">.</span>count<span class="op">(</span><span class="st">&quot;x&quot;</span><span class="op">)</span> <span class="op">==</span> <span class="dv">0</span><span class="op">)</span> <span class="op">{</span> <span class="co">/* 不存在 */</span> <span class="op">}</span></span>
+<span id="cb21-12"><a href="#cb21-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-13"><a href="#cb21-13" aria-hidden="true" tabindex="-1"></a><span class="co">// ⚠️ 不要用 m[&quot;key&quot;] 来判断是否存在！找不到时 [] 会自动插入一个默认值再返回引用，</span></span>
+<span id="cb21-14"><a href="#cb21-14" aria-hidden="true" tabindex="-1"></a><span class="co">//    副作用是让 size() 变大、还塞进了一条垃圾数据。</span></span></code></pre></div>
 <h3 id="范围查询lower_bound-upper_bound-equal_range">7.2
 范围查询：<code>lower_bound</code> / <code>upper_bound</code> /
 <code>equal_range</code></h3>
-<div class="sourceCode" id="cb17"><pre
-class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>map<span class="op">&lt;</span><span class="dt">int</span><span class="op">,</span>string<span class="op">&gt;</span> m2 <span class="op">=</span> <span class="op">{{</span><span class="dv">1</span><span class="op">,</span><span class="st">&quot;a&quot;</span><span class="op">},{</span><span class="dv">3</span><span class="op">,</span><span class="st">&quot;b&quot;</span><span class="op">},{</span><span class="dv">5</span><span class="op">,</span><span class="st">&quot;c&quot;</span><span class="op">},{</span><span class="dv">7</span><span class="op">,</span><span class="st">&quot;d&quot;</span><span class="op">}};</span></span>
-<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="kw">auto</span> lb <span class="op">=</span> m2<span class="op">.</span>lower_bound<span class="op">(</span><span class="dv">4</span><span class="op">);</span>   <span class="co">// 第一个 key &gt;= 4 的位置 -&gt; key=5</span></span>
-<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a><span class="kw">auto</span> ub <span class="op">=</span> m2<span class="op">.</span>upper_bound<span class="op">(</span><span class="dv">4</span><span class="op">);</span>   <span class="co">// 第一个 key &gt;  4 的位置 -&gt; key=5（4本身不存在，两者相同）</span></span>
-<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>cout <span class="op">&lt;&lt;</span> lb<span class="op">-&gt;</span>first <span class="op">&lt;&lt;</span> <span class="st">&quot; &quot;</span> <span class="op">&lt;&lt;</span> ub<span class="op">-&gt;</span>first <span class="op">&lt;&lt;</span> endl<span class="op">;</span></span></code></pre></div>
+<div class="sourceCode" id="cb22"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a>map<span class="op">&lt;</span><span class="dt">int</span><span class="op">,</span>string<span class="op">&gt;</span> m2 <span class="op">=</span> <span class="op">{{</span><span class="dv">1</span><span class="op">,</span><span class="st">&quot;a&quot;</span><span class="op">},{</span><span class="dv">3</span><span class="op">,</span><span class="st">&quot;b&quot;</span><span class="op">},{</span><span class="dv">5</span><span class="op">,</span><span class="st">&quot;c&quot;</span><span class="op">},{</span><span class="dv">7</span><span class="op">,</span><span class="st">&quot;d&quot;</span><span class="op">}};</span></span>
+<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a><span class="kw">auto</span> lb <span class="op">=</span> m2<span class="op">.</span>lower_bound<span class="op">(</span><span class="dv">4</span><span class="op">);</span>   <span class="co">// 第一个 key &gt;= 4 的位置 -&gt; key=5</span></span>
+<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a><span class="kw">auto</span> ub <span class="op">=</span> m2<span class="op">.</span>upper_bound<span class="op">(</span><span class="dv">4</span><span class="op">);</span>   <span class="co">// 第一个 key &gt;  4 的位置 -&gt; key=5（4本身不存在，两者相同）</span></span>
+<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a>cout <span class="op">&lt;&lt;</span> lb<span class="op">-&gt;</span>first <span class="op">&lt;&lt;</span> <span class="st">&quot; &quot;</span> <span class="op">&lt;&lt;</span> ub<span class="op">-&gt;</span>first <span class="op">&lt;&lt;</span> endl<span class="op">;</span></span></code></pre></div>
 <h3 id="删除">7.3 删除</h3>
-<div class="sourceCode" id="cb18"><pre
-class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>map<span class="op">&lt;</span>string<span class="op">,</span><span class="dt">int</span><span class="op">&gt;</span> m <span class="op">=</span> <span class="op">{{</span><span class="st">&quot;a&quot;</span><span class="op">,</span><span class="dv">1</span><span class="op">},{</span><span class="st">&quot;b&quot;</span><span class="op">,</span><span class="dv">2</span><span class="op">}};</span></span>
-<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>m<span class="op">.</span>erase<span class="op">(</span><span class="st">&quot;a&quot;</span><span class="op">);</span>            <span class="co">// 按 key 删除，返回删除的个数（map里是0或1）</span></span>
-<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a><span class="kw">auto</span> it <span class="op">=</span> m<span class="op">.</span>find<span class="op">(</span><span class="st">&quot;b&quot;</span><span class="op">);</span></span>
-<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="op">(</span>it <span class="op">!=</span> m<span class="op">.</span>end<span class="op">())</span> m<span class="op">.</span>erase<span class="op">(</span>it<span class="op">);</span>  <span class="co">// 按迭代器删除，O(1)（已经定位到节点，不用再搜一次）</span></span></code></pre></div>
+<div class="sourceCode" id="cb23"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a>map<span class="op">&lt;</span>string<span class="op">,</span><span class="dt">int</span><span class="op">&gt;</span> m <span class="op">=</span> <span class="op">{{</span><span class="st">&quot;a&quot;</span><span class="op">,</span><span class="dv">1</span><span class="op">},{</span><span class="st">&quot;b&quot;</span><span class="op">,</span><span class="dv">2</span><span class="op">}};</span></span>
+<span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a>m<span class="op">.</span>erase<span class="op">(</span><span class="st">&quot;a&quot;</span><span class="op">);</span>            <span class="co">// 按 key 删除，返回删除的个数（map里是0或1）</span></span>
+<span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a><span class="kw">auto</span> it <span class="op">=</span> m<span class="op">.</span>find<span class="op">(</span><span class="st">&quot;b&quot;</span><span class="op">);</span></span>
+<span id="cb23-4"><a href="#cb23-4" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="op">(</span>it <span class="op">!=</span> m<span class="op">.</span>end<span class="op">())</span> m<span class="op">.</span>erase<span class="op">(</span>it<span class="op">);</span>  <span class="co">// 按迭代器删除，O(1)（已经定位到节点，不用再搜一次）</span></span></code></pre></div>
 <pre><code>map/set 底层是红黑树（近似平衡二叉搜索树，见 algo-notes/red-black-tree.md），
 所有操作 O(log n)：插入、删除、查找。中序遍历天然有序，这是它相对哈希表最大的优势——
 需要&quot;按 key 排序遍历&quot;或者&quot;范围查询&quot;时必须用它。</code></pre>
 <p><code>set</code> 的查找接口和 <code>map</code> 完全对应（只是没有
 value，只判断 key 存在与否）：</p>
-<div class="sourceCode" id="cb20"><pre
-class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;set&gt;</span></span>
-<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>set<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> s <span class="op">=</span> <span class="op">{</span><span class="dv">5</span><span class="op">,</span><span class="dv">3</span><span class="op">,</span><span class="dv">1</span><span class="op">,</span><span class="dv">4</span><span class="op">,</span><span class="dv">1</span><span class="op">,</span><span class="dv">5</span><span class="op">,</span><span class="dv">9</span><span class="op">,</span><span class="dv">2</span><span class="op">,</span><span class="dv">6</span><span class="op">};</span></span>
-<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a><span class="co">// 遍历结果自动有序去重: 1 2 3 4 5 6 9</span></span>
-<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>s<span class="op">.</span>contains<span class="op">(</span><span class="dv">4</span><span class="op">);</span>   <span class="co">// C++20</span></span>
-<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>s<span class="op">.</span>count<span class="op">(</span><span class="dv">4</span><span class="op">);</span>      <span class="co">// 0 或 1</span></span>
-<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>s<span class="op">.</span>find<span class="op">(</span><span class="dv">4</span><span class="op">)</span> <span class="op">!=</span> s<span class="op">.</span>end<span class="op">();</span></span></code></pre></div>
+<div class="sourceCode" id="cb25"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;set&gt;</span></span>
+<span id="cb25-2"><a href="#cb25-2" aria-hidden="true" tabindex="-1"></a>set<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> s <span class="op">=</span> <span class="op">{</span><span class="dv">5</span><span class="op">,</span><span class="dv">3</span><span class="op">,</span><span class="dv">1</span><span class="op">,</span><span class="dv">4</span><span class="op">,</span><span class="dv">1</span><span class="op">,</span><span class="dv">5</span><span class="op">,</span><span class="dv">9</span><span class="op">,</span><span class="dv">2</span><span class="op">,</span><span class="dv">6</span><span class="op">};</span></span>
+<span id="cb25-3"><a href="#cb25-3" aria-hidden="true" tabindex="-1"></a><span class="co">// 遍历结果自动有序去重: 1 2 3 4 5 6 9</span></span>
+<span id="cb25-4"><a href="#cb25-4" aria-hidden="true" tabindex="-1"></a>s<span class="op">.</span>contains<span class="op">(</span><span class="dv">4</span><span class="op">);</span>   <span class="co">// C++20</span></span>
+<span id="cb25-5"><a href="#cb25-5" aria-hidden="true" tabindex="-1"></a>s<span class="op">.</span>count<span class="op">(</span><span class="dv">4</span><span class="op">);</span>      <span class="co">// 0 或 1</span></span>
+<span id="cb25-6"><a href="#cb25-6" aria-hidden="true" tabindex="-1"></a>s<span class="op">.</span>find<span class="op">(</span><span class="dv">4</span><span class="op">)</span> <span class="op">!=</span> s<span class="op">.</span>end<span class="op">();</span></span></code></pre></div>
 <h3 id="multimap-multiset允许-key-重复">7.4 <code>multimap</code> /
 <code>multiset</code>：允许 key 重复</h3>
-<div class="sourceCode" id="cb21"><pre
-class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>multimap<span class="op">&lt;</span>string<span class="op">,</span><span class="dt">int</span><span class="op">&gt;</span> mm <span class="op">=</span> <span class="op">{{</span><span class="st">&quot;a&quot;</span><span class="op">,</span><span class="dv">1</span><span class="op">},{</span><span class="st">&quot;a&quot;</span><span class="op">,</span><span class="dv">2</span><span class="op">},{</span><span class="st">&quot;a&quot;</span><span class="op">,</span><span class="dv">3</span><span class="op">},{</span><span class="st">&quot;b&quot;</span><span class="op">,</span><span class="dv">4</span><span class="op">}};</span></span>
-<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a>mm<span class="op">.</span>count<span class="op">(</span><span class="st">&quot;a&quot;</span><span class="op">);</span>   <span class="co">// 3（不再只是 0/1，因为可以重复）</span></span>
-<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a><span class="co">// 取出某个 key 的所有值：equal_range 一次拿到 [lower_bound, upper_bound) 整个区间</span></span>
-<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a><span class="kw">auto</span> <span class="op">[</span>lo<span class="op">,</span> hi<span class="op">]</span> <span class="op">=</span> mm<span class="op">.</span>equal_range<span class="op">(</span><span class="st">&quot;a&quot;</span><span class="op">);</span></span>
-<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="kw">auto</span> it <span class="op">=</span> lo<span class="op">;</span> it <span class="op">!=</span> hi<span class="op">;</span> <span class="op">++</span>it<span class="op">)</span> cout <span class="op">&lt;&lt;</span> it<span class="op">-&gt;</span>second <span class="op">&lt;&lt;</span> <span class="st">&quot; &quot;</span><span class="op">;</span></span>
-<span id="cb21-7"><a href="#cb21-7" aria-hidden="true" tabindex="-1"></a><span class="co">// 输出: 1 2 3</span></span></code></pre></div>
+<div class="sourceCode" id="cb26"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a>multimap<span class="op">&lt;</span>string<span class="op">,</span><span class="dt">int</span><span class="op">&gt;</span> mm <span class="op">=</span> <span class="op">{{</span><span class="st">&quot;a&quot;</span><span class="op">,</span><span class="dv">1</span><span class="op">},{</span><span class="st">&quot;a&quot;</span><span class="op">,</span><span class="dv">2</span><span class="op">},{</span><span class="st">&quot;a&quot;</span><span class="op">,</span><span class="dv">3</span><span class="op">},{</span><span class="st">&quot;b&quot;</span><span class="op">,</span><span class="dv">4</span><span class="op">}};</span></span>
+<span id="cb26-2"><a href="#cb26-2" aria-hidden="true" tabindex="-1"></a>mm<span class="op">.</span>count<span class="op">(</span><span class="st">&quot;a&quot;</span><span class="op">);</span>   <span class="co">// 3（不再只是 0/1，因为可以重复）</span></span>
+<span id="cb26-3"><a href="#cb26-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-4"><a href="#cb26-4" aria-hidden="true" tabindex="-1"></a><span class="co">// 取出某个 key 的所有值：equal_range 一次拿到 [lower_bound, upper_bound) 整个区间</span></span>
+<span id="cb26-5"><a href="#cb26-5" aria-hidden="true" tabindex="-1"></a><span class="kw">auto</span> <span class="op">[</span>lo<span class="op">,</span> hi<span class="op">]</span> <span class="op">=</span> mm<span class="op">.</span>equal_range<span class="op">(</span><span class="st">&quot;a&quot;</span><span class="op">);</span></span>
+<span id="cb26-6"><a href="#cb26-6" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="kw">auto</span> it <span class="op">=</span> lo<span class="op">;</span> it <span class="op">!=</span> hi<span class="op">;</span> <span class="op">++</span>it<span class="op">)</span> cout <span class="op">&lt;&lt;</span> it<span class="op">-&gt;</span>second <span class="op">&lt;&lt;</span> <span class="st">&quot; &quot;</span><span class="op">;</span></span>
+<span id="cb26-7"><a href="#cb26-7" aria-hidden="true" tabindex="-1"></a><span class="co">// 输出: 1 2 3</span></span></code></pre></div>
+<h3 id="红黑树实现细节">7.5 红黑树实现细节</h3>
+<p><code>map</code>/<code>set</code>
+底层是红黑树——一种通过给节点染色（红/黑）维护平衡的二叉搜索树，核心规则：根节点是黑色；红色节点的两个子节点必须是黑色（不允许两个红色节点相邻）；从任一节点到其所有后代空叶子节点的路径上，经过的黑色节点数目相同（黑高一致）。这几条规则联合起来保证树中最长路径不超过最短路径的
+2 倍，由此推出树高上界是 O(log n)。插入、删除、查找因此都稳定在 O(log
+n)——不像哈希表那样区分”平均 O(1)、最坏
+O(n)“，红黑树的最坏情况就是它的平均情况，这正是它被选为 <code>map</code>
+底层结构而非哈希表的原因之一：关联容器的语义承诺是稳定、可预测的复杂度，而不是追求最快的平均速度。</p>
+<p><code>map</code> 节点内部存的是
+<code>pair&lt;const Key, Value&gt;</code>——key 部分是
+<code>const</code>，即便拿到指向元素的引用也不能修改 key（改了 key
+会破坏树的有序性），只能通过 <code>it-&gt;second</code> 修改
+value。<code>set</code> 本质上是”只存 key、没有
+value”的红黑树，libstdc++ 里 <code>map</code> 和 <code>set</code>
+共享同一套红黑树模板，<code>map</code> 只是把每个节点的数据类型定成了
+<code>pair&lt;const Key, Value&gt;</code>。</p>
+<p>删除节点时只有被删除的那个节点对应的迭代器失效，其余节点的迭代器全部保持有效——这是所有基于节点、指针链接的数据结构的通性：节点一旦分配，内存地址在其生命周期内不会因为树的旋转、重新平衡而改变，红黑树的”旋转”调整的是指针指向关系，而不是搬移节点本身。插入同理不会使已有迭代器失效，因为插入只是新增指针链接，不触碰已有节点的地址。</p>
 <hr />
 <h2
 id="八unordered_map-unordered_set哈希表">八、<code>unordered_map</code>
 / <code>unordered_set</code>：哈希表</h2>
-<div class="sourceCode" id="cb22"><pre
-class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;unordered_map&gt;</span></span>
-<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a>unordered_map<span class="op">&lt;</span>string<span class="op">,</span><span class="dt">int</span><span class="op">&gt;</span> um<span class="op">;</span></span>
-<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a>um<span class="op">[</span><span class="st">&quot;x&quot;</span><span class="op">]</span> <span class="op">=</span> <span class="dv">10</span><span class="op">;</span></span>
-<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a>um<span class="op">[</span><span class="st">&quot;y&quot;</span><span class="op">]</span> <span class="op">=</span> <span class="dv">20</span><span class="op">;</span></span>
-<span id="cb22-5"><a href="#cb22-5" aria-hidden="true" tabindex="-1"></a><span class="co">// 遍历顺序不保证（取决于哈希桶布局），平均 O(1) 增删查</span></span>
-<span id="cb22-6"><a href="#cb22-6" aria-hidden="true" tabindex="-1"></a>um<span class="op">.</span>load_factor<span class="op">();</span>  <span class="co">// 当前负载因子 = size / bucket_count</span></span></code></pre></div>
+<div class="sourceCode" id="cb27"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;unordered_map&gt;</span></span>
+<span id="cb27-2"><a href="#cb27-2" aria-hidden="true" tabindex="-1"></a>unordered_map<span class="op">&lt;</span>string<span class="op">,</span><span class="dt">int</span><span class="op">&gt;</span> um<span class="op">;</span></span>
+<span id="cb27-3"><a href="#cb27-3" aria-hidden="true" tabindex="-1"></a>um<span class="op">[</span><span class="st">&quot;x&quot;</span><span class="op">]</span> <span class="op">=</span> <span class="dv">10</span><span class="op">;</span></span>
+<span id="cb27-4"><a href="#cb27-4" aria-hidden="true" tabindex="-1"></a>um<span class="op">[</span><span class="st">&quot;y&quot;</span><span class="op">]</span> <span class="op">=</span> <span class="dv">20</span><span class="op">;</span></span>
+<span id="cb27-5"><a href="#cb27-5" aria-hidden="true" tabindex="-1"></a><span class="co">// 遍历顺序不保证（取决于哈希桶布局），平均 O(1) 增删查</span></span>
+<span id="cb27-6"><a href="#cb27-6" aria-hidden="true" tabindex="-1"></a>um<span class="op">.</span>load_factor<span class="op">();</span>  <span class="co">// 当前负载因子 = size / bucket_count</span></span></code></pre></div>
 <h3 id="查找与删除接口和-map-完全一致只是没有顺序">8.1
 查找与删除（接口和 map 完全一致，只是没有顺序）</h3>
-<div class="sourceCode" id="cb23"><pre
-class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a>unordered_map<span class="op">&lt;</span>string<span class="op">,</span><span class="dt">int</span><span class="op">&gt;</span> um <span class="op">=</span> <span class="op">{{</span><span class="st">&quot;x&quot;</span><span class="op">,</span><span class="dv">1</span><span class="op">},{</span><span class="st">&quot;y&quot;</span><span class="op">,</span><span class="dv">2</span><span class="op">}};</span></span>
-<span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a>um<span class="op">.</span>contains<span class="op">(</span><span class="st">&quot;x&quot;</span><span class="op">);</span>                       <span class="co">// C++20</span></span>
-<span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a>um<span class="op">.</span>find<span class="op">(</span><span class="st">&quot;y&quot;</span><span class="op">)</span> <span class="op">!=</span> um<span class="op">.</span>end<span class="op">();</span></span>
-<span id="cb23-4"><a href="#cb23-4" aria-hidden="true" tabindex="-1"></a>um<span class="op">.</span>count<span class="op">(</span><span class="st">&quot;x&quot;</span><span class="op">);</span>                          <span class="co">// 0 或 1</span></span>
-<span id="cb23-5"><a href="#cb23-5" aria-hidden="true" tabindex="-1"></a>um<span class="op">.</span>erase<span class="op">(</span><span class="st">&quot;x&quot;</span><span class="op">);</span>                          <span class="co">// 按 key 删除</span></span>
-<span id="cb23-6"><a href="#cb23-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb23-7"><a href="#cb23-7" aria-hidden="true" tabindex="-1"></a>unordered_set<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> us <span class="op">=</span> <span class="op">{</span><span class="dv">1</span><span class="op">,</span><span class="dv">2</span><span class="op">,</span><span class="dv">3</span><span class="op">};</span></span>
-<span id="cb23-8"><a href="#cb23-8" aria-hidden="true" tabindex="-1"></a>us<span class="op">.</span>contains<span class="op">(</span><span class="dv">2</span><span class="op">);</span></span></code></pre></div>
+<div class="sourceCode" id="cb28"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a>unordered_map<span class="op">&lt;</span>string<span class="op">,</span><span class="dt">int</span><span class="op">&gt;</span> um <span class="op">=</span> <span class="op">{{</span><span class="st">&quot;x&quot;</span><span class="op">,</span><span class="dv">1</span><span class="op">},{</span><span class="st">&quot;y&quot;</span><span class="op">,</span><span class="dv">2</span><span class="op">}};</span></span>
+<span id="cb28-2"><a href="#cb28-2" aria-hidden="true" tabindex="-1"></a>um<span class="op">.</span>contains<span class="op">(</span><span class="st">&quot;x&quot;</span><span class="op">);</span>                       <span class="co">// C++20</span></span>
+<span id="cb28-3"><a href="#cb28-3" aria-hidden="true" tabindex="-1"></a>um<span class="op">.</span>find<span class="op">(</span><span class="st">&quot;y&quot;</span><span class="op">)</span> <span class="op">!=</span> um<span class="op">.</span>end<span class="op">();</span></span>
+<span id="cb28-4"><a href="#cb28-4" aria-hidden="true" tabindex="-1"></a>um<span class="op">.</span>count<span class="op">(</span><span class="st">&quot;x&quot;</span><span class="op">);</span>                          <span class="co">// 0 或 1</span></span>
+<span id="cb28-5"><a href="#cb28-5" aria-hidden="true" tabindex="-1"></a>um<span class="op">.</span>erase<span class="op">(</span><span class="st">&quot;x&quot;</span><span class="op">);</span>                          <span class="co">// 按 key 删除</span></span>
+<span id="cb28-6"><a href="#cb28-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb28-7"><a href="#cb28-7" aria-hidden="true" tabindex="-1"></a>unordered_set<span class="op">&lt;</span><span class="dt">int</span><span class="op">&gt;</span> us <span class="op">=</span> <span class="op">{</span><span class="dv">1</span><span class="op">,</span><span class="dv">2</span><span class="op">,</span><span class="dv">3</span><span class="op">};</span></span>
+<span id="cb28-8"><a href="#cb28-8" aria-hidden="true" tabindex="-1"></a>us<span class="op">.</span>contains<span class="op">(</span><span class="dv">2</span><span class="op">);</span></span></code></pre></div>
 <pre><code>底层是哈希表（拉链法，详见 algo-notes/hash-table-implementation.md），
 平均情况 O(1)，最坏情况（哈希冲突严重）O(n)。
 
@@ -528,6 +634,44 @@ map vs unordered_map 怎么选：
   需要有序遍历、范围查询（比如&quot;找所有大于x的key&quot;）-&gt; map（unordered_map 没有 lower_bound/upper_bound）
   key 类型是自定义类型时，unordered_map 需要提供哈希函数（std::hash 特化或传自定义 hasher），
   map 只需要 &lt; 运算符（或自定义 comparator），后者通常更省事。</code></pre>
+<h3 id="哈希表实现与-rehash-机制">8.2 哈希表实现与 rehash 机制</h3>
+<p><code>unordered_map</code> 底层是”桶数组（bucket array）+
+处理哈希冲突的链表”。插入一个 key 时，先算出
+<code>hash(key)</code>，对桶数量取模得到桶下标，把新节点挂到该桶对应的链表里；查找同样先定位桶，再在桶内链表线性比较。</p>
+<p>libstdc++
+有一处值得单独一提的实现细节：它不是每个桶各自维护一条独立链表，而是把<strong>所有元素</strong>串成一条全局单链表，桶数组里存的只是”指向该桶第一个节点前驱位置”的指针，用来标记桶的边界。这样设计的好处是遍历整个
+<code>unordered_map</code> 可以直接沿着这条全局链表走一遍、严格
+O(n)，不需要跳过大量空桶——如果每个桶单独维护链表，遍历退化情况下要访问所有桶（哪怕大部分是空的）才能收集到全部元素。这是标准没有强制规定、但主流实现出于遍历效率做的优化。</p>
+<p><strong>负载因子</strong>：<code>load_factor() = size() / bucket_count()</code>，标准默认的
+<code>max_load_factor()</code> 是 <strong>1.0</strong>；作为对比，Java
+<code>HashMap</code> 默认是 0.75。两者都是空间和时间的具体权衡点，0.75
+更倾向牺牲内存换更少冲突，1.0 更倾向节省内存，不存在谁对谁错。</p>
+<p><strong>rehash 触发与过程</strong>：每次插入后，如果
+<code>load_factor() &gt; max_load_factor()</code>，自动触发
+rehash：分配一个更大的新桶数组（通常约为原来的 2
+倍，并向上取整到下一个质数，用质数做桶数是为了让
+<code>hash % bucket_count</code>
+的分布更均匀，减少某些哈希函数在特定桶数下的规律性碰撞）→
+遍历旧数据每个节点，重新计算
+<code>hash(key) % new_bucket_count</code>，把节点摘下来挂到新桶 →
+释放旧桶数组。整个过程是 O(n)，n 是当前元素总数——这正是为什么
+<code>unordered_map</code> 插入被称为”均摊 O(1)“而不是严格
+O(1)：绝大多数插入只是简单的链表头插，只有触发 rehash
+的那一次插入需要付出 O(n) 的代价，均摊下来仍是常数。</p>
+<p><strong>rehash 前后迭代器与引用/指针的失效情况不同</strong>：rehash
+会让<strong>所有迭代器失效</strong>（桶数组本身被替换成新的一份，迭代器内部记录的桶位置信息全部作废），但<strong>指向元素的引用和指针仍然有效</strong>——<code>unordered_map</code>
+是基于节点的结构，rehash
+只是把节点从旧桶摘下、挂到新桶，节点本身的内存地址从未改变。这与
+<code>vector</code> 扩容时引用/指针也一起失效形成鲜明对比，根源在于
+<code>vector</code>
+是连续内存、扩容必须整体搬迁数据，<code>unordered_map</code>
+是节点式结构、rehash 只是重新排列指针关系。</p>
+<p><code>reserve(n)</code> 与 <code>rehash(n)</code>
+的区别：<code>rehash(n)</code> 直接把桶数量设置为至少
+n；<code>reserve(n)</code> 从”元素数量”角度出发，保证插入 n
+个元素之前不会触发 rehash，内部大致相当于
+<code>rehash(ceil(n / max_load_factor()))</code>。已知即将插入的元素数量时，提前
+<code>reserve</code> 可以避免插入过程中多次 rehash 造成的性能抖动。</p>
 <hr />
 <h2 id="九string字符串容器">九、<code>string</code>：字符串容器</h2>
 <blockquote>
@@ -535,51 +679,51 @@ map vs unordered_map 怎么选：
 <code>vector&lt;char&gt;</code> 但接口丰富得多），
 是实际项目里用得最多、却在很多”STL总结”里被忽略的一个容器。</p>
 </blockquote>
-<div class="sourceCode" id="cb25"><pre
-class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;string&gt;</span></span>
-<span id="cb25-2"><a href="#cb25-2" aria-hidden="true" tabindex="-1"></a>string s <span class="op">=</span> <span class="st">&quot;Hello, World!&quot;</span><span class="op">;</span></span>
-<span id="cb25-3"><a href="#cb25-3" aria-hidden="true" tabindex="-1"></a>s<span class="op">.</span>size<span class="op">();</span> s<span class="op">.</span>length<span class="op">();</span>   <span class="co">// 两者完全等价，都是 O(1)</span></span>
-<span id="cb25-4"><a href="#cb25-4" aria-hidden="true" tabindex="-1"></a>s<span class="op">.</span>empty<span class="op">();</span></span></code></pre></div>
-<h3 id="拼接">9.1 拼接</h3>
-<div class="sourceCode" id="cb26"><pre
-class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a>string s <span class="op">=</span> <span class="st">&quot;Hello&quot;</span><span class="op">;</span></span>
-<span id="cb26-2"><a href="#cb26-2" aria-hidden="true" tabindex="-1"></a>string s2 <span class="op">=</span> s <span class="op">+</span> <span class="st">&quot;, World!&quot;</span><span class="op">;</span>  <span class="co">// + 拼接生成新字符串</span></span>
-<span id="cb26-3"><a href="#cb26-3" aria-hidden="true" tabindex="-1"></a>s2 <span class="op">+=</span> <span class="st">&quot; Bye.&quot;</span><span class="op">;</span>                <span class="co">// += 原地追加</span></span></code></pre></div>
-<h3 id="子串与查找">9.2 子串与查找</h3>
-<div class="sourceCode" id="cb27"><pre
-class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a>string s <span class="op">=</span> <span class="st">&quot;Hello, World!&quot;</span><span class="op">;</span></span>
-<span id="cb27-2"><a href="#cb27-2" aria-hidden="true" tabindex="-1"></a>s<span class="op">.</span>substr<span class="op">(</span><span class="dv">7</span><span class="op">,</span> <span class="dv">5</span><span class="op">);</span>    <span class="co">// &quot;World&quot;：从下标7开始取5个字符</span></span>
-<span id="cb27-3"><a href="#cb27-3" aria-hidden="true" tabindex="-1"></a>s<span class="op">.</span>substr<span class="op">(</span><span class="dv">7</span><span class="op">);</span>       <span class="co">// &quot;World!&quot;：从下标7取到末尾</span></span>
-<span id="cb27-4"><a href="#cb27-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb27-5"><a href="#cb27-5" aria-hidden="true" tabindex="-1"></a>s<span class="op">.</span>find<span class="op">(</span><span class="st">&quot;World&quot;</span><span class="op">);</span>                 <span class="co">// 7：第一次出现的下标</span></span>
-<span id="cb27-6"><a href="#cb27-6" aria-hidden="true" tabindex="-1"></a>s<span class="op">.</span>find<span class="op">(</span><span class="st">&quot;xyz&quot;</span><span class="op">);</span>                   <span class="co">// 找不到返回 string::npos（一个很大的哨兵值，size_t的最大值）</span></span>
-<span id="cb27-7"><a href="#cb27-7" aria-hidden="true" tabindex="-1"></a>s<span class="op">.</span>find<span class="op">(</span><span class="st">&quot;xyz&quot;</span><span class="op">)</span> <span class="op">!=</span> string<span class="op">::</span>npos<span class="op">;</span>   <span class="co">// 判断是否存在的标准写法</span></span>
-<span id="cb27-8"><a href="#cb27-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb27-9"><a href="#cb27-9" aria-hidden="true" tabindex="-1"></a>s<span class="op">.</span>rfind<span class="op">(</span><span class="ch">&#39;o&#39;</span><span class="op">);</span>                    <span class="co">// 从后往前找，最后一个 &#39;o&#39; 的下标</span></span>
-<span id="cb27-10"><a href="#cb27-10" aria-hidden="true" tabindex="-1"></a>s<span class="op">.</span>find_first_of<span class="op">(</span><span class="st">&quot;lo&quot;</span><span class="op">);</span>           <span class="co">// 第一个&quot;是l或者o&quot;的字符的下标</span></span>
-<span id="cb27-11"><a href="#cb27-11" aria-hidden="true" tabindex="-1"></a>s<span class="op">.</span>find_last_of<span class="op">(</span><span class="st">&quot;lo&quot;</span><span class="op">);</span>            <span class="co">// 最后一个&quot;是l或者o&quot;的字符的下标</span></span>
-<span id="cb27-12"><a href="#cb27-12" aria-hidden="true" tabindex="-1"></a>s<span class="op">.</span>find_first_not_of<span class="op">(</span><span class="st">&quot;Hel&quot;</span><span class="op">);</span>      <span class="co">// 第一个&quot;不是H/e/l&quot;的字符的下标（跳过指定字符集合）</span></span></code></pre></div>
-<h3 id="修改">9.3 修改</h3>
-<div class="sourceCode" id="cb28"><pre
-class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a>string s <span class="op">=</span> <span class="st">&quot;Hello World&quot;</span><span class="op">;</span></span>
-<span id="cb28-2"><a href="#cb28-2" aria-hidden="true" tabindex="-1"></a>s<span class="op">.</span>replace<span class="op">(</span><span class="dv">6</span><span class="op">,</span> <span class="dv">5</span><span class="op">,</span> <span class="st">&quot;There&quot;</span><span class="op">);</span>  <span class="co">// 从下标6起的5个字符换成&quot;There&quot; -&gt; &quot;Hello There&quot;</span></span>
-<span id="cb28-3"><a href="#cb28-3" aria-hidden="true" tabindex="-1"></a>s<span class="op">.</span>insert<span class="op">(</span><span class="dv">5</span><span class="op">,</span> <span class="st">&quot;,&quot;</span><span class="op">);</span>           <span class="co">// 在下标5处插入 -&gt; &quot;Hello, There&quot;</span></span>
-<span id="cb28-4"><a href="#cb28-4" aria-hidden="true" tabindex="-1"></a>s<span class="op">.</span>erase<span class="op">(</span><span class="dv">5</span><span class="op">,</span> <span class="dv">1</span><span class="op">);</span>              <span class="co">// 从下标5删1个字符 -&gt; &quot;Hello There&quot;</span></span>
-<span id="cb28-5"><a href="#cb28-5" aria-hidden="true" tabindex="-1"></a>s<span class="op">.</span>clear<span class="op">();</span>                  <span class="co">// 清空</span></span></code></pre></div>
-<h3 id="比较与转换">9.4 比较与转换</h3>
-<div class="sourceCode" id="cb29"><pre
-class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a>string<span class="op">(</span><span class="st">&quot;abc&quot;</span><span class="op">)</span> <span class="op">==</span> <span class="st">&quot;abc&quot;</span><span class="op">;</span>       <span class="co">// 直接支持和 const char* 比较</span></span>
-<span id="cb29-2"><a href="#cb29-2" aria-hidden="true" tabindex="-1"></a>string<span class="op">(</span><span class="st">&quot;abc&quot;</span><span class="op">)</span> <span class="op">&lt;</span> string<span class="op">(</span><span class="st">&quot;abd&quot;</span><span class="op">);</span> <span class="co">// 字典序比较</span></span>
-<span id="cb29-3"><a href="#cb29-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb29-4"><a href="#cb29-4" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> n <span class="op">=</span> stoi<span class="op">(</span><span class="st">&quot;  42abc&quot;</span><span class="op">);</span>      <span class="co">// 42：自动跳过前导空格，遇到非数字停止</span></span>
-<span id="cb29-5"><a href="#cb29-5" aria-hidden="true" tabindex="-1"></a><span class="dt">double</span> d <span class="op">=</span> stod<span class="op">(</span><span class="st">&quot;3.14xyz&quot;</span><span class="op">);</span>   <span class="co">// 3.14</span></span>
-<span id="cb29-6"><a href="#cb29-6" aria-hidden="true" tabindex="-1"></a>string s <span class="op">=</span> to_string<span class="op">(</span><span class="dv">123</span><span class="op">);</span>    <span class="co">// &quot;123&quot;：数字转字符串</span></span>
-<span id="cb29-7"><a href="#cb29-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb29-8"><a href="#cb29-8" aria-hidden="true" tabindex="-1"></a><span class="at">const</span> <span class="dt">char</span><span class="op">*</span> cs <span class="op">=</span> s<span class="op">.</span>c_str<span class="op">();</span>   <span class="co">// 拿到 C 风格字符串（以 &#39;\0&#39; 结尾），和 C API 交互时用</span></span></code></pre></div>
-<h3 id="整行读取">9.5 整行读取</h3>
 <div class="sourceCode" id="cb30"><pre
-class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb30-1"><a href="#cb30-1" aria-hidden="true" tabindex="-1"></a>string line<span class="op">;</span></span>
-<span id="cb30-2"><a href="#cb30-2" aria-hidden="true" tabindex="-1"></a>getline<span class="op">(</span>cin<span class="op">,</span> line<span class="op">);</span>  <span class="co">// 读取一整行（包含空格），直到遇到换行符——&gt;&gt; 运算符遇到空白就停，两者不能混用取整行</span></span></code></pre></div>
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb30-1"><a href="#cb30-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;string&gt;</span></span>
+<span id="cb30-2"><a href="#cb30-2" aria-hidden="true" tabindex="-1"></a>string s <span class="op">=</span> <span class="st">&quot;Hello, World!&quot;</span><span class="op">;</span></span>
+<span id="cb30-3"><a href="#cb30-3" aria-hidden="true" tabindex="-1"></a>s<span class="op">.</span>size<span class="op">();</span> s<span class="op">.</span>length<span class="op">();</span>   <span class="co">// 两者完全等价，都是 O(1)</span></span>
+<span id="cb30-4"><a href="#cb30-4" aria-hidden="true" tabindex="-1"></a>s<span class="op">.</span>empty<span class="op">();</span></span></code></pre></div>
+<h3 id="拼接">9.1 拼接</h3>
+<div class="sourceCode" id="cb31"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a>string s <span class="op">=</span> <span class="st">&quot;Hello&quot;</span><span class="op">;</span></span>
+<span id="cb31-2"><a href="#cb31-2" aria-hidden="true" tabindex="-1"></a>string s2 <span class="op">=</span> s <span class="op">+</span> <span class="st">&quot;, World!&quot;</span><span class="op">;</span>  <span class="co">// + 拼接生成新字符串</span></span>
+<span id="cb31-3"><a href="#cb31-3" aria-hidden="true" tabindex="-1"></a>s2 <span class="op">+=</span> <span class="st">&quot; Bye.&quot;</span><span class="op">;</span>                <span class="co">// += 原地追加</span></span></code></pre></div>
+<h3 id="子串与查找">9.2 子串与查找</h3>
+<div class="sourceCode" id="cb32"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a>string s <span class="op">=</span> <span class="st">&quot;Hello, World!&quot;</span><span class="op">;</span></span>
+<span id="cb32-2"><a href="#cb32-2" aria-hidden="true" tabindex="-1"></a>s<span class="op">.</span>substr<span class="op">(</span><span class="dv">7</span><span class="op">,</span> <span class="dv">5</span><span class="op">);</span>    <span class="co">// &quot;World&quot;：从下标7开始取5个字符</span></span>
+<span id="cb32-3"><a href="#cb32-3" aria-hidden="true" tabindex="-1"></a>s<span class="op">.</span>substr<span class="op">(</span><span class="dv">7</span><span class="op">);</span>       <span class="co">// &quot;World!&quot;：从下标7取到末尾</span></span>
+<span id="cb32-4"><a href="#cb32-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-5"><a href="#cb32-5" aria-hidden="true" tabindex="-1"></a>s<span class="op">.</span>find<span class="op">(</span><span class="st">&quot;World&quot;</span><span class="op">);</span>                 <span class="co">// 7：第一次出现的下标</span></span>
+<span id="cb32-6"><a href="#cb32-6" aria-hidden="true" tabindex="-1"></a>s<span class="op">.</span>find<span class="op">(</span><span class="st">&quot;xyz&quot;</span><span class="op">);</span>                   <span class="co">// 找不到返回 string::npos（一个很大的哨兵值，size_t的最大值）</span></span>
+<span id="cb32-7"><a href="#cb32-7" aria-hidden="true" tabindex="-1"></a>s<span class="op">.</span>find<span class="op">(</span><span class="st">&quot;xyz&quot;</span><span class="op">)</span> <span class="op">!=</span> string<span class="op">::</span>npos<span class="op">;</span>   <span class="co">// 判断是否存在的标准写法</span></span>
+<span id="cb32-8"><a href="#cb32-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb32-9"><a href="#cb32-9" aria-hidden="true" tabindex="-1"></a>s<span class="op">.</span>rfind<span class="op">(</span><span class="ch">&#39;o&#39;</span><span class="op">);</span>                    <span class="co">// 从后往前找，最后一个 &#39;o&#39; 的下标</span></span>
+<span id="cb32-10"><a href="#cb32-10" aria-hidden="true" tabindex="-1"></a>s<span class="op">.</span>find_first_of<span class="op">(</span><span class="st">&quot;lo&quot;</span><span class="op">);</span>           <span class="co">// 第一个&quot;是l或者o&quot;的字符的下标</span></span>
+<span id="cb32-11"><a href="#cb32-11" aria-hidden="true" tabindex="-1"></a>s<span class="op">.</span>find_last_of<span class="op">(</span><span class="st">&quot;lo&quot;</span><span class="op">);</span>            <span class="co">// 最后一个&quot;是l或者o&quot;的字符的下标</span></span>
+<span id="cb32-12"><a href="#cb32-12" aria-hidden="true" tabindex="-1"></a>s<span class="op">.</span>find_first_not_of<span class="op">(</span><span class="st">&quot;Hel&quot;</span><span class="op">);</span>      <span class="co">// 第一个&quot;不是H/e/l&quot;的字符的下标（跳过指定字符集合）</span></span></code></pre></div>
+<h3 id="修改">9.3 修改</h3>
+<div class="sourceCode" id="cb33"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a>string s <span class="op">=</span> <span class="st">&quot;Hello World&quot;</span><span class="op">;</span></span>
+<span id="cb33-2"><a href="#cb33-2" aria-hidden="true" tabindex="-1"></a>s<span class="op">.</span>replace<span class="op">(</span><span class="dv">6</span><span class="op">,</span> <span class="dv">5</span><span class="op">,</span> <span class="st">&quot;There&quot;</span><span class="op">);</span>  <span class="co">// 从下标6起的5个字符换成&quot;There&quot; -&gt; &quot;Hello There&quot;</span></span>
+<span id="cb33-3"><a href="#cb33-3" aria-hidden="true" tabindex="-1"></a>s<span class="op">.</span>insert<span class="op">(</span><span class="dv">5</span><span class="op">,</span> <span class="st">&quot;,&quot;</span><span class="op">);</span>           <span class="co">// 在下标5处插入 -&gt; &quot;Hello, There&quot;</span></span>
+<span id="cb33-4"><a href="#cb33-4" aria-hidden="true" tabindex="-1"></a>s<span class="op">.</span>erase<span class="op">(</span><span class="dv">5</span><span class="op">,</span> <span class="dv">1</span><span class="op">);</span>              <span class="co">// 从下标5删1个字符 -&gt; &quot;Hello There&quot;</span></span>
+<span id="cb33-5"><a href="#cb33-5" aria-hidden="true" tabindex="-1"></a>s<span class="op">.</span>clear<span class="op">();</span>                  <span class="co">// 清空</span></span></code></pre></div>
+<h3 id="比较与转换">9.4 比较与转换</h3>
+<div class="sourceCode" id="cb34"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a>string<span class="op">(</span><span class="st">&quot;abc&quot;</span><span class="op">)</span> <span class="op">==</span> <span class="st">&quot;abc&quot;</span><span class="op">;</span>       <span class="co">// 直接支持和 const char* 比较</span></span>
+<span id="cb34-2"><a href="#cb34-2" aria-hidden="true" tabindex="-1"></a>string<span class="op">(</span><span class="st">&quot;abc&quot;</span><span class="op">)</span> <span class="op">&lt;</span> string<span class="op">(</span><span class="st">&quot;abd&quot;</span><span class="op">);</span> <span class="co">// 字典序比较</span></span>
+<span id="cb34-3"><a href="#cb34-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb34-4"><a href="#cb34-4" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> n <span class="op">=</span> stoi<span class="op">(</span><span class="st">&quot;  42abc&quot;</span><span class="op">);</span>      <span class="co">// 42：自动跳过前导空格，遇到非数字停止</span></span>
+<span id="cb34-5"><a href="#cb34-5" aria-hidden="true" tabindex="-1"></a><span class="dt">double</span> d <span class="op">=</span> stod<span class="op">(</span><span class="st">&quot;3.14xyz&quot;</span><span class="op">);</span>   <span class="co">// 3.14</span></span>
+<span id="cb34-6"><a href="#cb34-6" aria-hidden="true" tabindex="-1"></a>string s <span class="op">=</span> to_string<span class="op">(</span><span class="dv">123</span><span class="op">);</span>    <span class="co">// &quot;123&quot;：数字转字符串</span></span>
+<span id="cb34-7"><a href="#cb34-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb34-8"><a href="#cb34-8" aria-hidden="true" tabindex="-1"></a><span class="at">const</span> <span class="dt">char</span><span class="op">*</span> cs <span class="op">=</span> s<span class="op">.</span>c_str<span class="op">();</span>   <span class="co">// 拿到 C 风格字符串（以 &#39;\0&#39; 结尾），和 C API 交互时用</span></span></code></pre></div>
+<h3 id="整行读取">9.5 整行读取</h3>
+<div class="sourceCode" id="cb35"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a>string line<span class="op">;</span></span>
+<span id="cb35-2"><a href="#cb35-2" aria-hidden="true" tabindex="-1"></a>getline<span class="op">(</span>cin<span class="op">,</span> line<span class="op">);</span>  <span class="co">// 读取一整行（包含空格），直到遇到换行符——&gt;&gt; 运算符遇到空白就停，两者不能混用取整行</span></span></code></pre></div>
 <hr />
 <h2 id="十查找元素速查表">十、查找元素速查表</h2>
 <blockquote>
@@ -733,13 +877,13 @@ algo-notes/string-matching.md）</td>
 <hr />
 <h2 id="十二pair-tuple轻量组合类型">十二、<code>pair</code> /
 <code>tuple</code>：轻量组合类型</h2>
-<div class="sourceCode" id="cb31"><pre
-class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a>pair<span class="op">&lt;</span><span class="dt">int</span><span class="op">,</span>string<span class="op">&gt;</span> p <span class="op">=</span> <span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="st">&quot;one&quot;</span><span class="op">};</span></span>
-<span id="cb31-2"><a href="#cb31-2" aria-hidden="true" tabindex="-1"></a>p<span class="op">.</span>first<span class="op">;</span> p<span class="op">.</span>second<span class="op">;</span></span>
-<span id="cb31-3"><a href="#cb31-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb31-4"><a href="#cb31-4" aria-hidden="true" tabindex="-1"></a>tuple<span class="op">&lt;</span><span class="dt">int</span><span class="op">,</span>string<span class="op">,</span><span class="dt">double</span><span class="op">&gt;</span> t <span class="op">=</span> <span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="st">&quot;two&quot;</span><span class="op">,</span> <span class="fl">3.0</span><span class="op">};</span></span>
-<span id="cb31-5"><a href="#cb31-5" aria-hidden="true" tabindex="-1"></a>get<span class="op">&lt;</span><span class="dv">0</span><span class="op">&gt;(</span>t<span class="op">);</span> get<span class="op">&lt;</span><span class="dv">1</span><span class="op">&gt;(</span>t<span class="op">);</span> get<span class="op">&lt;</span><span class="dv">2</span><span class="op">&gt;(</span>t<span class="op">);</span></span>
-<span id="cb31-6"><a href="#cb31-6" aria-hidden="true" tabindex="-1"></a><span class="kw">auto</span> <span class="op">[</span>a<span class="op">,</span> b<span class="op">,</span> c<span class="op">]</span> <span class="op">=</span> t<span class="op">;</span>  <span class="co">// C++17 结构化绑定，比 get&lt;N&gt; 可读得多</span></span></code></pre></div>
+<div class="sourceCode" id="cb36"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb36-1"><a href="#cb36-1" aria-hidden="true" tabindex="-1"></a>pair<span class="op">&lt;</span><span class="dt">int</span><span class="op">,</span>string<span class="op">&gt;</span> p <span class="op">=</span> <span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="st">&quot;one&quot;</span><span class="op">};</span></span>
+<span id="cb36-2"><a href="#cb36-2" aria-hidden="true" tabindex="-1"></a>p<span class="op">.</span>first<span class="op">;</span> p<span class="op">.</span>second<span class="op">;</span></span>
+<span id="cb36-3"><a href="#cb36-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb36-4"><a href="#cb36-4" aria-hidden="true" tabindex="-1"></a>tuple<span class="op">&lt;</span><span class="dt">int</span><span class="op">,</span>string<span class="op">,</span><span class="dt">double</span><span class="op">&gt;</span> t <span class="op">=</span> <span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="st">&quot;two&quot;</span><span class="op">,</span> <span class="fl">3.0</span><span class="op">};</span></span>
+<span id="cb36-5"><a href="#cb36-5" aria-hidden="true" tabindex="-1"></a>get<span class="op">&lt;</span><span class="dv">0</span><span class="op">&gt;(</span>t<span class="op">);</span> get<span class="op">&lt;</span><span class="dv">1</span><span class="op">&gt;(</span>t<span class="op">);</span> get<span class="op">&lt;</span><span class="dv">2</span><span class="op">&gt;(</span>t<span class="op">);</span></span>
+<span id="cb36-6"><a href="#cb36-6" aria-hidden="true" tabindex="-1"></a><span class="kw">auto</span> <span class="op">[</span>a<span class="op">,</span> b<span class="op">,</span> c<span class="op">]</span> <span class="op">=</span> t<span class="op">;</span>  <span class="co">// C++17 结构化绑定，比 get&lt;N&gt; 可读得多</span></span></code></pre></div>
 <hr />
 <h2 id="十三容器选择决策树">十三、容器选择决策树</h2>
 <pre><code>需要处理文本？

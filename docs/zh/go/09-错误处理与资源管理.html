@@ -102,7 +102,9 @@
 <a href="../oodlld/index.html">OOD/LLD</a>
 <a href="../container/index.html">容器对照</a>
 <a href="../cpp/index.html">C++ 教程</a>
-<a href="../baguwen/index.html">面试八股</a></div></div>
+<a href="../baguwen/index.html">面试八股</a>
+<a href="../csbase/index.html">计算机基础</a>
+<a href="../javaeco/index.html">Java 生态</a></div></div>
 <div class="wrap">
 <nav id="TOC" role="doc-toc">
 <ul>
@@ -351,6 +353,85 @@ class="sourceCode go"><code class="sourceCode go"><span id="cb10-1"><a href="#cb
 <p>注意 panic 分支里 <code>result</code> 仍是 0:panic 在求值
 <code>a / b</code> 时就触发了,返回值从未被赋值,只有命名返回
 <code>err</code> 在 defer 的 <code>recover</code> 里被设置。</p>
+<h3 id="多层-defer-与-panicdefer-链会不会被打断">多层 defer 与
+panic:defer 链会不会被打断</h3>
+<p>一个很容易问倒人的细节:<strong>panic 展开时,同一个函数里已经注册的
+defer 会全部按 LIFO 顺序执行完,不会因为某一个 defer 自己也 panic
+了就提前中断</strong>——展开的是”defer 链”,不是”函数调用链”,一层函数的
+defer 链要走完,才轮到调用它的上一层函数的 defer
+链。用三层函数、每层各注册几个 defer、中间还让某个 defer 自己再 panic
+一次,能把这条规则看得很清楚:</p>
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> layerC<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">defer</span> fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;C: defer 1&quot;</span><span class="op">)</span></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">defer</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>        fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;C: defer 2 即将 panic&quot;</span><span class="op">)</span></span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a>        <span class="bu">panic</span><span class="op">(</span><span class="st">&quot;panic inside a defer&quot;</span><span class="op">)</span> <span class="co">// 在 defer 内部再次 panic</span></span>
+<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}()</span></span>
+<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">defer</span> fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;C: defer 3&quot;</span><span class="op">)</span></span>
+<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;C: 函数体&quot;</span><span class="op">)</span></span>
+<span id="cb11-13"><a href="#cb11-13" aria-hidden="true" tabindex="-1"></a>    <span class="bu">panic</span><span class="op">(</span><span class="st">&quot;original panic in C&quot;</span><span class="op">)</span> <span class="co">// 第一次 panic, 触发展开</span></span>
+<span id="cb11-14"><a href="#cb11-14" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb11-15"><a href="#cb11-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-16"><a href="#cb11-16" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> layerB<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb11-17"><a href="#cb11-17" aria-hidden="true" tabindex="-1"></a>    <span class="cf">defer</span> fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;B: defer&quot;</span><span class="op">)</span></span>
+<span id="cb11-18"><a href="#cb11-18" aria-hidden="true" tabindex="-1"></a>    layerC<span class="op">()</span></span>
+<span id="cb11-19"><a href="#cb11-19" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;B: 这行不会执行&quot;</span><span class="op">)</span> <span class="co">// layerC panic 后, layerB 也在展开, 跳过这里</span></span>
+<span id="cb11-20"><a href="#cb11-20" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb11-21"><a href="#cb11-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-22"><a href="#cb11-22" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> layerA<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb11-23"><a href="#cb11-23" aria-hidden="true" tabindex="-1"></a>    <span class="cf">defer</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb11-24"><a href="#cb11-24" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> r <span class="op">:=</span> <span class="bu">recover</span><span class="op">();</span> r <span class="op">!=</span> <span class="ot">nil</span> <span class="op">{</span></span>
+<span id="cb11-25"><a href="#cb11-25" aria-hidden="true" tabindex="-1"></a>            fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;A: recover 到了:&quot;</span><span class="op">,</span> r<span class="op">)</span></span>
+<span id="cb11-26"><a href="#cb11-26" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb11-27"><a href="#cb11-27" aria-hidden="true" tabindex="-1"></a>    <span class="op">}()</span></span>
+<span id="cb11-28"><a href="#cb11-28" aria-hidden="true" tabindex="-1"></a>    <span class="cf">defer</span> fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;A: defer&quot;</span><span class="op">)</span></span>
+<span id="cb11-29"><a href="#cb11-29" aria-hidden="true" tabindex="-1"></a>    layerB<span class="op">()</span></span>
+<span id="cb11-30"><a href="#cb11-30" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;A: 这行也不会执行&quot;</span><span class="op">)</span></span>
+<span id="cb11-31"><a href="#cb11-31" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb11-32"><a href="#cb11-32" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-33"><a href="#cb11-33" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb11-34"><a href="#cb11-34" aria-hidden="true" tabindex="-1"></a>    layerA<span class="op">()</span></span>
+<span id="cb11-35"><a href="#cb11-35" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;main 正常继续&quot;</span><span class="op">)</span></span>
+<span id="cb11-36"><a href="#cb11-36" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>运行输出:</p>
+<pre><code>C: 函数体
+C: defer 3
+C: defer 2 即将 panic
+C: defer 1
+B: defer
+A: defer
+A: recover 到了: panic inside a defer
+main 正常继续</code></pre>
+<p>按顺序拆解:<code>layerC</code> 里
+<code>panic("original panic in C")</code> 触发展开,按 LIFO 先执行
+<code>defer 3</code>(打印),再执行 <code>defer 2</code>——它自己又
+<code>panic("panic inside a defer")</code>。<strong>关键点在这里</strong>:<code>defer 2</code>
+内部这次新的 panic 并没有让 <code>layerC</code> 提前退出展开、跳过剩下的
+<code>defer 1</code>——<code>defer 1</code>
+照样被执行,只是从这一刻起,“当前生效的 panic”从
+<code>"original panic in C"</code> 变成了
+<code>"panic inside a defer"</code>(后一个 panic
+覆盖了前一个,前一个的信息就此丢失,只在栈回溯里能看到嵌套记录)。<code>layerC</code>
+的 defer 链走完后,展开继续向上传播到 <code>layerB</code>(执行它的
+defer)、再到 <code>layerA</code>(执行它的 defer,其中的
+<code>recover()</code> 拿到的是最后那个、也就是最新的 panic 值
+<code>"panic inside a defer"</code>,并不是最初的
+<code>"original panic in C"</code>)。</p>
+<p>这解释了两件事:<strong>第一</strong>,<code>defer</code>
+链是”当前函数里已注册的全部 defer”,不是”直到某个 defer
+出问题为止”——哪怕链条中间有 defer 自己也
+panic,链条本身仍然完整跑完,这保证了资源清理类的 defer(比如
+<code>f.Close()</code>、<code>mu.Unlock()</code>)不会因为前面某个无关的
+defer 出错就被跳过。<strong>第二</strong>,<code>recover()</code>
+只能拿到”当前生效”的那一个 panic 值,如果展开过程中出现了多次
+panic,较早的会被较晚的覆盖——这是为什么线上代码不该在 <code>defer</code>
+里写可能自己出错的清理逻辑而不加保护:一旦清理逻辑本身
+panic,原始错误的现场信息就丢了。</p>
 <p>对照记忆:</p>
 <table>
 <thead>
@@ -398,20 +479,60 @@ class="sourceCode go"><code class="sourceCode go"><span id="cb10-1"><a href="#cb
 <code>defer</code>:注册的调用在函数返回前(含 panic 展开时)按
 <strong>后进先出</strong> 执行(<a
 href="05-控制流.html">见第05章机制</a>)。</p>
-<div class="sourceCode" id="cb11"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;开始&quot;</span><span class="op">)</span></span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="cf">defer</span> fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;清理1&quot;</span><span class="op">)</span> <span class="co">// 后进先出: 最后执行</span></span>
-<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="cf">defer</span> fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;清理2&quot;</span><span class="op">)</span> <span class="co">// 先执行</span></span>
-<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;结束&quot;</span><span class="op">)</span></span>
-<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a><span class="co">// 输出顺序: 开始 结束 清理2 清理1</span></span></code></pre></div>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;开始&quot;</span><span class="op">)</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="cf">defer</span> fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;清理1&quot;</span><span class="op">)</span> <span class="co">// 后进先出: 最后执行</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a><span class="cf">defer</span> fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;清理2&quot;</span><span class="op">)</span> <span class="co">// 先执行</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;结束&quot;</span><span class="op">)</span></span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a><span class="co">// 输出顺序: 开始 结束 清理2 清理1</span></span></code></pre></div>
+<h3 id="defer-与返回值能改具名的改不了匿名的">defer
+与返回值:能改具名的,改不了匿名的</h3>
+<p><code>return</code>
+并不是一步到位的原子操作,它在编译器眼里分两步:<strong>把返回值写进返回槽位</strong>,然后<strong>执行
+<code>RET</code> 指令</strong>真正退出函数。<code>defer</code>
+注册的调用恰好插在这两步中间——所以如果函数用的是<strong>具名返回值</strong>,<code>defer</code>
+里修改这个变量,改的就是即将被 <code>RET</code>
+用掉的那个槽位,调用方能看到;如果是<strong>匿名返回值</strong>,<code>return expr</code>
+会先把 <code>expr</code>
+的值放进一个调用方不可见的临时槽位,<code>defer</code>
+里的代码根本拿不到这个临时值的引用去改它:</p>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> namedReturn<span class="op">()</span> <span class="op">(</span>result <span class="dt">int</span><span class="op">)</span> <span class="op">{</span> <span class="co">// 具名返回值 result 本身就是那个返回槽位</span></span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">defer</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>        result<span class="op">++</span> <span class="co">// 直接改返回槽位</span></span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}()</span></span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="dv">10</span></span>
+<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> anonReturn<span class="op">()</span> <span class="dt">int</span> <span class="op">{</span> <span class="co">// 匿名返回值, return 10 时值已被复制进一个不可见的临时槽位</span></span>
+<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a>    result <span class="op">:=</span> <span class="dv">10</span></span>
+<span id="cb14-14"><a href="#cb14-14" aria-hidden="true" tabindex="-1"></a>    <span class="cf">defer</span> <span class="kw">func</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb14-15"><a href="#cb14-15" aria-hidden="true" tabindex="-1"></a>        result<span class="op">++</span> <span class="co">// 只改了局部变量 result, 不影响已经复制走的返回值</span></span>
+<span id="cb14-16"><a href="#cb14-16" aria-hidden="true" tabindex="-1"></a>    <span class="op">}()</span></span>
+<span id="cb14-17"><a href="#cb14-17" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> result</span>
+<span id="cb14-18"><a href="#cb14-18" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb14-19"><a href="#cb14-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-20"><a href="#cb14-20" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb14-21"><a href="#cb14-21" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>namedReturn<span class="op">())</span> <span class="co">// 11 —— defer 改到了返回槽位</span></span>
+<span id="cb14-22"><a href="#cb14-22" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span>anonReturn<span class="op">())</span>  <span class="co">// 10 —— defer 改的只是局部变量, 为时已晚</span></span>
+<span id="cb14-23"><a href="#cb14-23" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>这条规则解释了前面 <code>safeDiv</code> 例子里为什么必须用具名返回值
+<code>err</code>:<code>recover()</code> 只能在 <code>defer</code> 里拿到
+panic 值,而”把这个值转换成 error
+并作为函数返回结果”这件事,只有具名返回值能做到——如果 <code>err</code>
+是匿名返回值,<code>defer</code> 里对它赋值根本传不到调用方手上。</p>
 <p>实际场景常用来配对”打开/关闭”或”加锁/解锁”:</p>
-<div class="sourceCode" id="cb12"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>f<span class="op">,</span> err <span class="op">:=</span> os<span class="op">.</span>Open<span class="op">(</span>name<span class="op">)</span></span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> err <span class="op">!=</span> <span class="ot">nil</span> <span class="op">{</span> <span class="cf">return</span> err <span class="op">}</span></span>
-<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="cf">defer</span> f<span class="op">.</span>Close<span class="op">()</span>           <span class="co">// 无论后面怎么返回/panic, 都会关</span></span>
-<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>mu<span class="op">.</span>Lock<span class="op">()</span></span>
-<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a><span class="cf">defer</span> mu<span class="op">.</span>Unlock<span class="op">()</span>         <span class="co">// 配对加解锁, 防止漏解锁</span></span></code></pre></div>
+<div class="sourceCode" id="cb15"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>f<span class="op">,</span> err <span class="op">:=</span> os<span class="op">.</span>Open<span class="op">(</span>name<span class="op">)</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> err <span class="op">!=</span> <span class="ot">nil</span> <span class="op">{</span> <span class="cf">return</span> err <span class="op">}</span></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a><span class="cf">defer</span> f<span class="op">.</span>Close<span class="op">()</span>           <span class="co">// 无论后面怎么返回/panic, 都会关</span></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>mu<span class="op">.</span>Lock<span class="op">()</span></span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a><span class="cf">defer</span> mu<span class="op">.</span>Unlock<span class="op">()</span>         <span class="co">// 配对加解锁, 防止漏解锁</span></span></code></pre></div>
 <p>和 C++ RAII 的差异:RAII
 绑定<strong>对象生命周期/作用域</strong>(离开块即析构);<code>defer</code>
 绑定<strong>函数返回</strong>(不是块级,是函数级!循环里
@@ -425,6 +546,55 @@ Go 选了函数级的 <code>defer</code> 而不是块级的析构</strong>:RAII
 退而求其次,绑定一个总能在编译期确定的时刻——<strong>函数返回</strong>——这个时刻无论函数是正常
 return 还是 panic
 展开都会经过,足以覆盖”打开就要关闭”这类资源管理的核心需求,只是粒度比块级作用域粗。</p>
+<p>这条”函数级”的特性在循环里最容易捅娄子:<code>defer</code>
+挂在<strong>外层函数</strong>的作用域上,不是循环体的作用域,所以循环体里的
+<code>defer</code>
+会一条条累积,直到外层函数整个返回才一起执行——如果循环处理的是文件、连接、锁这类有限资源,函数没返回之前它们一个都不会被释放:</p>
+<div class="sourceCode" id="cb16"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> badLoop<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> i <span class="op">:=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">3</span><span class="op">;</span> i<span class="op">++</span> <span class="op">{</span></span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">defer</span> fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;bad defer&quot;</span><span class="op">,</span> i<span class="op">)</span> <span class="co">// 攒到 badLoop 结束才执行, 不是每次循环结束就执行</span></span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;badLoop 函数体执行完毕&quot;</span><span class="op">)</span> <span class="co">// 这行先打印, 三个 defer 全都还没跑</span></span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> goodLoop<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> i <span class="op">:=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">3</span><span class="op">;</span> i<span class="op">++</span> <span class="op">{</span></span>
+<span id="cb16-14"><a href="#cb16-14" aria-hidden="true" tabindex="-1"></a>        <span class="kw">func</span><span class="op">()</span> <span class="op">{</span> <span class="co">// 每次循环包一层立即执行的匿名函数, 借它的函数级作用域</span></span>
+<span id="cb16-15"><a href="#cb16-15" aria-hidden="true" tabindex="-1"></a>            <span class="cf">defer</span> fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;good defer&quot;</span><span class="op">,</span> i<span class="op">)</span> <span class="co">// 匿名函数返回时立即执行, 不会累积</span></span>
+<span id="cb16-16"><a href="#cb16-16" aria-hidden="true" tabindex="-1"></a>            fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;good loop body&quot;</span><span class="op">,</span> i<span class="op">)</span></span>
+<span id="cb16-17"><a href="#cb16-17" aria-hidden="true" tabindex="-1"></a>        <span class="op">}()</span></span>
+<span id="cb16-18"><a href="#cb16-18" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb16-19"><a href="#cb16-19" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb16-20"><a href="#cb16-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-21"><a href="#cb16-21" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb16-22"><a href="#cb16-22" aria-hidden="true" tabindex="-1"></a>    badLoop<span class="op">()</span></span>
+<span id="cb16-23"><a href="#cb16-23" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;---&quot;</span><span class="op">)</span></span>
+<span id="cb16-24"><a href="#cb16-24" aria-hidden="true" tabindex="-1"></a>    goodLoop<span class="op">()</span></span>
+<span id="cb16-25"><a href="#cb16-25" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>运行输出:</p>
+<pre><code>badLoop 函数体执行完毕
+bad defer 2
+bad defer 1
+bad defer 0
+---
+good loop body 0
+good defer 0
+good loop body 1
+good defer 1
+good loop body 2
+good defer 2</code></pre>
+<p><code>badLoop</code> 里三次 <code>defer</code> 全部注册在
+<code>badLoop</code> 这个函数上,函数体先打印完,三个 <code>defer</code>
+才按 LIFO 补跑;真实场景里如果循环体是
+<code>defer file.Close()</code>,成百上千次循环下来,所有文件描述符会一直攒到函数返回才释放,循环执行期间同时打开的文件数不断累积,很容易撞上系统的文件描述符上限。<code>goodLoop</code>
+把每次循环体包进一个立即执行的匿名函数,借用这个匿名函数自己的”函数级”边界,把
+<code>defer</code>
+的触发时机从”外层函数返回”提前到”每次循环这一次匿名调用返回”,效果上等价于块级释放。</p>
 <blockquote>
 <p><code>runtime.SetFinalizer</code> 可给对象注册”GC
 回收时的终结器”,但它执行时机不确定、只保证跑一次,<strong>不能替代
@@ -436,10 +606,10 @@ defer/显式 Close</strong> 管理文件、锁等确定性资源。</p>
 href="03-变量与内存模型.html">逃逸分析(第03章)</a>决定变量在栈还是堆,栈上的随栈帧回收,堆上的由
 GC 回收。日常写业务代码基本不用管
 GC——极少数需要调优的场景,才会用到下面这几个”旋钮”:</p>
-<div class="sourceCode" id="cb13"><pre
-class="sourceCode go"><code class="sourceCode go"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>debug<span class="op">.</span>SetGCPercent<span class="op">(</span><span class="dv">200</span><span class="op">)</span> <span class="co">// 调高 → GC 更少、内存占用更高、吞吐更好</span></span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>debug<span class="op">.</span>SetGCPercent<span class="op">(</span><span class="dv">50</span><span class="op">)</span>  <span class="co">// 调低 → GC 更频繁、内存更省</span></span>
-<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>runtime<span class="op">.</span>GC<span class="op">()</span>            <span class="co">// 手动强制一次(阻塞式, 一般只在测试/特殊场景用)</span></span></code></pre></div>
+<div class="sourceCode" id="cb18"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>debug<span class="op">.</span>SetGCPercent<span class="op">(</span><span class="dv">200</span><span class="op">)</span> <span class="co">// 调高 → GC 更少、内存占用更高、吞吐更好</span></span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>debug<span class="op">.</span>SetGCPercent<span class="op">(</span><span class="dv">50</span><span class="op">)</span>  <span class="co">// 调低 → GC 更频繁、内存更省</span></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>runtime<span class="op">.</span>GC<span class="op">()</span>            <span class="co">// 手动强制一次(阻塞式, 一般只在测试/特殊场景用)</span></span></code></pre></div>
 <p><strong>并发三色标记-清除</strong>。Go 的 GC
 是<strong>并发的、非移动的、三色标记-清除(tri-color
 mark-sweep)</strong>,核心目标是<strong>极短的

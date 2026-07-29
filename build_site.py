@@ -22,7 +22,9 @@ ZH_ONLY = [("algo-notes", "algo", "算法笔记"),
            ("ood-lld-notes", "oodlld", "OOD/LLD"),
            ("container-notes", "container", "容器对照"),
            ("cpp-tutorial", "cpp", "C++ 教程"),
-           ("interview-baguwen", "baguwen", "面试八股")]
+           ("interview-baguwen", "baguwen", "面试八股"),
+           ("cs-fundamentals-notes", "csbase", "计算机基础"),
+           ("java-ecosystem-notes", "javaeco", "Java 生态")]
 LANGS = ["zh"]  # 英文版暂停维护,先隐藏入口(源文件保留在 *-tutorial-en/,以后需要时改回 ["zh", "en"] 即可)
 
 TOGGLE_JS = ("function switchLang(){var p=location.pathname,en=p.indexOf('/en/')>-1,"
@@ -105,6 +107,8 @@ def home_html(lang):
         "container-notes": "C++/Python/Go/Java 容器操作横向对照:长度、判存在、拷贝语义、常见坑速查。",
         "cpp-tutorial": "全面覆盖 C++ 知识点的速查手册:基础语法、STL 容器与算法、智能指针、多线程,不求最深但求不漏。",
         "interview-baguwen": "综合多个 1000+ star 仓库整理的面试高频考点,Python 和 C++ 各一套密集问答。",
+        "cs-fundamentals-notes": "操作系统、网络、数据库三块地基:进程线程、TCP/HTTP、事务索引与 Redis,原理配结构图与可执行示例。",
+        "java-ecosystem-notes": "补充 java-tutorial 没讲的框架生态:Spring 全家桶定位与核心机制、设计模式的 Java 语言层面落地写法。",
     }
     if lang == "zh":
         cards += "\n".join(

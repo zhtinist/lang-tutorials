@@ -102,7 +102,9 @@
 <a href="../oodlld/index.html">OOD/LLD</a>
 <a href="../container/index.html">容器对照</a>
 <a href="../cpp/index.html">C++ 教程</a>
-<a href="../baguwen/index.html">面试八股</a></div></div>
+<a href="../baguwen/index.html">面试八股</a>
+<a href="../csbase/index.html">计算机基础</a>
+<a href="../javaeco/index.html">Java 生态</a></div></div>
 <div class="wrap">
 <nav id="TOC" role="doc-toc">
 <ul>
@@ -542,6 +544,43 @@ class="sourceCode go"><code class="sourceCode go"><span id="cb17-1"><a href="#cb
 <code>a</code>,<code>append</code> 之后改 <code>b</code> 却不再波及
 <code>a</code>——同一段代码里两种行为,根源就是那次重新分配。什么时候扩容、扩多少,取决于容量,细节见
 <a href="07-复合数据结构.html">07-复合数据结构.md</a>。</p>
+<p>这里还有一个比”扩容导致脱钩”更容易被问倒的角度:<strong>即使没有扩容,把
+slice 传进函数、在函数内部
+<code>append</code>,外面也看不到新增的元素</strong>——问题不出在扩容,而出在
+<code>append</code>
+返回的是一个新表头,而这个新表头只存在于被调函数的局部变量里:</p>
+<div class="sourceCode" id="cb18"><pre
+class="sourceCode go"><code class="sourceCode go"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> main</span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="st">&quot;fmt&quot;</span></span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> appendInside<span class="op">(</span>s <span class="op">[]</span><span class="dt">int</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>    s <span class="op">=</span> <span class="bu">append</span><span class="op">(</span>s<span class="op">,</span> <span class="dv">999</span><span class="op">)</span> <span class="co">// cap 够, 原地写进共享的底层数组; 但 s 是局部变量的表头</span></span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;函数内部 s:&quot;</span><span class="op">,</span> s<span class="op">,</span> <span class="st">&quot;len:&quot;</span><span class="op">,</span> <span class="bu">len</span><span class="op">(</span>s<span class="op">))</span></span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a>    a <span class="op">:=</span> <span class="bu">make</span><span class="op">([]</span><span class="dt">int</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">5</span><span class="op">)</span> <span class="co">// len=2 cap=5, 留了余量, 不会触发扩容</span></span>
+<span id="cb18-12"><a href="#cb18-12" aria-hidden="true" tabindex="-1"></a>    a<span class="op">[</span><span class="dv">0</span><span class="op">],</span> a<span class="op">[</span><span class="dv">1</span><span class="op">]</span> <span class="op">=</span> <span class="dv">1</span><span class="op">,</span> <span class="dv">2</span></span>
+<span id="cb18-13"><a href="#cb18-13" aria-hidden="true" tabindex="-1"></a>    appendInside<span class="op">(</span>a<span class="op">)</span></span>
+<span id="cb18-14"><a href="#cb18-14" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;函数外部 a:&quot;</span><span class="op">,</span> a<span class="op">,</span> <span class="st">&quot;len:&quot;</span><span class="op">,</span> <span class="bu">len</span><span class="op">(</span>a<span class="op">))</span> <span class="co">// len 依然是 2, 看不到 999</span></span>
+<span id="cb18-15"><a href="#cb18-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-16"><a href="#cb18-16" aria-hidden="true" tabindex="-1"></a>    b <span class="op">:=</span> a<span class="op">[:</span><span class="dv">3</span><span class="op">]</span> <span class="co">// 强行把 len 扩到 3, 就能看到那个&quot;悄悄写进去&quot;的值</span></span>
+<span id="cb18-17"><a href="#cb18-17" aria-hidden="true" tabindex="-1"></a>    fmt<span class="op">.</span>Println<span class="op">(</span><span class="st">&quot;a[:3]:&quot;</span><span class="op">,</span> b<span class="op">)</span></span>
+<span id="cb18-18"><a href="#cb18-18" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>运行输出:</p>
+<pre><code>函数内部 s: [1 2 999] len: 3
+函数外部 a: [1 2] len: 2
+a[:3]: [1 2 999]</code></pre>
+<p><code>999</code> 确确实实被写进了 <code>a</code> 和 <code>s</code>
+共享的那个底层数组——但 <code>a</code> 的表头是 <code>main</code>
+里的一份独立拷贝,它的 <code>len</code> 字段自始至终是
+2,<code>fmt.Println(a)</code> 只会打印 <code>len</code>
+范围内的元素,看不到已经写进底层数组、但没被纳入 <code>len</code> 的那个
+<code>999</code>。这跟前面”扩容导致脱钩”是两个不同的坑:那里是数据本身不再共享,这里数据仍然共享,只是”长度”这个字段没有跟着传回来。想让函数内的
+<code>append</code> 影响外面,要么传 <code>*[]int</code>,要么让函数返回新
+slice、调用方用新值覆盖旧变量(<code>a = appendSomething(a)</code>——标准库
+<code>append</code> 本身就是这么用的)。</p>
 <p>map 和 chan
 更彻底:它们的变量本身<strong>就是一个指针</strong>(指向运行时的
 <code>hmap</code> / <code>hchan</code> 结构)。<code>b := a</code>

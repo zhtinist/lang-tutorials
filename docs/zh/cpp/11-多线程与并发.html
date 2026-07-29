@@ -102,7 +102,9 @@
 <a href="../oodlld/index.html">OOD/LLD</a>
 <a href="../container/index.html">容器对照</a>
 <a href="../cpp/index.html" style="color:var(--accent-dark);font-weight:700">C++ 教程</a>
-<a href="../baguwen/index.html">面试八股</a></div></div>
+<a href="../baguwen/index.html">面试八股</a>
+<a href="../csbase/index.html">计算机基础</a>
+<a href="../javaeco/index.html">Java 生态</a></div></div>
 <div class="wrap">
 <nav id="TOC" role="doc-toc">
 <ul>
@@ -131,6 +133,12 @@ id="toc-九内存序简介进阶了解即可">九、内存序简介（进阶，�
 <li><a href="#十多线程-vs-多进程-vs-协程"
 id="toc-十多线程-vs-多进程-vs-协程">十、多线程 vs 多进程 vs
 协程</a></li>
+<li><a href="#十一锁的两种实现思路自旋锁-vs-互斥锁"
+id="toc-十一锁的两种实现思路自旋锁-vs-互斥锁">十一、锁的两种实现思路：自旋锁
+vs 互斥锁</a></li>
+<li><a href="#十二单线程高并发的另一条路io-多路复用"
+id="toc-十二单线程高并发的另一条路io-多路复用">十二、单线程高并发的另一条路：I/O
+多路复用</a></li>
 </ul></li>
 </ul>
 </nav>
@@ -403,6 +411,221 @@ C++11 还提供了更弱的内存序（memory_order_relaxed / acquire / release 
 </tr>
 </tbody>
 </table>
+<hr />
+<h2
+id="十一锁的两种实现思路自旋锁-vs-互斥锁">十一、锁的两种实现思路：自旋锁
+vs 互斥锁</h2>
+<p><code>std::mutex</code>
+加锁失败时具体怎么处理，标准没有规定，但主流实现（glibc 的
+<code>pthread_mutex</code>、Linux 下依赖的
+<code>futex</code>）选择的是”让线程睡眠，把 CPU
+让给别人”——这只是众多加锁策略里的一种，另一种思路是<strong>自旋（busy-wait）</strong>：加锁失败就原地空转重试，不发生线程切换。</p>
+<p>C++ 标准库没有提供现成的自旋锁类型，只给了
+<code>std::atomic_flag</code> 这个原语，需要自己搭：</p>
+<div class="sourceCode" id="cb16"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;atomic&gt;</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> SpinLock <span class="op">{</span></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>atomic_flag <span class="va">flag_</span> <span class="op">=</span> ATOMIC_FLAG_INIT<span class="op">;</span></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span><span class="op">:</span></span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">void</span> lock<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">while</span> <span class="op">(</span><span class="va">flag_</span><span class="op">.</span>test_and_set<span class="op">(</span><span class="bu">std::</span>memory_order_acquire<span class="op">))</span> <span class="op">{</span></span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>            <span class="co">// 拿不到锁，原地空转重试，不放弃 CPU</span></span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">void</span> unlock<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a>        <span class="va">flag_</span><span class="op">.</span>clear<span class="op">(</span><span class="bu">std::</span>memory_order_release<span class="op">);</span></span>
+<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb16-14"><a href="#cb16-14" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span>
+<span id="cb16-15"><a href="#cb16-15" aria-hidden="true" tabindex="-1"></a><span class="co">// 4 个线程各自 lock/unlock 十万次保护同一个 counter++，实测 counter 稳定等于 400000</span></span></code></pre></div>
+<pre><code>test_and_set 是一条硬件保证的原子指令：把标志位从 0 改成 1 并返回旧值。
+旧值是 1 说明锁被占着，当前线程在 while 里不断重试；旧值是 0 说明抢到了锁。
+整个过程没有系统调用、没有线程状态切换——失败的代价就是纯粹的 CPU 空转。
+
+对比 mutex 加锁失败时的路径（Linux 下走 futex 系统调用）：
+把线程放进等待队列、挂起，CPU 转去调度其他可运行的线程；解锁时再通过系统调用唤醒等待者。
+一次完整的用户态/内核态切换（保存寄存器现场、重新被调度上 CPU）通常落在 1~10 微秒量级。</code></pre>
+<p><strong>该用自旋锁还是互斥锁</strong>，取决于临界区能”关多久”——本质是一个简单的不等式：临界区的执行时间，相比两次上下文切换的开销，谁更大。</p>
+<table style="width:100%;">
+<colgroup>
+<col style="width: 20%" />
+<col style="width: 37%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+</colgroup>
+<thead>
+<tr>
+<th>场景</th>
+<th>临界区时长</th>
+<th>推荐</th>
+<th>理由</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>极短的原子级操作（如自增计数器）</td>
+<td>几十纳秒级</td>
+<td>自旋锁</td>
+<td>忙等的浪费远小于一次上下文切换</td>
+</tr>
+<tr>
+<td>包含 I/O、复杂计算、可能阻塞的调用</td>
+<td>几十微秒以上</td>
+<td>互斥锁</td>
+<td>自旋这段时间足够调度很多别的工作，继续空转纯属浪费</td>
+</tr>
+<tr>
+<td>经验拐点</td>
+<td>10~20 微秒左右</td>
+<td>视情况</td>
+<td>这个量级正好接近上下文切换本身的开销，谁划算取决于具体硬件和负载</td>
+</tr>
+</tbody>
+</table>
+<p><strong>单核 CPU
+上自旋锁是个陷阱</strong>：单核系统任意时刻只有一个执行流在跑。如果线程
+A 持有锁、线程 B 自旋等待，B 会一直占着这唯一的核心空转，A
+根本没有机会被重新调度上 CPU
+去执行完临界区、释放锁——这基本等价于死锁，除非内核可抢占、能强制把 B
+换下去。这也是为什么自旋锁只在<strong>多核环境、且预期锁很快会被释放</strong>的场景下才有意义，单核环境下应该无条件选互斥锁。</p>
+<p><strong>活锁与退避</strong>：多个线程同时自旋抢同一把锁，可能出现”大家都在抢、谁也抢不到”的惊群效应——每次锁一释放，所有自旋线程几乎同时尝试抢占，互相干扰缓存行，反而拖慢了真正拿到锁的那个线程。常见解法是失败后加入<strong>随机退避</strong>（等待一个随机时间再重试，打散竞争时机）、<strong>票据锁（ticket
+lock）</strong>保证先来后到的公平顺序、<strong>MCS
+锁</strong>让每个等待线程只在自己私有的缓存行上自旋（减少多个线程反复争抢同一条共享缓存行带来的总线流量）。</p>
+<p><strong>自适应自旋</strong>：更精细的实现不会非此即彼，而是先自旋一小段时间（经验上约为一次上下文切换开销的
+1.5~2
+倍），若这段时间内还没拿到锁，再退化为真正的睡眠等待——短暂持有的锁享受自旋的低延迟，长时间持有的锁又不会让等待线程无谓空转。Java
+的 <code>synchronized</code> 和 Linux 内核自身的 <code>mutex_lock</code>
+都采用了类似策略。</p>
+<p>C++20 给 <code>atomic_flag</code> 增加了
+<code>wait()</code>/<code>notify_one()</code>/<code>notify_all()</code>，可以在拿不到锁时避免纯粹的忙等，由标准库实现决定用更高效的方式阻塞：</p>
+<div class="sourceCode" id="cb18"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> lock<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> <span class="op">(</span><span class="va">flag_</span><span class="op">.</span>test_and_set<span class="op">(</span><span class="bu">std::</span>memory_order_acquire<span class="op">))</span> <span class="op">{</span></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>        <span class="va">flag_</span><span class="op">.</span>wait<span class="op">(</span><span class="kw">true</span><span class="op">,</span> <span class="bu">std::</span>memory_order_relaxed<span class="op">);</span> <span class="co">// 拿不到锁时不必一直空转</span></span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> unlock<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>    <span class="va">flag_</span><span class="op">.</span>clear<span class="op">(</span><span class="bu">std::</span>memory_order_release<span class="op">);</span></span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a>    <span class="va">flag_</span><span class="op">.</span>notify_one<span class="op">();</span></span>
+<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>（本机 Apple Clang + <code>-std=c++20</code> 编译运行验证：4
+线程各自增 10 万次，<code>counter</code> 稳定等于
+400000，两种写法结果一致。）生产环境如果确实需要自旋锁，通常直接用平台提供的实现（如
+POSIX 的 <code>pthread_spinlock_t</code>），而不是手写。</p>
+<p><strong>读写锁是建立在这两者之上的更高层抽象</strong>：允许多个读者并发持锁、写者独占，解决的是”读多写少”场景下互斥锁把所有读操作都串行化的浪费。<code>std::shared_mutex</code>（C++17）提供了
+<code>lock_shared()</code>/<code>unlock_shared()</code>（读者用）和
+<code>lock()</code>/<code>unlock()</code>（写者用）两套接口；多数标准库实现里它是基于互斥锁/条件变量搭建的，不是自旋型实现——想要”读者多、临界区短、优先自旋”的读写锁，仍然需要自己实现或依赖第三方库。</p>
+<hr />
+<h2
+id="十二单线程高并发的另一条路io-多路复用">十二、单线程高并发的另一条路：I/O
+多路复用</h2>
+<p>前面几节的并发模型都是”一个任务对应一个线程”，线程数随并发连接数线性增长；网络服务器面对成千上万个连接时，另一条路是<strong>单线程/少量线程
++ I/O
+多路复用</strong>：一个线程同时监视一大堆文件描述符，等待其中任意一个进入就绪状态（可读/可写/异常）再去处理它，避免了”一个连接一个线程”的内存和调度开销。Linux
+下这条路径有三代实现：<code>select</code> → <code>poll</code> →
+<code>epoll</code>。</p>
+<table>
+<colgroup>
+<col style="width: 18%" />
+<col style="width: 30%" />
+<col style="width: 24%" />
+<col style="width: 27%" />
+</colgroup>
+<thead>
+<tr>
+<th>维度</th>
+<th><code>select</code></th>
+<th><code>poll</code></th>
+<th><code>epoll</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>内核数据结构</td>
+<td>位图 <code>fd_set</code></td>
+<td><code>struct pollfd</code> 数组</td>
+<td>红黑树（管理注册的 fd）+ 就绪链表</td>
+</tr>
+<tr>
+<td>fd 数量限制</td>
+<td>默认 1024（受编译期常量 <code>FD_SETSIZE</code> 限制）</td>
+<td>无硬性上限（受 <code>ulimit -n</code> 约束）</td>
+<td>无硬性上限</td>
+</tr>
+<tr>
+<td>每次调用的开销</td>
+<td>用户态构造整个 <code>fd_set</code>
+并整体拷贝进内核，内核遍历<strong>所有</strong>注册 fd 逐个检查</td>
+<td>拷贝整个 <code>pollfd</code>
+数组进内核，同样遍历<strong>所有</strong> fd</td>
+<td><code>epoll_ctl</code>
+只在注册/取消监视时调用一次；<code>epoll_wait</code>
+不需要每次都重新传入完整 fd 集合</td>
+</tr>
+<tr>
+<td>时间复杂度</td>
+<td>O(n)，n 是监视的 fd 总数</td>
+<td>O(n)</td>
+<td>O(k)，k 是<strong>当前就绪的连接数</strong>，与监视的 fd
+总数无关</td>
+</tr>
+<tr>
+<td>触发模式</td>
+<td>仅水平触发（LT）</td>
+<td>仅水平触发（LT）</td>
+<td>支持水平触发（LT，默认）和边缘触发（ET）</td>
+</tr>
+<tr>
+<td>跨平台性</td>
+<td>是，POSIX 标准</td>
+<td>是，POSIX 标准</td>
+<td>否，Linux 专有（macOS 对应 <code>kqueue</code>，Windows 对应
+IOCP）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>为什么 epoll 能做到 O(活跃连接数) 而不是
+O(总连接数)</strong>：select/poll
+的模型是”每次调用都重新告诉内核我关心哪些
+fd”，内核每次都要把整个集合拷进来、逐个检查一遍状态——一万个连接里哪怕只有十个真正活跃，也要做一万次检查。epoll
+把”注册关心哪些 fd”和”查询就绪状态”这两件事解耦：<code>epoll_ctl</code>
+把 fd
+挂进内核维护的一棵红黑树（选红黑树是因为增删查都要频繁发生，需要稳定的
+O(log n)）；fd
+真正就绪时，内核通过设备驱动的回调机制主动把它加入一条独立的就绪链表；<code>epoll_wait</code>
+只需要把这条就绪链表的内容拷给用户态，开销天然只跟”当前有多少就绪”成正比，和”总共注册了多少”无关。</p>
+<p><strong>水平触发（LT）与边缘触发（ET）</strong>：LT 是 select/poll
+唯一支持、也是 epoll 的默认模式——只要一个 fd
+处于就绪状态（比如读缓冲区还有数据没读完），每次调用都会重新通知，不管上一次有没有处理完，编程模型简单，但处理不及时会反复被通知。ET
+是 epoll 独有模式——只在 fd
+就绪状态<strong>发生跳变的那一刻</strong>通知一次（从”无数据”变成”有数据”的瞬间），之后即便数据没读完也不会再通知，直到下一次新的跳变。</p>
+<pre><code>LT: fd 只要有数据就一直通知
+    ─●───●───●───●───●─→  （每次 epoll_wait 都返回这个 fd，直到数据被读完）
+
+ET: 只在状态跳变的瞬间通知一次
+    ─●───────────────────→  （只在&quot;从无到有&quot;这一下通知，之后必须自己一次读干净）</code></pre>
+<p>ET 模式下必须<strong>一次性把数据处理完</strong>：配合非阻塞
+I/O，用循环反复 <code>read()</code> 直到返回
+<code>EAGAIN</code>（缓冲区已读空）才停止；如果只读了一部分就跳出循环、以为”下次还会通知我”，实际上不会有新通知，导致数据滞留、连接卡死。ET
+能减少 <code>epoll_wait</code>
+被调用和返回的次数，在连接数巨大的场景下降低系统调用总数，代价是编程复杂度更高，必须严格保证”非阻塞
+I/O + 循环读到 EAGAIN”这个模式。</p>
+<p><strong>实践选择</strong>：连接数不多（几十到几百量级）、或者需要跨平台，用
+<code>select</code>/<code>poll</code>
+足够，没必要为理论上的性能优势引入平台耦合（epoll 是 Linux 专有，macOS
+要换成 <code>kqueue</code>，Windows 换成 IOCP）；Linux
+平台、高并发长连接场景（网络服务器、反向代理）用
+<code>epoll</code>，O(活跃连接数) 相比 O(总连接数)
+的优势会随连接规模扩大越来越明显。选定 <code>epoll</code> 后默认用 LT
+模式即可——它相比 select/poll 的核心优势（O(k) 而不是 O(n)）在 LT
+下已经成立；ET 只是在此基础上进一步压缩系统调用次数，不是使用 epoll
+的必要条件，除非确认非阻塞 I/O 循环读的写法已经处理正确，否则不必为了 ET
+承担额外的复杂度和隐蔽 bug 风险。</p>
+<p>I/O
+多路复用和本章前面的线程模型不是互斥的两条路，而是常常结合使用：一个进程内跑少量线程（通常对应
+CPU 核数），每个线程各自跑一个 <code>epoll</code>
+事件循环，用多路复用解决”单线程如何同时应对海量连接”，用少量线程解决”如何利用多核”——这正是
+Nginx、Redis 等高性能服务器的经典架构。</p>
 <hr />
 <p><a href="index.html">← 返回索引</a></p>
 </div>
