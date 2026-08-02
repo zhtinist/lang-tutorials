@@ -2,6 +2,12 @@
 
 ---
 
+> 🧭 **看完题目不知道用哪个算法？** 先看 **[算法选择思维导图 · 看题选算法](algorithm-decision-map.md)**：
+> 一个交互式决策地图，把「题目里能看到的特征」直接映射到「该用的算法 → 落到哪一种具体子分支 → 对应笔记」。
+> 专治「打家劫舍、最长子序列这类题想不到是 DP」——支持输入特征词实时检索。
+
+---
+
 ## 目录
 
 > **按 CLRS 章节分类查找**：[clrs-index.md](clrs-index.md) 把本专题里源自《算法导论》的内容
@@ -31,6 +37,7 @@
 
 | 专题 | 文件 | 核心内容 |
 |------|------|----------|
+| 🧭 算法选择思维导图 | [algorithm-decision-map.md](algorithm-decision-map.md) | 看题选算法：题目特征 → 算法 → 具体子分支（交互检索） |
 | 二分搜索 | [binary-search.md](binary-search.md) | 基础二分、左右边界、二分答案 |
 | 双指针 | [two-pointer.md](two-pointer.md) | 快慢指针、左右指针、nSum模板 |
 | 滑动窗口 | [sliding-window.md](sliding-window.md) | 定长/变长窗口、哈希表辅助 |
