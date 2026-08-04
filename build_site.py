@@ -25,7 +25,11 @@ ZH_ONLY = [("algo-notes", "algo", "算法笔记"),
            ("interview-baguwen", "baguwen", "面试八股"),
            ("cs-fundamentals-notes", "csbase", "计算机基础"),
            ("java-ecosystem-notes", "javaeco", "Java 生态")]
-LANGS = ["zh"]  # 英文版暂停维护,先隐藏入口(源文件保留在 *-tutorial-en/,以后需要时改回 ["zh", "en"] 即可)
+LANGS = ["zh", "en"]
+# 已完成英文版、参与 zh/en 双语镜像的教程(sub 代号)。
+# 其余教程(python/go 及所有 ZH_ONLY 板块)暂时只有中文,不出现在 en 站点,也不显示语言切换按钮。
+# 以后补齐某教程英文版后,把它的 sub 代号加进来即可自动生成 en 页面并启用切换。
+BILINGUAL = {"java"}
 
 TOGGLE_JS = ("function switchLang(){var p=location.pathname,en=p.indexOf('/en/')>-1,"
              "n=en?p.replace('/en/','/zh/'):p.replace('/zh/','/en/');"
@@ -47,23 +51,38 @@ def lang_pair(lang):
             f'<span class="lp{en}">EN</span>')
 
 
-def toggle_html(lang):
-    # 只注入切换脚本;可见入口在顶栏(topnav-lang),侧边按钮已移除
+def toggle_html():
+    # 注入语言切换脚本
     return f'<script>{TOGGLE_JS}</script>'
+
+
+def lang_link(lang):
+    """顶栏语言切换入口(仅在既有中文又有英文的页面显示)。"""
+    return (f'<a class="topnav-lang" href="#" onclick="switchLang();return false;" '
+            f'title="切换语言 / Switch language">🌐 {lang_pair(lang)}</a>')
+
+
+def tuts_for(lang):
+    """zh 显示全部教程;en 只显示已完成英文版的教程。"""
+    return TUTS if lang == "zh" else [t for t in TUTS if t[1] in BILINGUAL]
 
 
 def navbar(lang, sub_active, lang_root):
     parts = [f'<a class="home" href="{lang_root}/index.html">'
              f'<span class="logo">📚</span><span class="brand">{HOME_TITLE[lang]}</span></a>']
-    for _, sub, disp in TUTS:
+    for _, sub, disp in tuts_for(lang):
         cls = ' style="color:var(--accent-dark);font-weight:700"' if sub == sub_active else ""
         parts.append(f'<a href="{lang_root}/{sub}/index.html"{cls}>{disp}</a>')
     if lang == "zh":
         for _, sub, disp in ZH_ONLY:
             cls = ' style="color:var(--accent-dark);font-weight:700"' if sub == sub_active else ""
             parts.append(f'<a href="{lang_root}/{sub}/index.html"{cls}>{disp}</a>')
+    extra = ""
+    if sub_active in BILINGUAL:  # 该页两种语言都有,才给切换入口
+        parts.append(lang_link(lang))
+        extra = toggle_html()
     return ('<div class="topbar"><div class="wrap">' + "\n".join(parts) + '</div></div>'
-            + '\n<div class="wrap">')
+            + extra + '\n<div class="wrap">')
 
 
 def first_h1(text):
@@ -99,7 +118,7 @@ def home_html(lang):
     cards = "\n".join(
         (f'<a class="card" href="{sub}/index.html"><h3>{disp}</h3>'
          f'<p>{("从底层实现视角讲 " + disp + ":内存模型、对象布局、并发、标准库,处处与 C/C++ 对照。") if lang=="zh" else ("Understand " + disp + " from the implementation up: memory model, object layout, concurrency, and the standard library — always contrasted with C/C++.")}</p></a>')
-        for _, sub, disp in TUTS)
+        for _, sub, disp in tuts_for(lang))
     ZH_ONLY_DESC = {
         "algo-notes": "数据结构手写实现、核心刷题框架、经典数据结构、暴力搜索、动态规划与其他算法技巧。",
         "architecture-notes": "五种经典架构模式、RESTful、整洁架构、DDD,学会选型而非背名词。",
@@ -123,17 +142,19 @@ def home_html(lang):
                   '源码见 <a href="https://github.com/zhtinist/lang-tutorials">GitHub 仓库</a>。')
     else:
         lead = ("Assuming you already know C/C++ — pointers, stack/heap, pass-by-value vs. reference, manual memory management.<br>"
-                "These three tutorials skip the basic syntax and instead explain <b>what actually happens under the hood for every operation</b>, always contrasted with C/C++.")
+                "This tutorial skips the basic syntax and instead explains <b>what actually happens under the hood for every operation</b>, always contrasted with C/C++.")
         credit = ('This content was written and proofread with the help of <b>Claude</b> and <b>Cursor</b>. '
                   'Author / maintainer: HTZHU. '
                   'Source on <a href="https://github.com/zhtinist/lang-tutorials">GitHub</a>.')
-    nav_items = "".join(f'<a href="{sub}/index.html">{disp}</a>' for _, sub, disp in TUTS)
+    nav_items = "".join(f'<a href="{sub}/index.html">{disp}</a>' for _, sub, disp in tuts_for(lang))
     if lang == "zh":
         nav_items += "".join(f'<a href="{sub}/index.html">{disp}</a>' for _, sub, disp in ZH_ONLY)
+    nav_items += lang_link(lang)  # 首页两种语言都有,始终给切换入口
     return f"""<!doctype html><html lang="{'zh-CN' if lang=='zh' else 'en'}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{T}</title>
-<link rel="stylesheet" href="../assets/style.css"></head><body>
+<link rel="stylesheet" href="../assets/style.css">
+<script>{TOGGLE_JS}</script></head><body>
 <div class="topbar"><div class="wrap"><a class="home" href="index.html"><span class="logo">📚</span><span class="brand">{T}</span></a>{nav_items}</div></div>
 <div class="wrap">
 <div class="hero"><h1>{T}</h1><p>{lead}</p></div>
@@ -144,7 +165,8 @@ def home_html(lang):
 
 def main():
     for lang in LANGS:
-        available = [t for t in TUTS if os.path.isdir(os.path.join(ROOT, src_for(t[0], lang)))]
+        available = [t for t in tuts_for(lang)
+                     if os.path.isdir(os.path.join(ROOT, src_for(t[0], lang)))]
         if not available:
             print(f"[跳过] {lang}:无源目录"); continue
         for src, sub, _ in available:
@@ -165,10 +187,12 @@ def main():
         with open(os.path.join(DOCS, lang, "index.html"), "w", encoding="utf-8") as f:
             f.write(home_html(lang))
         print(f"  {lang}/ 首页完成")
-    # 根入口:英文版暂停维护,直接跳转中文版
+    # 根入口:按上次记忆的语言偏好跳转,默认中文
     root = ('<!doctype html><meta charset="utf-8"><title>lang-tutorials</title>'
-            '<script>location.replace("zh/index.html");</script>'
-            '<p style="font-family:sans-serif">Redirecting… <a href="zh/index.html">中文</a></p>')
+            '<script>var l="zh";try{l=localStorage.getItem("lang")||"zh"}catch(e){}'
+            'location.replace(l==="en"?"en/index.html":"zh/index.html");</script>'
+            '<p style="font-family:sans-serif">Redirecting… '
+            '<a href="zh/index.html">中文</a> / <a href="en/index.html">EN</a></p>')
     open(os.path.join(DOCS, "index.html"), "w", encoding="utf-8").write(root)
     open(os.path.join(DOCS, ".nojekyll"), "w").close()
     print("  根入口 + .nojekyll 完成")

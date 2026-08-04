@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Variables and the Memory Model: What Really Happens in a =
+b</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../../assets/style.css" />
+</head>
+<body>
+<div class="topbar"><div class="wrap"><a class="home" href="../index.html"><span class="logo">📚</span><span class="brand">Other Languages for C/C++ Programmers</span></a>
+<a href="../java/index.html" style="color:var(--accent-dark);font-weight:700">Java</a>
+<a class="topnav-lang" href="#" onclick="switchLang();return false;" title="切换语言 / Switch language">🌐 <span class="lp">中文</span><span class="sep">/</span><span class="lp on">EN</span></a></div></div><script>function switchLang(){var p=location.pathname,en=p.indexOf('/en/')>-1,n=en?p.replace('/en/','/zh/'):p.replace('/zh/','/en/');try{localStorage.setItem('lang',en?'zh':'en')}catch(e){}location.href=n;}</script>
+<div class="wrap">
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#variables-and-the-memory-model-what-really-happens-in-a-b"
+id="toc-variables-and-the-memory-model-what-really-happens-in-a-b">Variables
+and the Memory Model: What Really Happens in <code>a = b</code></a>
+<ul>
+<li><a href="#basic-syntax-of-declaration-and-assignment"
+id="toc-basic-syntax-of-declaration-and-assignment">1. Basic Syntax of
+Declaration and Assignment</a></li>
+<li><a href="#the-two-camps" id="toc-the-two-camps">2. The Two
+Camps</a></li>
+<li><a href="#local-variable-table-slots-where-variables-live"
+id="toc-local-variable-table-slots-where-variables-live">3. Local
+Variable Table Slots: Where Variables Live</a></li>
+<li><a href="#a-b-the-core-of-the-core"
+id="toc-a-b-the-core-of-the-core">4. <code>a = b</code>: The Core of the
+Core</a></li>
+<li><a href="#vs-equals" id="toc-vs-equals">5. <code>==</code> vs
+<code>equals</code></a></li>
+<li><a href="#null" id="toc-null">6. <code>null</code></a></li>
+<li><a href="#final-variable-semantics"
+id="toc-final-variable-semantics">7. <code>final</code> Variable
+Semantics</a></li>
+<li><a href="#putting-them-into-object-fields"
+id="toc-putting-them-into-object-fields">8. Putting Them into Object
+Fields</a></li>
+<li><a
+href="#escape-analysis-language-semantics-vs-hotspot-implementation"
+id="toc-escape-analysis-language-semantics-vs-hotspot-implementation">9.
+Escape Analysis: Language Semantics vs HotSpot Implementation</a></li>
+<li><a href="#heap-vs-stack-five-dimensions-often-asked-in-interviews"
+id="toc-heap-vs-stack-five-dimensions-often-asked-in-interviews">10.
+Heap vs Stack: Five Dimensions Often Asked in Interviews</a></li>
+<li><a href="#summary" id="toc-summary">Summary</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1
+id="variables-and-the-memory-model-what-really-happens-in-a-b">Variables
+and the Memory Model: What Really Happens in <code>a = b</code></h1>
+<p>Most of the “weird bugs” a C/C++ programmer hits after switching to
+Java stem from a misunderstanding of what actually happens in memory
+during <strong>assignment, comparison, and parameter passing</strong>.
+This chapter thoroughly clarifies stack frames, the heap, and the two
+camps of variables.</p>
+<h2 id="basic-syntax-of-declaration-and-assignment">1. Basic Syntax of
+Declaration and Assignment</h2>
+<p>In Java, declaring a variable is <code>type name = value;</code>,
+almost the same as C:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> VarDemo <span class="op">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Primitive types: the variable holds the value directly</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span> age <span class="op">=</span> <span class="dv">20</span><span class="op">;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>        <span class="dt">double</span> price <span class="op">=</span> <span class="fl">9.9</span><span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Reference types: the variable holds &quot;a reference pointing to an object&quot;</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>        <span class="bu">String</span> name <span class="op">=</span> <span class="st">&quot;Ada&quot;</span><span class="op">;</span>              <span class="co">// a String object</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span><span class="op">[]</span> nums <span class="op">=</span> <span class="kw">new</span> <span class="dt">int</span><span class="op">[]{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">};</span>  <span class="co">// an array object</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>age<span class="op">);</span>    <span class="co">// 20</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>price<span class="op">);</span>  <span class="co">// 9.9</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>name<span class="op">);</span>   <span class="co">// Ada</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>nums<span class="op">[</span><span class="dv">0</span><span class="op">]);</span><span class="co">// 1</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Assignment: copy the value/reference on the right of = into the variable on the left</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span> age2 <span class="op">=</span> age<span class="op">;</span>      <span class="co">// what&#39;s copied is the numeric value</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>        age2 <span class="op">=</span> <span class="dv">99</span><span class="op">;</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>age<span class="op">);</span>     <span class="co">// 20, unaffected</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span><span class="op">[]</span> nums2 <span class="op">=</span> nums<span class="op">;</span>  <span class="co">// what&#39;s copied is the &quot;reference&quot;</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>        nums2<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="dv">100</span><span class="op">;</span></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>nums<span class="op">[</span><span class="dv">0</span><span class="op">]);</span> <span class="co">// 100! both variables point to the same array</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Changing <code>age2</code> does not affect <code>age</code>, but
+changing <code>nums2[0]</code> also changes <code>nums[0]</code>. This
+is neither coincidence nor a bug, but the core mechanism this chapter is
+about to explain thoroughly.</p>
+<p>Let’s put the core conclusion up front, then argue it point by
+point:</p>
+<blockquote>
+<p>Java variables come in <strong>two camps</strong>:
+<strong>primitive-type</strong> variables hold the “value” directly;
+<strong>reference-type</strong> variables hold a “reference value” — a
+JVM-managed pointer that points to an object on the heap.
+<code>a = b</code> is always “copy the bits inside b into a”: for
+primitive types this copies the value itself, for reference types it
+copies that pointer (from then on the two variables point to the same
+heap object).</p>
+</blockquote>
+<h2 id="the-two-camps">2. The Two Camps</h2>
+<table>
+<colgroup>
+<col style="width: 18%" />
+<col style="width: 18%" />
+<col style="width: 36%" />
+<col style="width: 27%" />
+</colgroup>
+<thead>
+<tr>
+<th>Camp</th>
+<th>Members</th>
+<th>What the variable stores</th>
+<th>Where the data is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Primitive types</td>
+<td><code>byte short int long float double char boolean</code></td>
+<td><strong>the value itself</strong> (bits)</td>
+<td>where the variable is (a stack frame slot, or inlined in an object
+field)</td>
+</tr>
+<tr>
+<td>Reference types</td>
+<td>classes, interfaces, arrays, <code>String</code>, wrapper classes,
+enums…</td>
+<td><strong>the reference value</strong> (≈ pointer)</td>
+<td>the object the reference points to is on the
+<strong>heap</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Put in C terms: - A primitive-type variable ≈ <code>int a;</code>;
+the memory of <code>a</code> directly is that integer. - A
+reference-type variable ≈ <code>Foo* p;</code>; the memory of
+<code>p</code> holds an address, and the real <code>Foo</code> is on the
+heap (allocated by <code>new</code>). <strong>But you cannot do
+arithmetic on this “pointer,” cannot dereference it to take an address,
+cannot cast it to an integer</strong> — it is a JVM-managed, constrained
+pointer.</p>
+<blockquote>
+<p>HotSpot implementation detail: a reference on a 64-bit JVM usually
+occupies 8 bytes, but with <strong>compressed pointers
+(CompressedOops)</strong> enabled it is squeezed to 4 bytes (using a
+35-bit addressable encoding, effective by default for heaps &lt; 32GB).
+See <a href="04-数据类型.html">“Data Types”</a>. The language
+specification does not prescribe the concrete representation of a
+reference, only its semantics.</p>
+</blockquote>
+<p><strong>Why divide into two camps, rather than “everything is an
+object” like Python/Smalltalk</strong>: this is a trade-off between
+performance and consistency. The “everything is an object” model is
+conceptually cleaner — any value has a uniform method-call interface,
+and containers can hold anything indiscriminately — but the cost is that
+every integer, every boolean, must be an object on the heap, and even a
+loop variable <code>i++</code> goes through an object allocation (or at
+least a boxing operation and a cache lookup) and an indirect reference
+dereference, whereas a register-level integer addition by the CPU takes
+just one clock cycle. Java’s trade-off is: pull the eight most frequent,
+fixed-size types that semantically just “are a value”
+(<code>byte/short/int/long/float/double/char/boolean</code>) out of the
+object system, store them directly as values in stack frame slots or
+object fields, without going through indirect reference addressing,
+without occupying the extra space of an object header (see the
+object-header overhead in <a href="04-数据类型.html">“Data Types”</a>),
+able to be mapped by the JIT directly into registers to participate in
+operations. The cost is that primitive types lose the uniformity of
+“everything is an object” — they cannot be put into generic containers
+that require <code>Object</code> (<code>List&lt;int&gt;</code> is
+illegal), and must be boxed into wrapper types like <code>Integer</code>
+to be brought into the object system, which gives rise to the boxing
+overhead and wrapper-class caching discussed in <a
+href="04-数据类型.html">“Data Types”</a>. This is “sparing 99% of
+high-frequency operations the object overhead” in exchange for “an extra
+type system that requires manual boxing/unboxing,” rather than making
+all values uniform but all slow.</p>
+<h2 id="local-variable-table-slots-where-variables-live">3. Local
+Variable Table Slots: Where Variables Live</h2>
+<p>Each method call pushes a <strong>stack frame</strong> onto the
+current thread’s <strong>JVM stack</strong>; the frame contains a
+<strong>local variable table</strong>, composed of a number of
+<strong>slots</strong> (the count is fixed at compile time, see the
+<code>javap</code> in <a href="01-运行模型.html">“Runtime
+Model”</a>).</p>
+<ul>
+<li>A slot is 32 bits. <code>int/float/reference</code> each occupy 1
+slot; <code>long/double</code> occupy 2 consecutive slots.</li>
+<li>Both method parameters and locals declared inside the method live in
+this table.</li>
+</ul>
+<p>For a primitive-type local variable, the slot holds that value. For a
+reference-type local variable, the slot holds that reference (pointing
+into the heap). <strong>The object body is never in the slot, always on
+the heap</strong> (except with escape analysis, see the end of the
+chapter).</p>
+<h2 id="a-b-the-core-of-the-core">4. <code>a = b</code>: The Core of the
+Core</h2>
+<h3 id="primitive-types-copy-the-value">4.1 Primitive Types: Copy the
+Value</h3>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> b <span class="op">=</span> <span class="dv">100</span><span class="op">;</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> a <span class="op">=</span> b<span class="op">;</span>   <span class="co">// copy b&#39;s bits (100) into a&#39;s slot</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> <span class="dv">200</span><span class="op">;</span>     <span class="co">// only changes a&#39;s own slot, b unaffected</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="co">// at this moment a=200, b=100</span></span></code></pre></div>
+<p>Memory diagram (stack frame local variable table):</p>
+<pre><code> before assignment    after a = b          after a = 200
+┌──────────┐       ┌──────────┐        ┌──────────┐
+│ b │ 100  │       │ b │ 100  │        │ b │ 100  │
+├──────────┤       ├──────────┤        ├──────────┤
+│ a │  ??  │       │ a │ 100  │←copy   │ a │ 200  │
+└──────────┘       └──────────┘        └──────────┘
+     Two independent slots, unaffecting each other. Equivalent to C&#39;s int a=b;</code></pre>
+<p>This is exactly the same as C, no surprises.</p>
+<h3
+id="reference-types-copy-the-reference-whats-copied-is-the-pointer-not-the-object">4.2
+Reference Types: Copy the Reference (what’s copied is the pointer, not
+the object!)</h3>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span><span class="op">[]</span> b <span class="op">=</span> <span class="kw">new</span> <span class="dt">int</span><span class="op">[]{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">};</span>  <span class="co">// build an array object on the heap; b holds the reference to it</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span><span class="op">[]</span> a <span class="op">=</span> b<span class="op">;</span>                    <span class="co">// copy the &quot;reference value&quot;! a and b point to the same array</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>a<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="dv">99</span><span class="op">;</span>                      <span class="co">// modify the heap object through a</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>b<span class="op">[</span><span class="dv">0</span><span class="op">]);</span>       <span class="co">// prints 99! because b points to the same object</span></span></code></pre></div>
+<p><strong>This is the intuition a C programmer most needs to
+build</strong>: <code>int[] a = b;</code> does not copy the array, but
+copies that pointer. It is equivalent to C’s <code>int* a = b;</code> (a
+shallow pointer copy), and <strong>not</strong> a
+<code>memcpy</code>.</p>
+<p>Memory diagram:</p>
+<pre><code>      stack frame local var table          Heap
+   ┌────────────────┐         ┌───────────────────────┐
+   │ b │  ref ●──────┼────────▶│ int[3] object          │
+   ├────────────────┤    ┌───▶│ [0]=99 [1]=2 [2]=3     │
+   │ a │  ref ●──────┼────┘    │ (a[0]=99 changes here) │
+   └────────────────┘         └───────────────────────┘
+      a and b are two pointers to the same heap object (aliasing)</code></pre>
+<p>Compared with the primitive-type diagram, the difference is clear at
+a glance:</p>
+<pre><code>   Object a = b  (reference type)      int a = b  (primitive type)
+   ┌───────┐                          ┌───────┐
+   │ b │●──┼──┐                       │ b │100│
+   ├───────┤  │   heap                ├───────┤
+   │ a │●──┼──┴──▶[ object ]           │ a │100│ ← independent copy
+   └───────┘  two pointers share one   └───────┘  two independent values
+              object</code></pre>
+<p>Commit one sentence to memory: <strong>primitive-type assignment
+clones the “data,” reference-type assignment clones the
+“pointer.”</strong> The latter produces <strong>aliasing</strong> —
+modifying the object through either variable is visible to the other.
+This is exactly the same behavior as two pointers in C pointing to the
+same <code>malloc</code>ed memory.</p>
+<h3 id="what-if-you-want-a-real-copy">4.3 What If You Want a Real
+Copy</h3>
+<p>Java does not deep-copy automatically (there is no C++ copy
+constructor triggered on assignment). To get an independent copy you
+must do it explicitly:</p>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span><span class="op">[]</span> a <span class="op">=</span> b<span class="op">.</span><span class="fu">clone</span><span class="op">();</span>               <span class="co">// shallow copy of the array, yields a new object</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span><span class="op">[]</span> a2 <span class="op">=</span> <span class="bu">Arrays</span><span class="op">.</span><span class="fu">copyOf</span><span class="op">(</span>b<span class="op">,</span> b<span class="op">.</span><span class="fu">length</span><span class="op">);</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="bu">List</span><span class="op">&lt;</span>T<span class="op">&gt;</span> copy <span class="op">=</span> <span class="kw">new</span> <span class="bu">ArrayList</span><span class="op">&lt;&gt;(</span>src<span class="op">);</span>  <span class="co">// the collection&#39;s copy constructor</span></span></code></pre></div>
+<p>Note these are mostly <strong>shallow copies</strong>: the
+container/array itself is new, but if it holds references inside, the
+element references still share the same batch of objects. A deep copy
+requires you to copy layer by layer.</p>
+<p>Let’s measure this “shallow” — a 2D array <code>clone()</code> only
+copies the outer references, the inner arrays are still shared:</p>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span><span class="op">[][]</span> grid <span class="op">=</span> <span class="op">{{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">},</span> <span class="op">{</span><span class="dv">3</span><span class="op">,</span> <span class="dv">4</span><span class="op">}};</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span><span class="op">[][]</span> copy <span class="op">=</span> grid<span class="op">.</span><span class="fu">clone</span><span class="op">();</span>   <span class="co">// clone() is a shallow copy: only copies the outer references</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>copy<span class="op">[</span><span class="dv">0</span><span class="op">][</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="dv">99</span><span class="op">;</span>               <span class="co">// penetrates into the shared inner array</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>grid<span class="op">[</span><span class="dv">0</span><span class="op">][</span><span class="dv">0</span><span class="op">]);</span>          <span class="co">// 99  &lt;- the original object was changed too!</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>copy<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">==</span> grid<span class="op">[</span><span class="dv">0</span><span class="op">]);</span>  <span class="co">// true -- the inner is the same array object</span></span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a><span class="co">// A real deep copy must copy the inner arrays one by one</span></span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span><span class="op">[][]</span> deep <span class="op">=</span> <span class="kw">new</span> <span class="dt">int</span><span class="op">[</span>grid<span class="op">.</span><span class="fu">length</span><span class="op">][];</span></span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> grid<span class="op">.</span><span class="fu">length</span><span class="op">;</span> i<span class="op">++)</span> deep<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> grid<span class="op">[</span>i<span class="op">].</span><span class="fu">clone</span><span class="op">();</span></span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>deep<span class="op">[</span><span class="dv">1</span><span class="op">][</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="op">-</span><span class="dv">1</span><span class="op">;</span></span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>grid<span class="op">[</span><span class="dv">1</span><span class="op">][</span><span class="dv">0</span><span class="op">]);</span>          <span class="co">// 3   &lt;- this time the original object is safe</span></span></code></pre></div>
+<h2 id="vs-equals">5. <code>==</code> vs <code>equals</code></h2>
+<p>Once you understand the two camps, this classic pitfall follows
+naturally.</p>
+<h3 id="compares-the-bits-in-the-variable"><code>==</code>: Compares
+“the bits in the variable”</h3>
+<ul>
+<li>Primitive types: compares the <strong>value</strong>.
+<code>3 == 3</code> → true. Intuitive.</li>
+<li>Reference types: compares the <strong>reference</strong> — i.e. “is
+it the same heap object” (whether the addresses are the same),
+<strong>not the content</strong>.</li>
+</ul>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> x <span class="op">=</span> <span class="kw">new</span> <span class="bu">String</span><span class="op">(</span><span class="st">&quot;hi&quot;</span><span class="op">);</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> y <span class="op">=</span> <span class="kw">new</span> <span class="bu">String</span><span class="op">(</span><span class="st">&quot;hi&quot;</span><span class="op">);</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>x <span class="op">==</span> y<span class="op">);</span>        <span class="co">// false! two different heap objects, two different pointers</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>x<span class="op">.</span><span class="fu">equals</span><span class="op">(</span>y<span class="op">));</span>   <span class="co">// true! compares content</span></span></code></pre></div>
+<p>Memory diagram:</p>
+<pre><code> ┌───────┐        heap
+ │ x │●──┼──▶[ String &quot;hi&quot; object① ]
+ ├───────┤
+ │ y │●──┼──▶[ String &quot;hi&quot; object② ]   x==y compares ● vs ●, different targets→false
+ └───────┘                             x.equals(y) compares char by char→true</code></pre>
+<h3 id="equals-compares-content-semantic-equality"><code>equals</code>:
+Compares “content” (semantic equality)</h3>
+<p><code>equals</code> is a <strong>method</strong> defined on
+<code>Object</code>, and can be overridden. The default implementation
+(<code>Object.equals</code>) is just <code>==</code> (compares
+references); but <code>String</code>, wrapper classes, collections, etc.
+<strong>override</strong> it to compare logical content instead. So: -
+To compare string/object content, <strong>always use
+<code>equals</code></strong>. - Use <code>==</code> only when you really
+want to ask “is it the same object,” or to compare primitive types, or
+to compare against <code>null</code>.</p>
+<p>Literals also have a “string constant pool” detail: the same literal
+reuses the same object in the pool, whereas <code>new String(...)</code>
+forces a new object — this happens to illuminate the difference between
+<code>==</code> (compares references) and <code>equals</code> (compares
+content) crystal-clearly:</p>
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> p <span class="op">=</span> <span class="st">&quot;hi&quot;</span><span class="op">;</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> q <span class="op">=</span> <span class="st">&quot;hi&quot;</span><span class="op">;</span>              <span class="co">// same literal -&gt; same object in the pool</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> n <span class="op">=</span> <span class="kw">new</span> <span class="bu">String</span><span class="op">(</span><span class="st">&quot;hi&quot;</span><span class="op">);</span>  <span class="co">// new forces creation of a new heap object</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>p <span class="op">==</span> q<span class="op">);</span>         <span class="co">// true  -- both point to that object in the pool</span></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>p <span class="op">==</span> n<span class="op">);</span>         <span class="co">// false -- n is another object</span></span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>p <span class="op">==</span> n<span class="op">.</span><span class="fu">intern</span><span class="op">());</span><span class="co">// true  -- intern() returns the one in the pool</span></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>p<span class="op">.</span><span class="fu">equals</span><span class="op">(</span>n<span class="op">));</span>    <span class="co">// true  -- content is always equal</span></span></code></pre></div>
+<blockquote>
+<p>Paired with <code>equals</code> is <code>hashCode</code>: the
+contract is “if equals is equal, then hashCode must be equal,” otherwise
+putting them into a <code>HashMap/HashSet</code> goes wrong. See <a
+href="07-复合数据结构.html">“Composite Data Structures”</a>. In C++ you
+provide <code>operator==</code> and <code>hash</code> for
+<code>unordered_map</code> — it’s the same thing.</p>
+</blockquote>
+<h3 id="a-counterintuitive-trap-wrapper-class-caching">A
+Counterintuitive Trap: Wrapper-Class Caching</h3>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="bu">Integer</span> a <span class="op">=</span> <span class="dv">100</span><span class="op">,</span> b <span class="op">=</span> <span class="dv">100</span><span class="op">;</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>a <span class="op">==</span> b<span class="op">);</span>   <span class="co">// true  —— 100 is in the cache range</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="bu">Integer</span> c <span class="op">=</span> <span class="dv">200</span><span class="op">,</span> d <span class="op">=</span> <span class="dv">200</span><span class="op">;</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>c <span class="op">==</span> d<span class="op">);</span>   <span class="co">// false —— 200 exceeds the cache, they are two objects</span></span></code></pre></div>
+<p><code>Integer</code> has an object cache for
+<code>[-128, 127]</code>; when boxing, it reuses the same object, so
+<code>==</code> happens to be true; beyond that a new object is created
+and <code>==</code> is false. <strong>This precisely shows that
+<code>==</code> compares references.</strong> To compare the values of
+wrapper classes, always use <code>equals</code> or unbox first. Details
+in <a href="04-数据类型.html">“Data Types”</a>.</p>
+<h2 id="null">6. <code>null</code></h2>
+<p><code>null</code> is the “null reference” of reference types,
+equivalent to C’s null pointer <code>nullptr</code> — the variable
+points to no object.</p>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="bu">String</span> s <span class="op">=</span> <span class="kw">null</span><span class="op">;</span>         <span class="co">// s&#39;s slot holds the &quot;null reference&quot; value</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>s<span class="op">.</span><span class="fu">length</span><span class="op">();</span>              <span class="co">// NullPointerException! &quot;dereferencing&quot; a null reference</span></span></code></pre></div>
+<p>The difference from C: dereferencing a null pointer in C is undefined
+behavior (most likely a segfault), while in Java it
+<strong>deterministically throws <code>NullPointerException</code>
+(NPE)</strong>, which can be caught and carries a stack trace (Helpful
+NPE / JEP 358: introduced in JDK 14 but off by default, on by default
+since JDK 15, able to indicate which variable was null). Primitive types
+<strong>cannot</strong> be <code>null</code> (they hold a value, not a
+reference); <code>int x = null;</code> is a compile error. This is also
+why unboxing a wrapper-class <code>Integer</code> into an
+<code>int</code> throws NPE if it is null.</p>
+<h2 id="final-variable-semantics">7. <code>final</code> Variable
+Semantics</h2>
+<p><code>final</code> is often used to parallel C++’s
+<code>const</code>, but the distinction must be precise:
+<strong><code>final</code> constrains “whether the variable’s slot can
+be assigned again,” not whether the object it points to can be
+changed.</strong></p>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="dt">final</span> <span class="dt">int</span> x <span class="op">=</span> <span class="dv">10</span><span class="op">;</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="co">// x = 20;                 // compile error: cannot reassign</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a><span class="dt">final</span> <span class="dt">int</span><span class="op">[]</span> arr <span class="op">=</span> <span class="op">{</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">};</span></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>arr<span class="op">[</span><span class="dv">0</span><span class="op">]</span> <span class="op">=</span> <span class="dv">99</span><span class="op">;</span>               <span class="co">// legal! changes the content of the heap object, doesn&#39;t touch the reference arr</span></span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a><span class="co">// arr = new int[5];       // compile error: cannot make arr point to another object</span></span></code></pre></div>
+<p>Understand it via the memory diagram: <code>final</code> locks down
+the slot on the left (cannot change what it points to), but cannot lock
+the content of the object in the heap on the right.</p>
+<pre><code> final int[] arr ●═══▶[ 1, 2, 3 ]   ═══ means this reference is locked and can&#39;t be re-pointed
+                        ↑ but the object content can still change: arr[0]=99 ok</code></pre>
+<ul>
+<li>To make “the object immutable too,” you must rely on the object’s
+own design (e.g. <code>String</code> is inherently immutable, or use an
+immutable collection <code>List.copyOf(...)</code>). This is similar to
+the C++ distinction of <code>const int* p</code> (can’t change the
+pointed-to content) vs <code>int* const p</code> (can’t change the
+target): <strong>Java’s <code>final</code> provides only the latter
+half</strong> — it locks the target, not the content.</li>
+<li><code>final</code> fields: must be assigned exactly once before
+construction completes, immutable afterward; there is a multi-thread
+visibility guarantee (after construction completes, other threads can
+see the correct final field values).</li>
+<li><code>final</code> local variables / parameters: often used for
+capture by a lambda (a lambda can only capture “effectively final” local
+variables, see <a href="06-函数与调用栈.html">“Functions and the Call
+Stack”</a>).</li>
+</ul>
+<p><strong>Why <code>final</code> locks only the reference, not the
+content, rather than offering deep freezing like some
+languages</strong>: the root cause still lies in the unified rule
+<code>a = b</code> — assignment always copies “the bits in the
+variable,” and all <code>final</code> can constrain is whether these
+bits can be overwritten afterward; it governs <strong>the storage
+location that is the variable</strong>, not the content of the heap
+memory that location points to. Whether the content of a heap object can
+change depends on whether the class’s own defined methods expose
+“mutators” (e.g. an array exposes <code>arr[i]=</code>, an
+<code>ArrayList</code> exposes <code>add</code>, whereas
+<code>String</code> simply provides no mutation methods at all) — this
+is each type’s own contract, and there is no unified way at the language
+level to “freeze” an object graph of arbitrary shape (an object may
+recursively reference other mutable objects through its fields, deep
+freezing would require recursively traversing and copying the whole
+graph, and would have to cope with cyclic references). Limiting
+<code>final</code> to the single semantics of “lock the storage
+location” — uniform, cheap, and statically verifiable — buys the ability
+for the compiler to perform definite assignment analysis and the
+safe-publication guarantee for multiple threads consistently on
+<strong>any</strong> type, without having to separately define what
+“deep immutable” means for each type. When you genuinely need deep
+immutability, leave it to the concrete type’s own implementation
+(<code>String</code> is immutable, <code>record</code> combined with
+immutable collections, <code>List.copyOf</code>) — that is more reliable
+than forcing a generic but semantically vague “deep freeze” at the
+language level.</p>
+<h2 id="putting-them-into-object-fields">8. Putting Them into Object
+Fields</h2>
+<p>The above discusses local variables (in stack frame slots).
+<strong>An object’s fields</strong> follow the same two-camp rule, only
+their storage location is <strong>inside the object on the
+heap</strong>:</p>
+<div class="sourceCode" id="cb16"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> <span class="bu">Node</span> <span class="op">{</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> value<span class="op">;</span>      <span class="co">// primitive-type field: the value is inlined directly in the Node object&#39;s memory</span></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>    <span class="bu">Node</span> next<span class="op">;</span>      <span class="co">// reference field: holds a reference pointing to another Node on the heap (or null)</span></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Memory diagram (a <code>Node</code> object on the heap):</p>
+<pre><code>The Node object on the heap
+┌─────────────────────────┐
+│ [object header mark+klass]│  ← see the object layout in Chapter 4
+│ value : 42              │  ← int value inlined
+│ next  : ref ●───────────┼──▶ another Node object (or null)
+└─────────────────────────┘</code></pre>
+<p>This is exactly what a linked list/tree looks like in Java:
+structurally isomorphic to C’s
+<code>struct Node { int value; struct Node* next; };</code>, the only
+differences being that <code>next</code> is a managed reference, the
+object is on the GC heap, and you don’t <code>free</code> it.</p>
+<h2 id="escape-analysis-language-semantics-vs-hotspot-implementation">9.
+Escape Analysis: Language Semantics vs HotSpot Implementation</h2>
+<p>The language specification says “objects are all on the heap.” But
+<strong>in HotSpot</strong>, the JIT’s <strong>escape analysis</strong>
+(see <a href="01-运行模型.html">“Runtime Model”</a>), if it proves that
+a <code>new</code>ed object won’t escape the current method, may do
+<strong>scalar replacement</strong>: break the object into several
+primitive values placed directly into stack frame slots or even
+registers, <strong>never entering the heap and needing no
+GC</strong>.</p>
+<div class="sourceCode" id="cb18"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> <span class="fu">distance</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">var</span> p <span class="op">=</span> <span class="kw">new</span> <span class="bu">Point</span><span class="op">(</span><span class="dv">3</span><span class="op">,</span> <span class="dv">4</span><span class="op">);</span>   <span class="co">// p does not escape this method</span></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> p<span class="op">.</span><span class="fu">x</span> <span class="op">*</span> p<span class="op">.</span><span class="fu">x</span> <span class="op">+</span> p<span class="op">.</span><span class="fu">y</span> <span class="op">*</span> p<span class="op">.</span><span class="fu">y</span><span class="op">;</span></span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">// After HotSpot optimization: there may be no new at all; x, y become two on-stack local variables</span></span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>So the precise statement is: - <strong>At the semantic
+level</strong>: reference-type objects are logically on the heap,
+assignment copies the reference, and aliasing holds. - <strong>At the
+implementation level</strong>: non-escaping objects may be
+<strong>scalar-replaced</strong> (broken into primitive values placed
+into stack frame slots/registers, rather than moving the whole object
+onto the stack), approaching the efficiency of C’s “struct on the stack”
+— but this is <strong>semantically transparent</strong> to the code you
+write; you need not, and cannot, control it directly.</p>
+<p>This explains why creating lots of short-lived small objects in Java
+is often not as slow as you’d imagine.</p>
+<h2 id="heap-vs-stack-five-dimensions-often-asked-in-interviews">10.
+Heap vs Stack: Five Dimensions Often Asked in Interviews</h2>
+<p>The previous sections have thoroughly explained the stack frame local
+variable table (slots) and heap objects separately; here we put the two
+head-to-head, comparing along the five dimensions most often asked
+about, and along the way answer “why their characteristics look the way
+they do.”</p>
+<table>
+<colgroup>
+<col style="width: 12%" />
+<col style="width: 43%" />
+<col style="width: 43%" />
+</colgroup>
+<thead>
+<tr>
+<th>Dimension</th>
+<th>Stack (JVM stack / per-thread)</th>
+<th>Heap (Heap / globally shared)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Stores what</td>
+<td>stack frames: local variable table (slots), operand stack, return
+address</td>
+<td>objects and arrays <code>new</code>ed</td>
+</tr>
+<tr>
+<td>Ownership</td>
+<td><strong>thread-private</strong>, each thread has its own independent
+stack</td>
+<td><strong>thread-shared</strong>, all threads see the same heap</td>
+</tr>
+<tr>
+<td>Lifecycle</td>
+<td>pushed on method call, popped and destroyed on return,
+deterministic</td>
+<td>an object lives until it becomes unreachable, judged by GC,
+non-deterministic (see <a href="09-错误处理与资源管理.html">“Error
+Handling and Resource Management”</a>)</td>
+</tr>
+<tr>
+<td>Allocation/reclamation speed</td>
+<td>extremely fast: pushing is essentially moving a stack-top
+pointer</td>
+<td>slower: the allocator must find a free block, GC periodically scans
+and reclaims</td>
+</tr>
+<tr>
+<td>Space size</td>
+<td>small and fixed (<code>-Xss</code>, default about
+512KB~1MB/thread)</td>
+<td>large and dynamically adjustable
+(<code>-Xms</code>/<code>-Xmx</code>)</td>
+</tr>
+<tr>
+<td>Thread safety</td>
+<td>inherently safe, stack frames are invisible to other threads</td>
+<td>needs synchronization mechanisms
+(<code>synchronized</code>/<code>volatile</code>, see <a
+href="10-并发模型.html">“Concurrency Model”</a>) to ensure safe
+multi-thread access</td>
+</tr>
+<tr>
+<td>Error on exhaustion</td>
+<td><code>StackOverflowError</code> (see the
+recursion-exhausts-the-stack in <a
+href="06-函数与调用栈.html">“Functions and the Call Stack”</a>)</td>
+<td><code>OutOfMemoryError: Java heap space</code> (see <a
+href="09-错误处理与资源管理.html">“Error Handling and Resource
+Management”</a>)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Why stack allocation is an order of magnitude faster than
+heap allocation</strong>: the stack’s lifecycle rules are extremely
+regular — last-in-first-out, a method call pushes a frame, a return pops
+a frame, the order determined entirely by the call relationships, with
+no need to consider “when is this block of memory freed” or “is anyone
+still using it.” This strict ordering degenerates allocation into a
+<strong>pointer bump</strong> operation: move the stack-top pointer down
+(or up, depending on the implementation) by a fixed offset and the
+allocation is done, and reclamation is even free — move the stack-top
+pointer back and that block of memory automatically “ceases to exist,”
+with no traversal, no marking, no extra bookkeeping needed. The heap is
+otherwise: an object’s lifetime is determined by a complex graph of
+reference relationships, at any moment some objects live long and some
+live short, the order utterly without pattern, and the allocator must
+find a suitable spot among a pile of free blocks of varying sizes (a
+free-list lookup or pointer bumping within a TLAB, see <a
+href="01-运行模型.html">“Runtime Model”</a>), and reclamation must rely
+on reachability analysis scanning the entire reference graph before it
+can judge who can be collected — this whole set of bookkeeping the stack
+needs none of, only because its lifecycle pattern (strictly nested
+call/return) is inherently far simpler than the heap’s lifecycle pattern
+(arbitrary object-graph lifetimes).</p>
+<p><strong>Why the stack is inherently thread-safe while the heap needs
+extra synchronization</strong>: a stack frame’s lifecycle is strictly
+bound to “the method call the current thread is executing” — each thread
+has its own independent JVM stack, and thread A’s stack frames are
+forever invisible to thread B, so two threads cannot possibly read/write
+the same stack-frame local variable at the same time; thread safety is a
+direct corollary of this “privacy,” needing no extra design. The heap,
+on the other hand, is an address space shared by all threads: any object
+<code>new</code>ed by any thread, any reference held by any thread,
+could in theory be passed to another thread to hold — sharing means the
+possibility of concurrent access always exists, which is why Java needs
+the whole apparatus of
+<code>synchronized</code>/<code>volatile</code>/atomic classes to cope
+with the multi-thread visibility and contention issues of data on the
+heap. This also explains why local variables (on the stack) never need
+locking, whereas object fields (on the heap), once shared across
+threads, may need it.</p>
+<p><strong>Why one is smallish and fixed while the other is largish and
+adjustable</strong>: the stack’s size needs to be reserved at the very
+moment “a thread is created” (one stack per thread), and the number of
+threads is often tens to thousands; if each thread’s stack were opened
+very large, the total overhead would balloon linearly with the thread
+count, so the stack size is designed as a smallish default value
+(<code>-Xss</code>), enough to be usable, and enlarging it is usually
+only to accommodate deeper recursion; the heap is a single global
+instance, needing to be planned just once for the total object volume of
+the whole program, so it can and should naturally be opened larger, and
+left room for dynamic expansion (between <code>-Xms</code> and
+<code>-Xmx</code>) to adapt to run-time variation in the number of
+objects.</p>
+<h2 id="summary">Summary</h2>
+<ol type="1">
+<li>The two camps of variables: <strong>primitive types hold the value,
+reference types hold the pointer (reference value)</strong>; the
+division into camps is a trade-off between performance (avoiding
+object/boxing overhead for high-frequency operations) and
+consistency.</li>
+<li><code>a = b</code> always copies “the bits in the variable”: for
+primitive types it’s a <strong>value copy</strong> (an independent
+copy), for reference types it’s a <strong>pointer copy</strong>
+(producing aliasing, sharing the same heap object). To get a copy you
+must explicitly clone/copy-construct, and the default is a shallow
+copy.</li>
+<li><code>==</code> compares bits (for reference types, whether they are
+the same object), <code>equals</code> compares content — to compare
+object content, always use <code>equals</code>.</li>
+<li><code>null</code> is the null reference; dereferencing it
+<strong>deterministically throws NPE</strong> (not UB); primitive types
+cannot be null.</li>
+<li><code>final</code> locks only “what the variable points to,” not
+“the object content”: because it constrains the bit pattern that is the
+storage location, not the content of the heap memory that location
+points to; deep immutability is left to the type itself to implement
+(<code>String</code>, immutable collections), buying a semantics that is
+uniform and statically verifiable across any type.</li>
+<li>Object fields likewise follow the two-camp rule, only they live
+inside the heap object; linked lists/trees are isomorphic to C’s struct,
+only the reference is managed and reclaimed by GC.</li>
+<li>HotSpot escape analysis may perform <strong>scalar
+replacement</strong> on non-escaping objects (breaking them into scalars
+placed into stack frames/registers, rather than whole-object stack
+allocation), but this is semantically transparent.</li>
+<li>Stack allocation is fast, inherently thread-safe, small and fixed;
+heap allocation is slow, needs extra synchronization, large and
+adjustable — the root of all of it lies in the fact that the stack’s
+lifecycle is strictly nested (last-in-first-out, thread-private), while
+the heap’s lifecycle is determined by an arbitrary
+reference-relationship graph; stack exhaustion throws
+<code>StackOverflowError</code>, heap exhaustion throws
+<code>OutOfMemoryError</code>.</li>
+</ol>
+<p>Take this model into <a href="04-数据类型.html">the next chapter’s
+object memory layout</a>, and into <a
+href="06-函数与调用栈.html">Chapter 6’s “Java has only
+pass-by-value”</a> — which is in fact a direct corollary of this
+chapter’s <code>a = b</code> rule in the “parameter passing”
+scenario.</p>
+<hr />
+<p><a href="02-基础语法.html">← Previous chapter: Basic Syntax</a> · <a
+href="index.html">Back to contents</a> · <a href="04-数据类型.html">Next
+chapter: Data Types</a> →</p>
+</div>
+</body>
+</html>

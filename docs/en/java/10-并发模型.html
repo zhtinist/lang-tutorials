@@ -1,0 +1,1945 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Concurrency Model</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../../assets/style.css" />
+</head>
+<body>
+<div class="topbar"><div class="wrap"><a class="home" href="../index.html"><span class="logo">📚</span><span class="brand">Other Languages for C/C++ Programmers</span></a>
+<a href="../java/index.html" style="color:var(--accent-dark);font-weight:700">Java</a>
+<a class="topnav-lang" href="#" onclick="switchLang();return false;" title="切换语言 / Switch language">🌐 <span class="lp">中文</span><span class="sep">/</span><span class="lp on">EN</span></a></div></div><script>function switchLang(){var p=location.pathname,en=p.indexOf('/en/')>-1,n=en?p.replace('/en/','/zh/'):p.replace('/zh/','/en/');try{localStorage.setItem('lang',en?'zh':'en')}catch(e){}location.href=n;}</script>
+<div class="wrap">
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#concurrency-model" id="toc-concurrency-model">Concurrency
+Model</a>
+<ul>
+<li><a href="#thread-creation-and-lifecycle"
+id="toc-thread-creation-and-lifecycle">1. Thread creation and
+lifecycle</a></li>
+<li><a href="#the-java-memory-model-jmm"
+id="toc-the-java-memory-model-jmm">2. The Java Memory Model
+(JMM)</a></li>
+<li><a href="#happens-before" id="toc-happens-before">3.
+happens-before</a></li>
+<li><a href="#instruction-reordering-and-double-checked-locking"
+id="toc-instruction-reordering-and-double-checked-locking">4.
+Instruction reordering and double-checked locking</a></li>
+<li><a href="#volatile" id="toc-volatile">5. volatile</a></li>
+<li><a href="#synchronized-and-the-object-header"
+id="toc-synchronized-and-the-object-header">6. synchronized and the
+object header</a></li>
+<li><a href="#cas-and-atomic" id="toc-cas-and-atomic">7. CAS and
+Atomic*</a></li>
+<li><a href="#java.util.concurrent" id="toc-java.util.concurrent">8.
+java.util.concurrent</a></li>
+<li><a href="#deadlock-and-how-to-avoid-it"
+id="toc-deadlock-and-how-to-avoid-it">9. Deadlock and how to avoid
+it</a></li>
+<li><a href="#bio-nio-aio" id="toc-bio-nio-aio">10. BIO / NIO /
+AIO</a></li>
+<li><a href="#virtual-threads-loom-jdk-21"
+id="toc-virtual-threads-loom-jdk-21">11. Virtual threads (Loom, JDK
+21)</a></li>
+<li><a href="#summary" id="toc-summary">Summary</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1 id="concurrency-model">Concurrency Model</h1>
+<p>In C/C++, concurrency relies on <code>std::thread</code>,
+<code>pthread</code>, atomic types, and manually controlled
+<code>memory_order</code>; the programmer must decide, at every access
+to a shared variable, which memory ordering to use. Java abstracts this
+whole stack into the <strong>JMM (Java Memory Model)</strong> and
+<code>java.util.concurrent</code>: the language specification uniformly
+defines “what read/write orderings are safe under multithreading,” and
+the utility classes package common concurrency patterns (locks,
+counters, thread pools, asynchronous orchestration) into components you
+can call directly.</p>
+<h2 id="thread-creation-and-lifecycle">1. Thread creation and
+lifecycle</h2>
+<p>For the “task” a thread is to run, Java has three ways to write
+it:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// 1. Extend Thread (not recommended: the single-inheritance slot is used up, and the task is tightly coupled to the thread)</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> MyThread <span class="kw">extends</span> <span class="bu">Thread</span> <span class="op">{</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="at">@Override</span> <span class="kw">public</span> <span class="dt">void</span> <span class="fu">run</span><span class="op">()</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;run in &quot;</span> <span class="op">+</span> <span class="fu">getName</span><span class="op">());</span> <span class="op">}</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="co">// 2. Runnable: no return value, no checked exceptions, the most commonly used</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="bu">Runnable</span> r <span class="op">=</span> <span class="op">()</span> <span class="op">-&gt;</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;runnable&quot;</span><span class="op">);</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="co">// 3. Callable&lt;V&gt;: has a return value V, may throw checked exceptions, used together with Future (see the java.util.concurrent section)</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="bu">Callable</span><span class="op">&lt;</span><span class="bu">Integer</span><span class="op">&gt;</span> c <span class="op">=</span> <span class="op">()</span> <span class="op">-&gt;</span> <span class="dv">42</span><span class="op">;</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> ThreadDemo <span class="op">{</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="kw">throws</span> <span class="bu">Exception</span> <span class="op">{</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Thread</span> t1 <span class="op">=</span> <span class="kw">new</span> <span class="fu">MyThread</span><span class="op">();</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>        t1<span class="op">.</span><span class="fu">start</span><span class="op">();</span>            <span class="co">// start() makes the JVM spin up a new thread to run run()</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Thread</span> t2 <span class="op">=</span> <span class="kw">new</span> <span class="bu">Thread</span><span class="op">(</span>r<span class="op">);</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>        t2<span class="op">.</span><span class="fu">start</span><span class="op">();</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>        t1<span class="op">.</span><span class="fu">join</span><span class="op">();</span>             <span class="co">// the current thread blocks until t1 terminates, like pthread_join</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>        t2<span class="op">.</span><span class="fu">join</span><span class="op">();</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a><span class="co">// which of the two threads prints first is unspecified, but join() guarantees main waits for both to finish before ending</span></span></code></pre></div>
+<p><code>start()</code> makes the JVM create a new thread and
+asynchronously call back into <code>run()</code>; if you call
+<code>run()</code> directly, that is just an ordinary method call, the
+code executes <strong>synchronously</strong> in the current thread, and
+no new thread is started at all. A <code>Thread</code> object can be
+<code>start()</code>-ed only once; calling it a second time throws
+<code>IllegalThreadStateException</code>.</p>
+<p>Java’s <code>Thread</code> on HotSpot defaults to a <strong>1:1
+mapping to a kernel thread</strong> (OS thread), just as heavy as C++’s
+<code>std::thread</code>. Calling <code>start()</code> triggers a
+<code>pthread_create</code>, and each thread is allocated about 1MB of
+stack space by default (adjustable with <code>-Xss</code>). The
+system-level cost of <code>new Thread(...).start()</code> is the same
+order of magnitude as hand-writing <code>pthread_create</code> in C—a
+thread is not a free resource, and this is the starting point for the
+fundamental problem that “virtual threads” at the end of this chapter
+set out to solve.</p>
+<p>The six states of <code>Thread.State</code> do not map one-to-one to
+the OS’s thread states:</p>
+<pre><code>    NEW --start()--&gt; RUNNABLE &lt;----+
+                      |  ^          | notify / timeout / lock acquired
+    fails to acquire  |  |          |
+    lock on entering  |  |          |
+    a sync block      v  |          |
+                   BLOCKED          |
+    wait()/park()   |               |
+                      v             |
+    WAITING / TIMED_WAITING --------+
+                      |
+                   TERMINATED (run returns)</code></pre>
+<ul>
+<li><code>RUNNABLE</code> covers both “currently running on a CPU” and
+“ready and waiting to be scheduled”; Java does not distinguish them
+(only the OS does).</li>
+<li><code>BLOCKED</code>: waiting for a <code>synchronized</code>
+monitor lock.</li>
+<li><code>WAITING</code>: <code>Object.wait()</code>,
+<code>Thread.join()</code>, <code>LockSupport.park()</code>—waiting
+indefinitely.</li>
+<li><code>TIMED_WAITING</code>: the above calls with a timeout, and
+<code>Thread.sleep(ms)</code>.</li>
+</ul>
+<p>Two threads modifying the same variable at once goes wrong; let’s
+look first at a concrete consequence, then explain the root cause:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> SimpleSyncDemo <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">int</span> counter <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">synchronized</span> <span class="dt">void</span> <span class="fu">increment</span><span class="op">()</span> <span class="op">{</span>   <span class="co">// a synchronized method: only one thread can execute it at a time</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>        counter<span class="op">++;</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="kw">throws</span> <span class="bu">InterruptedException</span> <span class="op">{</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Runnable</span> job <span class="op">=</span> <span class="op">()</span> <span class="op">-&gt;</span> <span class="op">{</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">100_000</span><span class="op">;</span> i<span class="op">++)</span> <span class="fu">increment</span><span class="op">();</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>        <span class="op">};</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Thread</span> t1 <span class="op">=</span> <span class="kw">new</span> <span class="bu">Thread</span><span class="op">(</span>job<span class="op">);</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Thread</span> t2 <span class="op">=</span> <span class="kw">new</span> <span class="bu">Thread</span><span class="op">(</span>job<span class="op">);</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>        t1<span class="op">.</span><span class="fu">start</span><span class="op">();</span></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>        t2<span class="op">.</span><span class="fu">start</span><span class="op">();</span></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>        t1<span class="op">.</span><span class="fu">join</span><span class="op">();</span></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>        t2<span class="op">.</span><span class="fu">join</span><span class="op">();</span></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;counter = &quot;</span> <span class="op">+</span> counter<span class="op">);</span> <span class="co">// 200000, the same on every run</span></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a><span class="co">// counter = 200000</span></span></code></pre></div>
+<p>Each of the two threads adds to <code>counter</code> 100,000 times;
+with <code>synchronized</code> added, the result is always exactly
+200,000. Remove <code>synchronized</code>, and <code>counter++</code>
+itself is three steps—“read, increment, write back”—and these three
+steps of the two threads may interleave, so the result will
+nondeterministically be less than 200,000. The mechanism behind this is
+the subject of the next several sections.</p>
+<h3 id="the-four-creation-approaches-compared-in-practice">The four
+creation approaches compared in practice</h3>
+<p>The three forms above only address “how to define the task”; in real
+projects there is a fourth, more common way to put it into
+practice—handing the task to a thread pool. Running all four in one
+piece of code makes the behavioral differences more intuitive than
+looking at the syntax alone (verified in practice with
+<code>javac</code>/<code>java</code> on JDK 25):</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">concurrent</span><span class="op">.*;</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> ThreadCreateDemo <span class="op">{</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">class</span> MyThread <span class="kw">extends</span> <span class="bu">Thread</span> <span class="op">{</span>                 <span class="co">// 1. extend Thread</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>        <span class="at">@Override</span> <span class="kw">public</span> <span class="dt">void</span> <span class="fu">run</span><span class="op">()</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;[extends Thread] running&quot;</span><span class="op">);</span> <span class="op">}</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">class</span> MyRunnable <span class="kw">implements</span> <span class="bu">Runnable</span> <span class="op">{</span>           <span class="co">// 2. implement Runnable</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>        <span class="at">@Override</span> <span class="kw">public</span> <span class="dt">void</span> <span class="fu">run</span><span class="op">()</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;[implements Runnable] running&quot;</span><span class="op">);</span> <span class="op">}</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">class</span> MyCallable <span class="kw">implements</span> <span class="bu">Callable</span><span class="op">&lt;</span><span class="bu">Integer</span><span class="op">&gt;</span> <span class="op">{</span>  <span class="co">// 3. implement Callable, with a return value</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>        <span class="at">@Override</span> <span class="kw">public</span> <span class="bu">Integer</span> <span class="fu">call</span><span class="op">()</span> <span class="op">{</span> <span class="cf">return</span> <span class="dv">42</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="kw">throws</span> <span class="bu">Exception</span> <span class="op">{</span></span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Thread</span> t1 <span class="op">=</span> <span class="kw">new</span> <span class="fu">MyThread</span><span class="op">();</span></span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>        t1<span class="op">.</span><span class="fu">start</span><span class="op">();</span> t1<span class="op">.</span><span class="fu">join</span><span class="op">();</span></span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Thread</span> t2 <span class="op">=</span> <span class="kw">new</span> <span class="bu">Thread</span><span class="op">(</span><span class="kw">new</span> <span class="fu">MyRunnable</span><span class="op">());</span></span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a>        t2<span class="op">.</span><span class="fu">start</span><span class="op">();</span> t2<span class="op">.</span><span class="fu">join</span><span class="op">();</span></span>
+<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a>        <span class="co">// FutureTask implements both Runnable and Future&lt;V&gt;; it is the bridge between Callable and Thread</span></span>
+<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a>        <span class="bu">FutureTask</span><span class="op">&lt;</span><span class="bu">Integer</span><span class="op">&gt;</span> futureTask <span class="op">=</span> <span class="kw">new</span> <span class="bu">FutureTask</span><span class="op">&lt;&gt;(</span><span class="kw">new</span> <span class="fu">MyCallable</span><span class="op">());</span></span>
+<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a>        <span class="kw">new</span> <span class="bu">Thread</span><span class="op">(</span>futureTask<span class="op">).</span><span class="fu">start</span><span class="op">();</span></span>
+<span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;[Callable+FutureTask] result = &quot;</span> <span class="op">+</span> futureTask<span class="op">.</span><span class="fu">get</span><span class="op">());</span> <span class="co">// blocks until call() finishes</span></span>
+<span id="cb4-25"><a href="#cb4-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-26"><a href="#cb4-26" aria-hidden="true" tabindex="-1"></a>        <span class="co">// 4. Thread pool: the task definition is unchanged, only the way it is delivered for execution differs</span></span>
+<span id="cb4-27"><a href="#cb4-27" aria-hidden="true" tabindex="-1"></a>        <span class="bu">ExecutorService</span> pool <span class="op">=</span> <span class="bu">Executors</span><span class="op">.</span><span class="fu">newSingleThreadExecutor</span><span class="op">();</span></span>
+<span id="cb4-28"><a href="#cb4-28" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Future</span><span class="op">&lt;</span><span class="bu">Integer</span><span class="op">&gt;</span> future <span class="op">=</span> pool<span class="op">.</span><span class="fu">submit</span><span class="op">(</span><span class="kw">new</span> <span class="fu">MyCallable</span><span class="op">());</span></span>
+<span id="cb4-29"><a href="#cb4-29" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;[thread pool] result = &quot;</span> <span class="op">+</span> future<span class="op">.</span><span class="fu">get</span><span class="op">());</span></span>
+<span id="cb4-30"><a href="#cb4-30" aria-hidden="true" tabindex="-1"></a>        pool<span class="op">.</span><span class="fu">shutdown</span><span class="op">();</span></span>
+<span id="cb4-31"><a href="#cb4-31" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb4-32"><a href="#cb4-32" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb4-33"><a href="#cb4-33" aria-hidden="true" tabindex="-1"></a><span class="co">// [extends Thread] running</span></span>
+<span id="cb4-34"><a href="#cb4-34" aria-hidden="true" tabindex="-1"></a><span class="co">// [implements Runnable] running</span></span>
+<span id="cb4-35"><a href="#cb4-35" aria-hidden="true" tabindex="-1"></a><span class="co">// [Callable+FutureTask] result = 42</span></span>
+<span id="cb4-36"><a href="#cb4-36" aria-hidden="true" tabindex="-1"></a><span class="co">// [thread pool] result = 42</span></span></code></pre></div>
+<table>
+<colgroup>
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+</colgroup>
+<thead>
+<tr>
+<th>Creation approach</th>
+<th>Has a return value?</th>
+<th>Can declare checked exceptions?</th>
+<th>Uses up the single-inheritance slot?</th>
+<th>Typical scenario</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Extend Thread</td>
+<td>No</td>
+<td>No (the <code>run()</code> signature does not allow
+<code>throws</code>)</td>
+<td>Yes</td>
+<td>Extremely simple, one-off tasks; rarely used</td>
+</tr>
+<tr>
+<td>Implement Runnable</td>
+<td>No</td>
+<td>No</td>
+<td>No</td>
+<td>The most general form; decouples task from thread</td>
+</tr>
+<tr>
+<td>Implement Callable + FutureTask</td>
+<td>Yes (generic <code>V</code>)</td>
+<td>Yes (<code>call()</code> declares
+<code>throws Exception</code>)</td>
+<td>No</td>
+<td>Tasks whose result or exception you need to obtain</td>
+</tr>
+<tr>
+<td>Submit to a thread pool</td>
+<td><code>submit</code> returns a <code>Future</code></td>
+<td>Depends on Runnable/Callable</td>
+<td>No</td>
+<td>The default choice in production; see the “Thread pool” section
+below</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Why “implement an interface” is recommended more often than
+“extend Thread”</strong>: the reason is not merely the surface syntactic
+constraint of “Java’s single inheritance,” but more fundamentally a
+separation of concerns: <code>Thread</code> is the OS-level concept of
+“a thread of execution,” while
+<code>Runnable</code>/<code>Callable</code> is the business-level
+concept of “the task to be done.” Extending <code>Thread</code>
+hard-binds the two together, so the task logic cannot be passed, reused,
+or dropped into a thread pool independently of <code>Thread</code>;
+implementing <code>Runnable</code>/<code>Callable</code> lets the same
+task object be both <code>new Thread(task)</code> and submitted as-is to
+a thread pool without changing any code. <code>Callable</code> has two
+things <code>Runnable</code> lacks—“a return value + checked
+exceptions”—because the signature of <code>Runnable.run()</code> was
+fixed as <code>void run()</code> (without <code>throws</code>) back in
+JDK 1.0, whereas <code>Callable&lt;V&gt;</code> is an interface added
+together with <code>java.util.concurrent</code> in JDK 5, designed
+specifically for tasks that need to propagate results and exceptions;
+<code>FutureTask</code> wraps a <code>Callable</code> into a
+<code>Runnable</code>, so it can be dropped straight into
+<code>new Thread(futureTask).start()</code>, and you can also obtain
+<code>call()</code>’s return value via <code>futureTask.get()</code>—it
+is the bridge connecting the two worlds of “a task has a return value”
+and “Thread only understands Runnable.”</p>
+<h2 id="the-java-memory-model-jmm">2. The Java Memory Model (JMM)</h2>
+<p>The JMM is a <strong>specification</strong> (Chapter 17 of the JLS),
+not a direct description of some particular hardware behavior. It
+defines, when multiple threads read and write shared variables, what
+values are legally visible.</p>
+<p><strong>Why a formal specification is needed, rather than letting
+everyone judge by intuition that “it looks right so it’s fine”</strong>:
+intuition is built on the single-threaded model of sequential
+execution—“code executes top to bottom, and once a variable is assigned
+it can be seen.” But for a single-threaded program, the compiler and CPU
+guarantee only <strong>as-if-serial</strong> (the reordered result is
+consistent with the sequential-execution result), and the scope of this
+guarantee is limited to “this one thread observing itself.” Across
+threads, one thread’s reordered, cached, or delayed-write-back
+operations may become visible to another thread at any arbitrary moment,
+and as-if-serial places no constraint whatsoever on this cross-thread
+visibility—this is space left for hardware and compilers to optimize
+freely, not an oversight of theirs. Concurrent code written by intuition
+may “happen” to run correctly every time on x86 (where memory ordering
+is relatively strong), but may break on ARM (where memory ordering is
+far weaker and reordering more aggressive) or under a JIT version that
+inlines/reorders more aggressively—this kind of bug that “runs on your
+machine” and cannot be stably reproduced by ordinary testing can only be
+prevented in advance by a specification that precisely states “which
+orderings are guaranteed and which are not”; testing alone cannot
+falsify “this code is correct on all platforms.” This is exactly the
+reason the JMM (JSR-133, 2004) exists: before 2004 Java’s memory-model
+definition was internally contradictory (allowing some counterintuitive
+reorderings that even the spec authors thought should not happen), and
+the work of JSR-133 was to re-formalize “what may be reordered and what
+may not,” so that compiler implementers and application developers work
+against the same contract rather than each relying on their own
+experience.</p>
+<p>The JMM abstracts as follows: each thread has a <strong>working
+memory</strong>, and shared variables live in <strong>main
+memory</strong>. To operate on a variable, a thread must first copy it
+from main memory into its working memory, and after modifying it, write
+it back.</p>
+<pre><code>   +----------------+        +----------------+
+   |   Thread A      |        |   Thread B      |
+   | working memory  |        | working memory  |
+   | [x=0 copy]      |        | [x=0 copy]      |
+   +-------+--------+        +--------+-------+
+           |  read/write             |
+           v                         v
+   +-------------------------------------------+
+   |            main memory  x = 0              |
+   +-------------------------------------------+</code></pre>
+<p>This is an <strong>abstract model</strong> and does not represent the
+real memory layout—in reality “working memory” corresponds to CPU
+registers, the store buffer, and the various levels of cache; the JMM
+deliberately does not bind to any concrete hardware implementation,
+specifying only the observable behavioral contract, so that the
+specification can constrain, at the same time, hardware with entirely
+different memory orderings such as x86 and ARM. The core problem: after
+thread A modifies <code>x</code>, thread B does not necessarily see it
+immediately—the root cause is the objective existence of the cache
+layer, plus the fact that compilers/CPUs reorder instructions for
+performance.</p>
+<p>The JMM defines three properties that must each be guaranteed
+separately; note that they are three <strong>different</strong> things,
+with different causes and different tools to solve them, which is also
+the direct basis for the later division of labor among
+<code>volatile</code>/<code>synchronized</code>/<code>Atomic</code>:</p>
+<table>
+<colgroup>
+<col style="width: 15%" />
+<col style="width: 15%" />
+<col style="width: 41%" />
+<col style="width: 28%" />
+</colgroup>
+<thead>
+<tr>
+<th>Property</th>
+<th>Meaning</th>
+<th>Consequence when not guaranteed</th>
+<th>Guaranteed by</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Atomicity</td>
+<td>The operation is indivisible and cannot have another thread’s
+operation inserted into an intermediate state</td>
+<td>A compound operation (e.g. <code>count++</code>) is executed
+interleaved, losing updates</td>
+<td>Basic reads/writes (except long/double) are naturally atomic;
+compound operations need synchronized/CAS</td>
+</tr>
+<tr>
+<td>Visibility</td>
+<td>One thread’s write can be read by another thread</td>
+<td>One thread writes a new value, another thread reads the old value
+forever (even spinning in an infinite loop)</td>
+<td>volatile, synchronized, final</td>
+</tr>
+<tr>
+<td>Ordering</td>
+<td>Instructions are not reordered in a way that breaks cross-thread
+observable semantics</td>
+<td>Two order-dependent steps are reordered, and another thread sees
+“the effect before the cause”</td>
+<td>volatile, synchronized, happens-before</td>
+</tr>
+</tbody>
+</table>
+<p>The reason the three are independent is straightforward: visibility
+solves “after a write, can others see it” (a caching problem); ordering
+solves “can the order of writes be scrambled” (a reordering problem);
+atomicity solves “can one logical operation be split into several steps
+whose intermediate state other threads can see” (an
+operation-granularity problem)—the three problems have different causes,
+so naturally no single tool can solve all three at the lowest cost
+simultaneously. This is why the Java concurrency toolbox is not one
+“universal lock” but is layered: <code>volatile</code> solves only
+visibility and ordering, while
+<code>synchronized</code>/<code>Atomic</code> are what solve atomicity
+(detailed below).</p>
+<blockquote>
+<p>The <code>long</code>/<code>double</code> pitfall: the JMM guarantees
+atomicity only for 32-bit reads and writes; a 64-bit variable may be
+split into two writes on a 32-bit platform, causing a read of “half a
+value” (a mismatched combination where the high 32 bits are the new
+value and the low 32 bits are the old value). Adding
+<code>volatile</code> guarantees the 64-bit read/write is atomic as a
+whole. HotSpot on mainstream 64-bit JVMs actually treats these
+atomically in practice, but the specification itself does not make this
+guarantee, and portable code must not depend on this coincidence of a
+specific implementation.</p>
+</blockquote>
+<h2 id="happens-before">3. happens-before</h2>
+<p>The JMM does not require you to reason about implementation details
+like “when the cache is flushed” or “how instructions are reordered”;
+instead it provides a higher-level contract:
+<strong>happens-before</strong>. If operation A happens-before operation
+B, then A’s result is visible to B, and A is semantically ordered before
+B—this is a contract you can use directly to reason about program
+correctness, without understanding the CPU cache-coherence protocol. The
+rules:</p>
+<ol type="1">
+<li><strong>Program order</strong>: within the same thread, an earlier
+operation happens-before a later one.</li>
+<li><strong>Monitor lock</strong>: an <code>unlock</code> on a lock
+happens-before a subsequent <code>lock</code> on the same lock.</li>
+<li><strong>volatile</strong>: a write to a volatile variable
+happens-before a subsequent read of it.</li>
+<li><strong>Transitivity</strong>: A hb B, B hb C ⇒ A hb C.</li>
+<li><strong>Thread start</strong>: <code>t.start()</code> happens-before
+any operation within the thread.</li>
+<li><strong>Thread termination</strong>: operations within a thread
+happen-before the return of another thread’s <code>t.join()</code>.</li>
+</ol>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> a <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="kw">volatile</span> <span class="dt">boolean</span> flag <span class="op">=</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="co">// Thread 1</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> <span class="dv">1</span><span class="op">;</span>              <span class="co">// (1)</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>flag <span class="op">=</span> <span class="kw">true</span><span class="op">;</span>        <span class="co">// (2) volatile write</span></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a><span class="co">// Thread 2</span></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="op">(</span>flag<span class="op">)</span> <span class="op">{</span>         <span class="co">// (3) volatile read; if it reads true, then (2) hb (3)</span></span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>    <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>a<span class="op">);</span> <span class="co">// necessarily 1: (1)hb(2)hb(3), by transitivity ⇒ (1)hb(4)</span></span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Without <code>volatile</code>, the write to <code>a</code> may not be
+visible to thread 2, or (1)(2) may be reordered, causing thread 2 to see
+<code>flag == true</code> but <code>a == 0</code>.</p>
+<h2 id="instruction-reordering-and-double-checked-locking">4.
+Instruction reordering and double-checked locking</h2>
+<p>Compilers and CPUs reorder instructions for performance, on the sole
+premise that <strong>single-threaded semantics (as-if-serial) are
+unchanged</strong>—a premise that no longer holds under multithreading,
+making it one of the most insidious sources of concurrency bugs, because
+the wrong result caused by reordering “looks completely normal” from a
+single-threaded viewpoint. The classic example is double-checked locking
+(DCL):</p>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Singleton <span class="op">{</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">private</span> <span class="dt">static</span> <span class="kw">volatile</span> Singleton instance<span class="op">;</span> <span class="co">// volatile cannot be omitted</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> Singleton <span class="fu">getInstance</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>instance <span class="op">==</span> <span class="kw">null</span><span class="op">)</span> <span class="op">{</span>                  <span class="co">// first check (no lock)</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>            <span class="kw">synchronized</span> <span class="op">(</span>Singleton<span class="op">.</span><span class="fu">class</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>                <span class="cf">if</span> <span class="op">(</span>instance <span class="op">==</span> <span class="kw">null</span><span class="op">)</span> <span class="op">{</span>          <span class="co">// second check</span></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>                    instance <span class="op">=</span> <span class="kw">new</span> <span class="fu">Singleton</span><span class="op">();</span>  <span class="co">// see the breakdown below</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>                <span class="op">}</span></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> instance<span class="op">;</span></span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Breaking down concretely why <code>instance = new Singleton()</code>
+goes wrong without <code>volatile</code>: at the bytecode level this
+line is not done in one step but in three—(1) allocate a block of
+memory, (2) call the constructor on this memory to initialize the
+fields, (3) point the <code>instance</code> reference at this memory. As
+long as the compiler or CPU judges that “within a single thread, the
+order of these three steps does not affect the final result,” it is
+entitled to reorder them into (1)(3)(2)—i.e. first point
+<code>instance</code> at the memory, then run the constructor. For the
+thread executing this code, the reordering is indeed unobservable (by
+the time it finishes (2), <code>instance</code> already points to a
+fully initialized object, the same as the sequential-execution result).
+But for <strong>another thread</strong>, the intermediate state of the
+reordering is observable: if thread A is right in the middle of the
+reordered (1)(3) (<code>instance</code> is already non-null, but the
+object’s fields are still default values) while thread B executes the
+first check <code>if (instance == null)</code>, B sees
+<code>instance != null</code> and returns directly—but what it gets is a
+<strong>half-built object whose constructor has not finished
+running</strong>, and subsequent access to this object’s fields will
+read default values (e.g. reading all-0/null fields where a business
+object was expected). This fault occurs only in the window where
+multiple threads simultaneously contend to “create for the first time”;
+the window is extremely narrow, unit tests and everyday runs can hardly
+ever trigger it, it only occurs sporadically under high concurrency in
+production, and the field state may differ on each reproduction—this is
+exactly where concurrency bugs are far harder to track down than
+sequential-execution bugs.</p>
+<p>Once <code>volatile</code> modifies <code>instance</code>, the rule
+that “operations before a write cannot be reordered after the write”
+directly forbids (2)(3) from being reordered into (3)(2): the operations
+before the write to <code>instance</code> (step 3)—namely step 2, the
+constructor’s initialization—must complete first. This is exactly why
+DCL only became correct in JDK 5 (after JSR-133 defined volatile
+semantics)—before JDK 5, <code>volatile</code> guaranteed only
+visibility and did not forbid reordering, so DCL was unsafe before then
+even with <code>volatile</code> added.</p>
+<h2 id="volatile">5. volatile</h2>
+<p>The most common use of <code>volatile</code> is a “one-writer,
+many-readers status flag”—one thread writes, other threads read, and
+reads are guaranteed to see the latest value:</p>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> VolatileFlagDemo <span class="op">{</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">volatile</span> <span class="dt">boolean</span> ready <span class="op">=</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">int</span> data <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="kw">throws</span> <span class="bu">InterruptedException</span> <span class="op">{</span></span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Thread</span> writer <span class="op">=</span> <span class="kw">new</span> <span class="bu">Thread</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="op">{</span></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>            data <span class="op">=</span> <span class="dv">42</span><span class="op">;</span>         <span class="co">// write the ordinary variable first</span></span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>            ready <span class="op">=</span> <span class="kw">true</span><span class="op">;</span>      <span class="co">// then write the volatile, acting as a &quot;publish&quot; signal</span></span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a>        <span class="op">});</span></span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Thread</span> reader <span class="op">=</span> <span class="kw">new</span> <span class="bu">Thread</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="op">{</span></span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a>            <span class="cf">while</span> <span class="op">(!</span>ready<span class="op">)</span> <span class="op">{</span>   <span class="co">// busy-wait until it sees the writer&#39;s update</span></span>
+<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a>                <span class="co">// spin</span></span>
+<span id="cb8-13"><a href="#cb8-13" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
+<span id="cb8-14"><a href="#cb8-14" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;data = &quot;</span> <span class="op">+</span> data<span class="op">);</span> <span class="co">// guaranteed to see 42, not 0</span></span>
+<span id="cb8-15"><a href="#cb8-15" aria-hidden="true" tabindex="-1"></a>        <span class="op">});</span></span>
+<span id="cb8-16"><a href="#cb8-16" aria-hidden="true" tabindex="-1"></a>        reader<span class="op">.</span><span class="fu">start</span><span class="op">();</span></span>
+<span id="cb8-17"><a href="#cb8-17" aria-hidden="true" tabindex="-1"></a>        writer<span class="op">.</span><span class="fu">start</span><span class="op">();</span></span>
+<span id="cb8-18"><a href="#cb8-18" aria-hidden="true" tabindex="-1"></a>        writer<span class="op">.</span><span class="fu">join</span><span class="op">();</span></span>
+<span id="cb8-19"><a href="#cb8-19" aria-hidden="true" tabindex="-1"></a>        reader<span class="op">.</span><span class="fu">join</span><span class="op">();</span></span>
+<span id="cb8-20"><a href="#cb8-20" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;done&quot;</span><span class="op">);</span></span>
+<span id="cb8-21"><a href="#cb8-21" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb8-22"><a href="#cb8-22" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb8-23"><a href="#cb8-23" aria-hidden="true" tabindex="-1"></a><span class="co">// data = 42</span></span>
+<span id="cb8-24"><a href="#cb8-24" aria-hidden="true" tabindex="-1"></a><span class="co">// done</span></span></code></pre></div>
+<p>Remove <code>volatile</code>, and the <code>reader</code> thread may
+in theory never see <code>ready</code> turn <code>true</code> (the
+compiler/JIT may optimize <code>while (!ready)</code> to read a register
+only once, because it cannot tell this field will be changed by another
+thread), or may see <code>ready == true</code> but <code>data</code>
+still 0 (reordering). With <code>volatile</code> added, neither problem
+occurs.</p>
+<p>What <code>volatile</code> provides is precisely the two guarantees
+of visibility and ordering (analogous to C++’s acquire/release
+semantics, but not exactly equivalent):</p>
+<ol type="1">
+<li><strong>Visibility</strong>: a thread’s write to a volatile variable
+guarantees that any thread subsequently reading it sees the latest
+value. This is implemented with <strong>memory barriers</strong>
+(store/load fences) working together with the CPU’s cache-coherence
+protocol, and <strong>not</strong> literally “every read/write bypasses
+the cache and flushes straight to main memory” (that is an
+oversimplified statement).</li>
+<li><strong>Forbids reordering</strong>: operations before a write
+cannot be reordered after the write, and operations after a read cannot
+be reordered before the read.</li>
+</ol>
+<p><strong>Why <code>volatile</code> does not guarantee the atomicity of
+compound operations</strong>, rather than simply being made to “make
+reads and writes atomic” and solve it in one stroke:
+<code>volatile</code>’s implementation cost is deliberately kept very
+low—it only inserts memory barriers at read/write points, and involves
+no mutual-exclusion mechanism (no queuing, no blocking, no OS
+involvement), which is exactly why it is far lighter than a lock. But
+for a multi-step operation like “read the old value, compute the new
+value, write it back,” a memory barrier governs “the ordering and
+visibility of each step when it occurs individually,” but cannot govern
+“the interleaving of these several steps of two threads”—a barrier is
+not a mutex, and it will not make a second thread wait idly until the
+first thread finishes the entire read-modify-write sequence:</p>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">volatile</span> <span class="dt">int</span> count <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> <span class="fu">bump</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>    count<span class="op">++;</span>  <span class="co">// the three steps read-modify-write; volatile cannot prevent two threads both reading the same value, each adding 1, and losing updates</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>When two threads each call <code>count++</code> 100,000 times on the
+same <code>volatile int count</code>, the result is almost certainly
+less than 200,000—<code>volatile</code> guarantees that each read/write
+is visible when it occurs individually, but cannot stop the interleaving
+of “thread A reads 100, thread B also reads 100 (A’s write has not
+happened yet, or A has not written yet), both compute 101 based on 100
+and each write it back”:</p>
+<pre><code>count = 157682 (expected 200000, usually less)   // across multiple runs, the result differs each time but is always clearly less than 200000</code></pre>
+<p><strong>The division of labor among volatile / synchronized /
+Atomic</strong> is thus determined: <code>volatile</code> solves only
+the visibility + ordering of a single variable, at the lowest cost; to
+make a compound operation like read-modify-write atomic as a whole,
+either use <code>synchronized</code>/<code>ReentrantLock</code> for
+mutual exclusion (making the entire critical section serial, with only
+one thread entering at a time, able to cover any number of lines of code
+and any number of variables), or use a CAS-based atomic class like
+<code>AtomicInteger</code> (making only a single-step operation on a
+single variable atomic, relying on hardware instructions rather than
+blocking; see the next section). The three are layered by “the
+granularity of the problem to solve” and “the cost you are willing to
+pay,” and are not substitutes for one another. <code>count++</code>
+needs <code>synchronized</code> or <code>AtomicInteger</code> to be
+guaranteed atomic; <code>volatile</code> suits a “one-writer,
+many-readers status flag,” not a “counter that multiple threads all
+modify.”</p>
+<h2 id="synchronized-and-the-object-header">6. synchronized and the
+object header</h2>
+<p>Adding <code>synchronized</code> to a method allows only one thread
+to execute it at a time; <code>synchronized</code> can also wrap a block
+of code and specify which object to lock on:</p>
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="kw">synchronized</span> <span class="op">(</span>lock<span class="op">)</span> <span class="op">{</span>        <span class="co">// the monitorenter bytecode</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">// critical section</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span>                            <span class="co">// the monitorexit bytecode (the exception path also exits)</span></span></code></pre></div>
+<p>Alongside locking there is also
+<code>wait</code>/<code>notify</code>: one thread “waits” until some
+condition is met, and another thread “wakes it up” after changing the
+condition. Both must be called inside a <code>synchronized</code>
+block:</p>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> WaitNotifyDemo <span class="op">{</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">final</span> <span class="bu">Object</span> lock <span class="op">=</span> <span class="kw">new</span> <span class="bu">Object</span><span class="op">();</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">boolean</span> condition <span class="op">=</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="kw">throws</span> <span class="bu">InterruptedException</span> <span class="op">{</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Thread</span> waiter <span class="op">=</span> <span class="kw">new</span> <span class="bu">Thread</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="op">{</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>            <span class="kw">synchronized</span> <span class="op">(</span>lock<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>                <span class="cf">while</span> <span class="op">(!</span>condition<span class="op">)</span> <span class="op">{</span>                 <span class="co">// use while rather than if, to guard against spurious wakeups</span></span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>                    <span class="cf">try</span> <span class="op">{</span> lock<span class="op">.</span><span class="fu">wait</span><span class="op">();</span> <span class="op">}</span> <span class="cf">catch</span> <span class="op">(</span><span class="bu">InterruptedException</span> e<span class="op">)</span> <span class="op">{</span> <span class="op">}</span></span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>                <span class="op">}</span></span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>                <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;waiter: condition met&quot;</span><span class="op">);</span></span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a>        <span class="op">});</span></span>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a>        waiter<span class="op">.</span><span class="fu">start</span><span class="op">();</span></span>
+<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Thread</span><span class="op">.</span><span class="fu">sleep</span><span class="op">(</span><span class="dv">100</span><span class="op">);</span> <span class="co">// let the waiter most likely enter wait first (does not affect correctness, just makes the demo clearer)</span></span>
+<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a>        <span class="kw">synchronized</span> <span class="op">(</span>lock<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a>            condition <span class="op">=</span> <span class="kw">true</span><span class="op">;</span></span>
+<span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a>            lock<span class="op">.</span><span class="fu">notifyAll</span><span class="op">();</span>                        <span class="co">// wake the waiters (they still must re-contend for the lock)</span></span>
+<span id="cb12-19"><a href="#cb12-19" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb12-20"><a href="#cb12-20" aria-hidden="true" tabindex="-1"></a>        waiter<span class="op">.</span><span class="fu">join</span><span class="op">();</span></span>
+<span id="cb12-21"><a href="#cb12-21" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;main: done&quot;</span><span class="op">);</span></span>
+<span id="cb12-22"><a href="#cb12-22" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb12-23"><a href="#cb12-23" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb12-24"><a href="#cb12-24" aria-hidden="true" tabindex="-1"></a><span class="co">// waiter: condition met</span></span>
+<span id="cb12-25"><a href="#cb12-25" aria-hidden="true" tabindex="-1"></a><span class="co">// main: done</span></span></code></pre></div>
+<p><code>lock.wait()</code> releases the lock and puts the current
+thread into waiting, until another thread calls
+<code>lock.notify()</code>/<code>notifyAll()</code> gives it a chance to
+be woken and re-contend for the lock—so
+<code>wait</code>/<code>notify</code> must be used in pairs on the same
+lock object.</p>
+<p><code>synchronized</code> is a <strong>reentrant monitor
+lock</strong> (monitor). Every Java object can serve as a lock, and the
+lock state is recorded in the <strong>mark word of the object
+header</strong>. The 64-bit HotSpot object-header layout (uncompressed,
+ordinary object):</p>
+<pre><code>Object memory layout:
++------------------+------------------+-------------+---------+
+| Mark Word (8B)   | Klass Pointer(4/8B)| instance fields | padding |
++------------------+------------------+-------------+---------+</code></pre>
+<p>The Mark Word reuses the same 8 bytes to store different information
+(the lock flag bits determine how it is interpreted):</p>
+<table>
+<thead>
+<tr>
+<th>Lock state</th>
+<th>Mark Word content (partial)</th>
+<th>Flag bits</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Unlocked</td>
+<td>hashCode, GC generational age</td>
+<td>01</td>
+</tr>
+<tr>
+<td>Biased lock</td>
+<td>ID of the owning thread</td>
+<td>01 (biased bit 1)</td>
+</tr>
+<tr>
+<td>Lightweight lock</td>
+<td>pointer to the Lock Record on the stack</td>
+<td>00</td>
+</tr>
+<tr>
+<td>Heavyweight lock</td>
+<td>pointer to the monitor (ObjectMonitor)</td>
+<td>10</td>
+</tr>
+<tr>
+<td>GC mark</td>
+<td>—</td>
+<td>11</td>
+</tr>
+</tbody>
+</table>
+<h3 id="lock-upgrade">Lock upgrade</h3>
+<p>To avoid always going heavyweight (an OS mutex, involving
+user-mode/kernel-mode switches, expensive), HotSpot introduced a tiered
+scheme, essentially a direct product of the observation that “the vast
+majority of locks actually have no real contention”—if you blindly went
+heavyweight from the start, you would pay the cost of switching into the
+kernel for contention that does not exist at all:</p>
+<pre><code>unlocked --first thread enters--&gt; biased lock (records the thread ID; subsequent CAS for the same thread is all skipped)
+         --another thread contends--&gt; lightweight lock (spin + CAS, optimistic, suits short critical sections)
+         --spin fails / heavy contention--&gt; heavyweight lock (suspends the thread, enters the OS wait queue)</code></pre>
+<ul>
+<li><strong>Biased lock</strong>: assumes the lock is always acquired by
+the same thread, records the thread ID on the first acquisition, and
+afterward needs no CAS if there is no contention. Disabled by default
+and slated for removal from JDK 15 onward (in modern applications,
+thread pools and concurrency frameworks make the assumption of “the same
+thread repeatedly locking” no longer generally hold, and the benefit of
+maintaining this layer of complexity has shrunk).</li>
+<li><strong>Lightweight lock</strong>: threads execute alternately (not
+contending simultaneously). A thread builds a Lock Record in its own
+stack frame and uses CAS to swap the mark word for a pointer to it. If
+it fails, it spins.</li>
+<li><strong>Heavyweight lock</strong>: real contention. It inflates into
+an <code>ObjectMonitor</code>, and contending threads are suspended by
+the OS, analogous to <code>pthread_mutex</code>.</li>
+</ul>
+<h3 id="the-monitor-structure-what-a-heavyweight-lock-actually-is">The
+Monitor structure: what a heavyweight lock actually is</h3>
+<p>The <code>wait</code>/<code>notify</code> in the earlier
+<code>WaitNotifyDemo</code> were in fact already using a monitor,
+without spelling out its internal structure. After inflating into a
+heavyweight lock, the mark word points to an <code>ObjectMonitor</code>
+(a real C++ structure in the HotSpot source), whose core fields
+correspond respectively to “who is running,” “who is queued,” and “who
+is waiting for notification”:</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>Field</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Owner</code></td>
+<td>The thread currently holding the lock</td>
+</tr>
+<tr>
+<td><code>EntryList</code></td>
+<td>The queue of threads that failed to acquire the lock and are blocked
+on <code>monitorenter</code></td>
+</tr>
+<tr>
+<td><code>WaitSet</code></td>
+<td>The set of threads that called <code>wait()</code> and voluntarily
+gave up the lock to wait</td>
+</tr>
+<tr>
+<td><code>recursions</code></td>
+<td>The reentrancy count of the current holding thread</td>
+</tr>
+</tbody>
+</table>
+<p>These four fields explain why the behavior of the earlier
+<code>wait</code>/<code>notify</code> example must be bound to the same
+lock: a thread calling <code>lock.wait()</code> essentially moves itself
+out of <code>Owner</code> and into the <code>WaitSet</code> of the
+<code>ObjectMonitor</code> for this lock, releasing the lock at the same
+time; another thread’s <code>notify()</code>/<code>notifyAll()</code>
+moves the thread(s) in the <code>WaitSet</code> (one or all) back into
+the <code>EntryList</code>, making them eligible again to contend for
+<code>Owner</code>—“moved into the EntryList” is not “immediately
+acquires the lock”; a woken thread must still contend along with the
+other threads in the <code>EntryList</code>, which is why the earlier
+code uses <code>while</code> rather than <code>if</code> around
+<code>wait()</code> to recheck the condition. <code>recursions</code>
+directly corresponds to the “reentrant” property: when the same thread
+again enters a <code>synchronized</code> block for a lock it already
+holds, it is not blocked by the <code>EntryList</code>, but simply
+increments <code>recursions</code>, decrementing it on
+<code>monitorexit</code>, and only when it drops to 0 is the lock
+actually released—this is why
+<code>synchronized void setA() { setB(); }</code> (A and B locking the
+same object) does not lock itself out.</p>
+<h2 id="cas-and-atomic">7. CAS and Atomic*</h2>
+<p>Atomic classes like <code>AtomicInteger</code> provide a set of
+operations that “look like ordinary methods but are actually atomic as a
+whole,” with no need to lock yourself:</p>
+<div class="sourceCode" id="cb15"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">concurrent</span><span class="op">.</span><span class="im">atomic</span><span class="op">.</span><span class="im">AtomicInteger</span><span class="op">;</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> AtomicBasicDemo <span class="op">{</span></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>        <span class="bu">AtomicInteger</span> ai <span class="op">=</span> <span class="kw">new</span> <span class="bu">AtomicInteger</span><span class="op">(</span><span class="dv">0</span><span class="op">);</span></span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>ai<span class="op">.</span><span class="fu">incrementAndGet</span><span class="op">());</span> <span class="co">// 1</span></span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>ai<span class="op">.</span><span class="fu">incrementAndGet</span><span class="op">());</span> <span class="co">// 2</span></span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>        <span class="dt">boolean</span> ok <span class="op">=</span> ai<span class="op">.</span><span class="fu">compareAndSet</span><span class="op">(</span><span class="dv">2</span><span class="op">,</span> <span class="dv">100</span><span class="op">);</span>     <span class="co">// expect the current value to be 2, set it to 100</span></span>
+<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>ok<span class="op">);</span>                    <span class="co">// true</span></span>
+<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>ai<span class="op">.</span><span class="fu">get</span><span class="op">());</span>               <span class="co">// 100</span></span>
+<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb15-13"><a href="#cb15-13" aria-hidden="true" tabindex="-1"></a><span class="co">// 1</span></span>
+<span id="cb15-14"><a href="#cb15-14" aria-hidden="true" tabindex="-1"></a><span class="co">// 2</span></span>
+<span id="cb15-15"><a href="#cb15-15" aria-hidden="true" tabindex="-1"></a><span class="co">// true</span></span>
+<span id="cb15-16"><a href="#cb15-16" aria-hidden="true" tabindex="-1"></a><span class="co">// 100</span></span></code></pre></div>
+<p>Multiple threads calling <code>incrementAndGet()</code> concurrently
+will not lose updates the way an ordinary <code>int</code>’s
+<code>count++</code> does—behind this is CAS (Compare-And-Swap), the
+cornerstone of lock-free concurrency, corresponding to x86’s
+<code>cmpxchg</code> instruction. Semantics:
+<code>if (memory value == expected) { memory value = new value; return true }</code>,
+and the whole process is atomic in hardware—it solves the same
+“atomicity” problem as a lock but takes an entirely different path: a
+lock relies on mutual exclusion (making the second thread wait), whereas
+CAS relies on “optimistic retry” (blocking no thread, and on failure
+re-reading the latest value and trying again), so there is no overhead
+of suspending/waking threads at all, and it is much faster than a lock
+when contention is light; under heavy contention, the repeated retries
+also waste CPU, and this is the boundary of its cost.</p>
+<div class="sourceCode" id="cb16"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>ai<span class="op">.</span><span class="fu">incrementAndGet</span><span class="op">();</span>               <span class="co">// the underlying CAS spin: do { old=get(); } while(!compareAndSet(old, old+1))</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="dt">boolean</span> ok <span class="op">=</span> ai<span class="op">.</span><span class="fu">compareAndSet</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">);</span> <span class="co">// if expected 1, set 2</span></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a><span class="co">// JDK8+ high-concurrency counter, striping to reduce CAS contention (the hot spot is spread across multiple Cells)</span></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>LongAdder adder <span class="op">=</span> <span class="kw">new</span> <span class="fu">LongAdder</span><span class="op">();</span></span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>adder<span class="op">.</span><span class="fu">increment</span><span class="op">();</span></span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a><span class="dt">long</span> sum <span class="op">=</span> adder<span class="op">.</span><span class="fu">sum</span><span class="op">();</span></span></code></pre></div>
+<p><code>Atomic*</code> implements the CAS of its internal field with
+<code>volatile</code> + <code>Unsafe</code>/<code>VarHandle</code>—which
+also explains why <code>Atomic*</code> can fill the gap mentioned
+earlier that “volatile does not guarantee the atomicity of compound
+operations”: it does not make <code>volatile</code> stronger, but
+rather, on top of the visibility <code>volatile</code> provides, uses
+the hardware instruction CAS to merge “compare and swap” into a single
+indivisible operation, fundamentally eliminating the possibility of the
+“read old value, compute, write back” steps being interposed by another
+thread.</p>
+<p><strong>The ABA problem</strong>: a value changes from A to B and
+back to A, and CAS cannot detect it—because CAS only compares “is the
+current value equal to the expected value,” and does not care whether
+the value was changed and changed back in between; in structures like
+lock-free stacks and lock-free linked lists, ABA may cause a node to be
+wrongly reused or freed. It is solved with
+<code>AtomicStampedReference</code> (binding a version number to the
+value and comparing both together), analogous to the tagged pointer in a
+lock-free stack.</p>
+<p>A runnable comparison: 8 threads each <code>count++</code> 100,000
+times. The unprotected <code>int</code> <strong>loses updates</strong>
+because “read-modify-write” is not atomic, while
+<code>AtomicInteger</code> is always correct thanks to CAS:</p>
+<div class="sourceCode" id="cb17"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">concurrent</span><span class="op">.</span><span class="im">atomic</span><span class="op">.</span><span class="im">AtomicInteger</span><span class="op">;</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> LostUpdate <span class="op">{</span></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">int</span> plain <span class="op">=</span> <span class="dv">0</span><span class="op">;</span>                       <span class="co">// unprotected</span></span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">final</span> <span class="bu">AtomicInteger</span> atomic <span class="op">=</span> <span class="kw">new</span> <span class="bu">AtomicInteger</span><span class="op">(</span><span class="dv">0</span><span class="op">);</span></span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="kw">throws</span> <span class="bu">Exception</span> <span class="op">{</span></span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span> threads <span class="op">=</span> <span class="dv">8</span><span class="op">,</span> perThread <span class="op">=</span> <span class="dv">100_000</span><span class="op">;</span></span>
+<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Runnable</span> job <span class="op">=</span> <span class="op">()</span> <span class="op">-&gt;</span> <span class="op">{</span></span>
+<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> perThread<span class="op">;</span> i<span class="op">++)</span> <span class="op">{</span></span>
+<span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a>                plain<span class="op">++;</span>                         <span class="co">// read-modify-write, not atomic: loses updates</span></span>
+<span id="cb17-12"><a href="#cb17-12" aria-hidden="true" tabindex="-1"></a>                atomic<span class="op">.</span><span class="fu">incrementAndGet</span><span class="op">();</span>        <span class="co">// CAS: atomic</span></span>
+<span id="cb17-13"><a href="#cb17-13" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
+<span id="cb17-14"><a href="#cb17-14" aria-hidden="true" tabindex="-1"></a>        <span class="op">};</span></span>
+<span id="cb17-15"><a href="#cb17-15" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Thread</span><span class="op">[]</span> ts <span class="op">=</span> <span class="kw">new</span> <span class="bu">Thread</span><span class="op">[</span>threads<span class="op">];</span></span>
+<span id="cb17-16"><a href="#cb17-16" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> threads<span class="op">;</span> i<span class="op">++)</span> ts<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> <span class="kw">new</span> <span class="bu">Thread</span><span class="op">(</span>job<span class="op">);</span></span>
+<span id="cb17-17"><a href="#cb17-17" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span><span class="bu">Thread</span> t <span class="op">:</span> ts<span class="op">)</span> t<span class="op">.</span><span class="fu">start</span><span class="op">();</span></span>
+<span id="cb17-18"><a href="#cb17-18" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span><span class="bu">Thread</span> t <span class="op">:</span> ts<span class="op">)</span> t<span class="op">.</span><span class="fu">join</span><span class="op">();</span>            <span class="co">// wait for all to finish, the result is deterministic</span></span>
+<span id="cb17-19"><a href="#cb17-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-20"><a href="#cb17-20" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span> expected <span class="op">=</span> threads <span class="op">*</span> perThread<span class="op">;</span>      <span class="co">// 800000</span></span>
+<span id="cb17-21"><a href="#cb17-21" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;expected      = &quot;</span> <span class="op">+</span> expected<span class="op">);</span></span>
+<span id="cb17-22"><a href="#cb17-22" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;atomic == exp : &quot;</span> <span class="op">+</span> <span class="op">(</span>atomic<span class="op">.</span><span class="fu">get</span><span class="op">()</span> <span class="op">==</span> expected<span class="op">));</span></span>
+<span id="cb17-23"><a href="#cb17-23" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;plain  &lt;  exp : &quot;</span> <span class="op">+</span> <span class="op">(</span>plain <span class="op">&lt;</span> expected<span class="op">));</span></span>
+<span id="cb17-24"><a href="#cb17-24" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb17-25"><a href="#cb17-25" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb17-26"><a href="#cb17-26" aria-hidden="true" tabindex="-1"></a><span class="co">// expected      = 800000</span></span>
+<span id="cb17-27"><a href="#cb17-27" aria-hidden="true" tabindex="-1"></a><span class="co">// atomic == exp : true</span></span>
+<span id="cb17-28"><a href="#cb17-28" aria-hidden="true" tabindex="-1"></a><span class="co">// plain  &lt;  exp : true    —— plain is almost certainly &lt; 800000 (lost updates), atomic always equals the expected value</span></span></code></pre></div>
+<p>(This code has been verified in practice: <code>atomic == exp</code>
+is always <code>true</code>, <code>plain &lt; exp</code> is always
+<code>true</code>, and the phenomenon is stable and reproducible.)</p>
+<h2 id="java.util.concurrent">8. java.util.concurrent</h2>
+<h3 id="reentrantlock">ReentrantLock</h3>
+<p><code>ReentrantLock</code> is the explicit version of
+<code>synchronized</code>: you <code>lock()</code> yourself and
+<code>unlock()</code> yourself, and you must put <code>unlock()</code>
+in a <code>finally</code>, otherwise the exception path will cause the
+lock never to be released:</p>
+<div class="sourceCode" id="cb18"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">concurrent</span><span class="op">.</span><span class="im">locks</span><span class="op">.</span><span class="im">ReentrantLock</span><span class="op">;</span></span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> LockBasicDemo <span class="op">{</span></span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">final</span> <span class="bu">ReentrantLock</span> lock <span class="op">=</span> <span class="kw">new</span> <span class="bu">ReentrantLock</span><span class="op">();</span></span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">int</span> counter <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">increment</span><span class="op">()</span> <span class="op">{</span></span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a>        lock<span class="op">.</span><span class="fu">lock</span><span class="op">();</span></span>
+<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">{</span></span>
+<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a>            counter<span class="op">++;</span></span>
+<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="cf">finally</span> <span class="op">{</span></span>
+<span id="cb18-12"><a href="#cb18-12" aria-hidden="true" tabindex="-1"></a>            lock<span class="op">.</span><span class="fu">unlock</span><span class="op">();</span></span>
+<span id="cb18-13"><a href="#cb18-13" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb18-14"><a href="#cb18-14" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb18-15"><a href="#cb18-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-16"><a href="#cb18-16" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="kw">throws</span> <span class="bu">InterruptedException</span> <span class="op">{</span></span>
+<span id="cb18-17"><a href="#cb18-17" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Runnable</span> job <span class="op">=</span> <span class="op">()</span> <span class="op">-&gt;</span> <span class="op">{</span> <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">100_000</span><span class="op">;</span> i<span class="op">++)</span> <span class="fu">increment</span><span class="op">();</span> <span class="op">};</span></span>
+<span id="cb18-18"><a href="#cb18-18" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Thread</span> t1 <span class="op">=</span> <span class="kw">new</span> <span class="bu">Thread</span><span class="op">(</span>job<span class="op">);</span></span>
+<span id="cb18-19"><a href="#cb18-19" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Thread</span> t2 <span class="op">=</span> <span class="kw">new</span> <span class="bu">Thread</span><span class="op">(</span>job<span class="op">);</span></span>
+<span id="cb18-20"><a href="#cb18-20" aria-hidden="true" tabindex="-1"></a>        t1<span class="op">.</span><span class="fu">start</span><span class="op">();</span></span>
+<span id="cb18-21"><a href="#cb18-21" aria-hidden="true" tabindex="-1"></a>        t2<span class="op">.</span><span class="fu">start</span><span class="op">();</span></span>
+<span id="cb18-22"><a href="#cb18-22" aria-hidden="true" tabindex="-1"></a>        t1<span class="op">.</span><span class="fu">join</span><span class="op">();</span></span>
+<span id="cb18-23"><a href="#cb18-23" aria-hidden="true" tabindex="-1"></a>        t2<span class="op">.</span><span class="fu">join</span><span class="op">();</span></span>
+<span id="cb18-24"><a href="#cb18-24" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;counter = &quot;</span> <span class="op">+</span> counter<span class="op">);</span> <span class="co">// 200000</span></span>
+<span id="cb18-25"><a href="#cb18-25" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb18-26"><a href="#cb18-26" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb18-27"><a href="#cb18-27" aria-hidden="true" tabindex="-1"></a><span class="co">// counter = 200000</span></span></code></pre></div>
+<p>The extra capability over <code>synchronized</code> is being able to
+try to acquire the lock with a timeout, and take another branch if it
+cannot be obtained, rather than waiting forever:</p>
+<div class="sourceCode" id="cb19"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="op">(</span>lock<span class="op">.</span><span class="fu">tryLock</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="bu">TimeUnit</span><span class="op">.</span><span class="fu">SECONDS</span><span class="op">))</span> <span class="op">{</span>   <span class="co">// wait at most 1 second</span></span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span> <span class="op">{</span></span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>        <span class="co">// critical section</span></span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span> <span class="cf">finally</span> <span class="op">{</span></span>
+<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a>        lock<span class="op">.</span><span class="fu">unlock</span><span class="op">();</span></span>
+<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb19-7"><a href="#cb19-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> <span class="cf">else</span> <span class="op">{</span></span>
+<span id="cb19-8"><a href="#cb19-8" aria-hidden="true" tabindex="-1"></a>    <span class="co">// did not get the lock, do something else (e.g. give up, retry)</span></span>
+<span id="cb19-9"><a href="#cb19-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p><code>ReentrantLock</code> is more flexible than
+<code>synchronized</code>: interruptible, timeout-capable,
+fairness-capable, and supports multiple condition variables. It is based
+on <strong>AQS (AbstractQueuedSynchronizer)</strong>—a
+<code>volatile int state</code> + a CLH-variant wait queue; the
+visibility of <code>state</code> relies on <code>volatile</code>, while
+the queuing and blocking under contention rely on AQS’s own wait-queue
+mechanism. <code>new ReentrantLock(true)</code> constructs a fair lock
+(queued in request order, slightly lower throughput but no thread
+starves forever).</p>
+<table>
+<thead>
+<tr>
+<th>Comparison</th>
+<th>synchronized</th>
+<th>ReentrantLock</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Acquisition</td>
+<td>Implicit (JVM)</td>
+<td>Explicit lock/unlock</td>
+</tr>
+<tr>
+<td>Release</td>
+<td>Automatic</td>
+<td>Manual (finally)</td>
+</tr>
+<tr>
+<td>Interruptible</td>
+<td>No</td>
+<td>lockInterruptibly()</td>
+</tr>
+<tr>
+<td>Timeout</td>
+<td>No</td>
+<td>tryLock(timeout)</td>
+</tr>
+<tr>
+<td>Fair lock</td>
+<td>No</td>
+<td>Optional</td>
+</tr>
+<tr>
+<td>Condition variables</td>
+<td>Single (wait/notify)</td>
+<td>Multiple Conditions</td>
+</tr>
+</tbody>
+</table>
+<h3 id="what-locks-are-there-in-java-a-classification-table">What locks
+are there in Java: a classification table</h3>
+<p>We have already covered <code>synchronized</code> (lock upgrade:
+biased lock → lightweight lock → heavyweight lock) and
+<code>ReentrantLock</code> (based on AQS) separately, but “what locks
+are there in Java” asks about a higher-level classification
+dimension—the same lock often falls into several dimensions at once, and
+these dimensions describe mutually independent problems, not mutually
+exclusive options:</p>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr>
+<th>Classification dimension</th>
+<th>Type</th>
+<th>Meaning</th>
+<th>Example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>By whether contention is assumed</td>
+<td>Pessimistic lock</td>
+<td>Assumes there is definitely contention; locks first, then
+operates</td>
+<td><code>synchronized</code>, <code>ReentrantLock</code></td>
+</tr>
+<tr>
+<td></td>
+<td>Optimistic lock</td>
+<td>Assumes there is no contention; operates first, then checks at
+commit whether it was modified, retrying on conflict</td>
+<td>CAS, <code>AtomicInteger</code> (see the previous section)</td>
+</tr>
+<tr>
+<td>By whether jumping the queue is allowed</td>
+<td>Fair lock</td>
+<td>Acquired strictly in request order; no thread starves forever</td>
+<td><code>new ReentrantLock(true)</code></td>
+</tr>
+<tr>
+<td></td>
+<td>Unfair lock</td>
+<td>Allows a newly arrived thread to grab a just-released lock directly,
+trading fairness for throughput</td>
+<td><code>synchronized</code>, <code>new ReentrantLock()</code>
+(default)</td>
+</tr>
+<tr>
+<td>By whether it can be acquired again</td>
+<td>Reentrant lock</td>
+<td>The same thread can repeatedly acquire a lock it already holds
+without deadlocking, implemented via
+<code>recursions</code>/<code>state</code> counting</td>
+<td><code>synchronized</code>, <code>ReentrantLock</code></td>
+</tr>
+<tr>
+<td></td>
+<td>Non-reentrant lock</td>
+<td>The same thread acquiring it again locks itself out</td>
+<td>A hand-written spinlock that does not record the owner</td>
+</tr>
+<tr>
+<td>By whether it can be shared</td>
+<td>Exclusive lock (mutual-exclusion lock)</td>
+<td>Only one thread can hold it at a time</td>
+<td><code>synchronized</code>, <code>ReentrantLock</code>, the write
+lock of <code>ReentrantReadWriteLock</code></td>
+</tr>
+<tr>
+<td></td>
+<td>Shared lock</td>
+<td>Multiple threads can hold it at the same time</td>
+<td>The read lock of <code>ReentrantReadWriteLock</code>,
+<code>Semaphore</code> (allows N to enter simultaneously)</td>
+</tr>
+<tr>
+<td>By behavior on acquisition failure</td>
+<td>Spinlock</td>
+<td>On failing to acquire the lock, does not block but loops and retries
+(with an upper bound, after which it turns to blocking)</td>
+<td>The implementation of the lightweight lock;
+<code>AtomicInteger</code>’s internal CAS spin</td>
+</tr>
+<tr>
+<td></td>
+<td>Blocking lock</td>
+<td>On failing to acquire the lock, suspends directly and yields the
+CPU, waiting to be woken</td>
+<td>The heavyweight lock (<code>ObjectMonitor</code> suspends threads
+into the <code>EntryList</code>)</td>
+</tr>
+<tr>
+<td>By lock-granularity design</td>
+<td>Segmented lock</td>
+<td>Splits one big object into segments, each locked separately;
+concurrency degree = number of segments</td>
+<td>The <code>Segment</code> of JDK 7 <code>ConcurrentHashMap</code>
+(JDK 8 changed to locking the bucket’s head node; see the next
+section)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Why the same lock spans several rows</strong>: take
+<code>synchronized</code> as an example—it is simultaneously an “unfair
+lock” (the instant thread A releases the lock, a newly arrived thread B
+may grab it faster than the already-queued thread C), a “reentrant lock”
+(the same thread can repeatedly enter a critical section it already
+holds), and an “exclusive lock” (only one thread executes the critical
+section at a time)—these three describe three mutually independent
+problems (whether to queue in order, whether reentry is allowed, whether
+sharing is allowed), and <code>synchronized</code> made a fixed choice
+on each of these three dimensions; whereas <code>ReentrantLock</code>
+hands the choice on the “fair/unfair” dimension back to the caller
+(passing <code>true</code>/<code>false</code> to the constructor), which
+is precisely one concrete manifestation of why it is more flexible than
+<code>synchronized</code>, rather than a vague claim of “more
+flexible.”</p>
+<p>The <code>optimistic lock</code>/<code>pessimistic lock</code> layer
+of classification corresponds directly to the earlier “CAS and Atomic*”
+section in this chapter: a pessimistic lock assumes “not locking will
+surely cause problems,” so it pays the cost of locking first and then
+operates, and <code>synchronized</code>/<code>ReentrantLock</code> both
+follow this line of thinking; an optimistic lock assumes “probably no
+one is contending with me,” so it operates directly without locking, and
+only at the moment of committing the result uses CAS to check “did
+anyone modify it first during this period,” writing successfully if not
+and retrying (or re-reading the latest value and recomputing) if so—the
+earlier <code>AtomicInteger</code>/<code>LongAdder</code> are the most
+basic way optimistic locking is realized in Java; the common
+database-level pattern of “adding a <code>version</code> field to a row,
+<code>UPDATE ... WHERE version = old version number</code>” is the same
+idea reused at another layer of the system.</p>
+<h3 id="concurrenthashmap">ConcurrentHashMap</h3>
+<p>In concurrent scenarios do not use an ordinary <code>HashMap</code>
+(multiple threads simultaneously triggering a resize may cause a linked
+list to form a cycle and <code>get</code> to loop forever); use
+<code>ConcurrentHashMap</code>, whose API is used the same way as
+<code>HashMap</code>:</p>
+<div class="sourceCode" id="cb20"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">concurrent</span><span class="op">.</span><span class="im">ConcurrentHashMap</span><span class="op">;</span></span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> CHMBasicDemo <span class="op">{</span></span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>        <span class="bu">ConcurrentHashMap</span><span class="op">&lt;</span><span class="bu">String</span><span class="op">,</span> <span class="bu">Integer</span><span class="op">&gt;</span> map <span class="op">=</span> <span class="kw">new</span> <span class="bu">ConcurrentHashMap</span><span class="op">&lt;&gt;();</span></span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>        map<span class="op">.</span><span class="fu">put</span><span class="op">(</span><span class="st">&quot;a&quot;</span><span class="op">,</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a>        map<span class="op">.</span><span class="fu">putIfAbsent</span><span class="op">(</span><span class="st">&quot;a&quot;</span><span class="op">,</span> <span class="dv">99</span><span class="op">);</span>         <span class="co">// &quot;a&quot; already exists, not overwritten</span></span>
+<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a>        map<span class="op">.</span><span class="fu">computeIfAbsent</span><span class="op">(</span><span class="st">&quot;b&quot;</span><span class="op">,</span> k <span class="op">-&gt;</span> <span class="dv">2</span><span class="op">);</span> <span class="co">// &quot;b&quot; does not exist, compute and put it in</span></span>
+<span id="cb20-9"><a href="#cb20-9" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>map<span class="op">.</span><span class="fu">get</span><span class="op">(</span><span class="st">&quot;a&quot;</span><span class="op">));</span> <span class="co">// 1</span></span>
+<span id="cb20-10"><a href="#cb20-10" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>map<span class="op">.</span><span class="fu">get</span><span class="op">(</span><span class="st">&quot;b&quot;</span><span class="op">));</span> <span class="co">// 2</span></span>
+<span id="cb20-11"><a href="#cb20-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb20-12"><a href="#cb20-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb20-13"><a href="#cb20-13" aria-hidden="true" tabindex="-1"></a><span class="co">// 1</span></span>
+<span id="cb20-14"><a href="#cb20-14" aria-hidden="true" tabindex="-1"></a><span class="co">// 2</span></span></code></pre></div>
+<p>The JDK 8 rewrite: <strong>array + linked list / red-black
+tree</strong>, with concurrency control using <strong>CAS + synchronized
+(locking the bucket’s head node)</strong>, rather than the segmented
+lock (Segment) of JDK 7. Choosing “lock the bucket’s head node” rather
+than locking the whole table is so that the concurrency degree is
+proportional to the number of buckets rather than being compressed to
+1—this is precisely the fundamental reason it has far higher throughput
+than <code>Collections.synchronizedMap</code> (which locks the whole
+table, so only one thread can operate at any moment):</p>
+<ul>
+<li>Inserting into an empty bucket: CAS puts it directly,
+lock-free.</li>
+<li>Non-empty bucket: <code>synchronized</code> locks that bucket’s head
+node, only one bucket, concurrency degree = number of buckets.</li>
+<li>When a linked list’s length ≥ 8 and the table capacity ≥ 64, it
+converts to a red-black tree, dropping queries from O(n) to O(log
+n).</li>
+<li><code>size()</code> uses <code>baseCount</code> +
+<code>CounterCell[]</code> (similar to LongAdder) to avoid a hot
+spot.</li>
+</ul>
+<p>Reads are basically lock-free (a node’s val/next are volatile),
+writes lock only a single bucket, and throughput is far higher than
+<code>Collections.synchronizedMap</code>.</p>
+<h3 id="the-thread-pool-threadpoolexecutor">The thread pool
+ThreadPoolExecutor</h3>
+<p>Rather than <code>new Thread</code> for every task, one usually uses
+a thread pool to reuse threads—creating an OS thread is itself expensive
+(as discussed earlier, stack allocation, <code>pthread_create</code>,
+and kernel scheduling all have real costs), and the thread pool
+amortizes this cost across many task executions. The simplest usage is
+to obtain an <code>ExecutorService</code> and <code>submit</code> tasks
+to it repeatedly:</p>
+<div class="sourceCode" id="cb21"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">concurrent</span><span class="op">.</span><span class="im">ExecutorService</span><span class="op">;</span></span>
+<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">concurrent</span><span class="op">.</span><span class="im">Executors</span><span class="op">;</span></span>
+<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">concurrent</span><span class="op">.</span><span class="im">Future</span><span class="op">;</span></span>
+<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> PoolBasicDemo <span class="op">{</span></span>
+<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="kw">throws</span> <span class="bu">Exception</span> <span class="op">{</span></span>
+<span id="cb21-7"><a href="#cb21-7" aria-hidden="true" tabindex="-1"></a>        <span class="bu">ExecutorService</span> es <span class="op">=</span> <span class="bu">Executors</span><span class="op">.</span><span class="fu">newFixedThreadPool</span><span class="op">(</span><span class="dv">2</span><span class="op">);</span></span>
+<span id="cb21-8"><a href="#cb21-8" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Future</span><span class="op">&lt;</span><span class="bu">Integer</span><span class="op">&gt;</span> f <span class="op">=</span> es<span class="op">.</span><span class="fu">submit</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="dv">1</span> <span class="op">+</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb21-9"><a href="#cb21-9" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;result = &quot;</span> <span class="op">+</span> f<span class="op">.</span><span class="fu">get</span><span class="op">());</span> <span class="co">// 2, blocks to get the result</span></span>
+<span id="cb21-10"><a href="#cb21-10" aria-hidden="true" tabindex="-1"></a>        es<span class="op">.</span><span class="fu">shutdown</span><span class="op">();</span>                              <span class="co">// remember to shut down the pool when done</span></span>
+<span id="cb21-11"><a href="#cb21-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb21-12"><a href="#cb21-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb21-13"><a href="#cb21-13" aria-hidden="true" tabindex="-1"></a><span class="co">// result = 2</span></span></code></pre></div>
+<p><code>submit</code> hands the task to the thread pool for
+asynchronous execution and returns a <code>Future</code> immediately;
+<code>f.get()</code> blocks waiting for the task to finish and obtains
+the return value; <code>shutdown()</code> notifies the pool to accept no
+new tasks and to exit once it finishes what it has in hand.</p>
+<p>More common in production is to <code>new ThreadPoolExecutor</code>
+yourself with the parameters spelled out, rather than using
+<code>Executors</code>’ factory methods:</p>
+<div class="sourceCode" id="cb22"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">concurrent</span><span class="op">.</span><span class="im">ArrayBlockingQueue</span><span class="op">;</span></span>
+<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">concurrent</span><span class="op">.</span><span class="im">Executors</span><span class="op">;</span></span>
+<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">concurrent</span><span class="op">.</span><span class="im">ThreadPoolExecutor</span><span class="op">;</span></span>
+<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">concurrent</span><span class="op">.</span><span class="im">TimeUnit</span><span class="op">;</span></span>
+<span id="cb22-5"><a href="#cb22-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-6"><a href="#cb22-6" aria-hidden="true" tabindex="-1"></a><span class="bu">ThreadPoolExecutor</span> pool <span class="op">=</span> <span class="kw">new</span> <span class="bu">ThreadPoolExecutor</span><span class="op">(</span></span>
+<span id="cb22-7"><a href="#cb22-7" aria-hidden="true" tabindex="-1"></a>    <span class="dv">2</span><span class="op">,</span>                              <span class="co">// corePoolSize: number of core threads, always resident</span></span>
+<span id="cb22-8"><a href="#cb22-8" aria-hidden="true" tabindex="-1"></a>    <span class="dv">4</span><span class="op">,</span>                              <span class="co">// maximumPoolSize: maximum number of threads</span></span>
+<span id="cb22-9"><a href="#cb22-9" aria-hidden="true" tabindex="-1"></a>    <span class="dv">60L</span><span class="op">,</span> <span class="bu">TimeUnit</span><span class="op">.</span><span class="fu">SECONDS</span><span class="op">,</span>          <span class="co">// keepAliveTime: idle survival time for non-core threads</span></span>
+<span id="cb22-10"><a href="#cb22-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">new</span> <span class="bu">ArrayBlockingQueue</span><span class="op">&lt;&gt;(</span><span class="dv">100</span><span class="op">),</span>  <span class="co">// workQueue: the task queue</span></span>
+<span id="cb22-11"><a href="#cb22-11" aria-hidden="true" tabindex="-1"></a>    <span class="bu">Executors</span><span class="op">.</span><span class="fu">defaultThreadFactory</span><span class="op">(),</span></span>
+<span id="cb22-12"><a href="#cb22-12" aria-hidden="true" tabindex="-1"></a>    <span class="kw">new</span> <span class="bu">ThreadPoolExecutor</span><span class="op">.</span><span class="fu">CallerRunsPolicy</span><span class="op">()</span> <span class="co">// rejection policy</span></span>
+<span id="cb22-13"><a href="#cb22-13" aria-hidden="true" tabindex="-1"></a><span class="op">);</span></span></code></pre></div>
+<p>Task submission logic (be sure to understand it):</p>
+<pre><code>submit a task
+  ├─ number of running threads &lt; core?   → create a core thread to run it
+  ├─ no, queue not full?                  → enqueue and wait
+  ├─ no, thread count &lt; max?              → create a non-core thread to run it
+  └─ no                                    → trigger the rejection policy</code></pre>
+<p>Rejection policies: <code>AbortPolicy</code> (throws an exception,
+the default), <code>CallerRunsPolicy</code> (the submitter runs it
+itself, backpressure), <code>DiscardPolicy</code>,
+<code>DiscardOldestPolicy</code>.</p>
+<blockquote>
+<p>In production, avoid
+<code>Executors.newFixedThreadPool</code>/<code>newCachedThreadPool</code>:
+the former has an unbounded queue (piled-up tasks may OOM rather than
+triggering the rejection policy), and the latter has an unbounded thread
+count (under a sudden burst of load it may create a huge number of
+threads and drag down the system). Manually
+<code>new ThreadPoolExecutor</code> with explicit parameters makes the
+decision “is there a capacity ceiling at all” explicit, rather than
+relying on the hard-to-notice defaults behind the factory methods.</p>
+</blockquote>
+<h3 id="why-more-threads-is-not-always-better">Why more threads is not
+always better</h3>
+<p>Intuitively “the more threads, the stronger the concurrency,” but
+this intuition holds only on an idealized machine with infinite cores.
+On a real machine, once the thread count exceeds a certain point,
+throughput no longer rises and may even fall, because two kinds of
+invisible cost grow with the thread count:</p>
+<ul>
+<li><strong>Context-switching overhead</strong>: CPU cores are limited,
+and once the thread count greatly exceeds the number of cores, the OS
+scheduler must constantly swap threads on and off the CPU—each switch
+must save/restore registers, flush the TLB, and destroy the
+just-established cache locality (the newly swapped-in thread most likely
+has to reload data from memory rather than hitting what the previous
+thread left in L1/L2). These switches produce no business result at all
+and are purely scheduling cost; the more threads, the more switches per
+unit time, and the lower the proportion of CPU time actually spent on
+business computation—this is the most direct cause of “more threads is
+not always better,” and is the same mechanism, at a different scale, as
+“too many platform threads dragging down the scheduler” in the earlier
+“virtual threads” section.</li>
+<li><strong>Memory overhead</strong>: as mentioned earlier, each
+platform thread takes about 1MB of stack by default; 1,000 threads
+consume nearly 1GB of stack memory alone, not counting the other
+resources a thread holds (database connections, file handles bound to
+the thread also grow proportionally).</li>
+</ul>
+<p>Hence an empirical formula for estimating “how many threads is
+appropriate,” rather than picking a number arbitrarily:</p>
+<pre><code>optimal thread count ≈ number of CPU cores × (1 + average wait time / average compute time)</code></pre>
+<p>The meaning is straightforward: a task that computes the whole time
+(wait time approaching 0) should have a thread count close to the number
+of cores—opening more threads just makes them queue for CPU time slices,
+does not speed up computation, and instead adds switching overhead; a
+task that spends most of its time waiting on IO (wait time far exceeding
+compute time) can open far more threads than cores, because during the
+wait a thread does not occupy the CPU, and this “idle” time can be
+scheduled for another thread to compute. From this come two commonly
+used simplified rules of thumb:</p>
+<ul>
+<li><strong>CPU-intensive tasks</strong> (pure computation, sorting,
+encryption/decryption): thread count ≈ number of CPU cores + 1. As many
+threads as cores exactly fill each core, and the extra 1 leaves margin
+for “a thread occasionally taking a page fault or briefly blocking,”
+avoiding some core idling for that instant.</li>
+<li><strong>IO-intensive tasks</strong> (database queries, RPC calls,
+file reads/writes): thread count ≈ number of CPU cores × 2, or even
+higher. Such tasks spend most of their time with the thread waiting for
+IO to return and not occupying the CPU, and the extra threads can
+execute the compute part of other tasks while a “waiting” thread yields
+the CPU.</li>
+</ul>
+<p>These two values are only empirical starting points, not exact
+solutions—the true optimum depends on the actual ratio of “wait time /
+compute time” in the formula above, and production usually requires load
+testing and observing CPU utilization and the number of context switches
+(<code>vmstat</code>/<code>pidstat</code> can show the
+<code>cs</code>/<code>csw</code> columns) to tune it, rather than
+applying a fixed multiplier once and for all. This is also why the
+earlier part of this section stresses using
+<code>new ThreadPoolExecutor(...)</code> with explicit parameters rather
+than relying on the <code>Executors</code> factory methods—the
+thread-count ceiling ought to be a value computed from the actual load,
+not a number hidden inside the default implementation that developers
+will not even look at.</p>
+<h3 id="future-and-completablefuture">Future and CompletableFuture</h3>
+<p>The <code>Future</code> returned by <code>es.submit(...)</code> in
+the <code>PoolBasicDemo</code> above is the most basic
+asynchronous-result placeholder—<code>get()</code> blocks to obtain the
+result, and until you have the result you can do nothing; multiple
+asynchronous steps cannot be chained declaratively, only manually
+<code>get()</code>-blocked layer by layer.
+<code>CompletableFuture</code> solves exactly this composability
+problem: you can string multiple asynchronous steps together like
+building blocks, without manually blocking at each step:</p>
+<div class="sourceCode" id="cb25"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">concurrent</span><span class="op">.</span><span class="im">CompletableFuture</span><span class="op">;</span></span>
+<span id="cb25-2"><a href="#cb25-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb25-3"><a href="#cb25-3" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> CFBasicDemo <span class="op">{</span></span>
+<span id="cb25-4"><a href="#cb25-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb25-5"><a href="#cb25-5" aria-hidden="true" tabindex="-1"></a>        CompletableFuture<span class="op">&lt;</span><span class="bu">Integer</span><span class="op">&gt;</span> cf <span class="op">=</span> CompletableFuture</span>
+<span id="cb25-6"><a href="#cb25-6" aria-hidden="true" tabindex="-1"></a>            <span class="op">.</span><span class="fu">supplyAsync</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="dv">10</span><span class="op">)</span>     <span class="co">// asynchronously produce a value</span></span>
+<span id="cb25-7"><a href="#cb25-7" aria-hidden="true" tabindex="-1"></a>            <span class="op">.</span><span class="fu">thenApply</span><span class="op">(</span>x <span class="op">-&gt;</span> x <span class="op">*</span> <span class="dv">2</span><span class="op">);</span>    <span class="co">// transform the result, chaining to return a new CompletableFuture</span></span>
+<span id="cb25-8"><a href="#cb25-8" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>cf<span class="op">.</span><span class="fu">join</span><span class="op">());</span> <span class="co">// 20, blocks waiting for the whole chain to finish before taking the value</span></span>
+<span id="cb25-9"><a href="#cb25-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb25-10"><a href="#cb25-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb25-11"><a href="#cb25-11" aria-hidden="true" tabindex="-1"></a><span class="co">// 20</span></span></code></pre></div>
+<p>More common chained forms also include consuming the result and
+handling exceptions:</p>
+<div class="sourceCode" id="cb26"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a>CompletableFuture</span>
+<span id="cb26-2"><a href="#cb26-2" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span><span class="fu">supplyAsync</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="dv">10</span><span class="op">)</span>                    <span class="co">// asynchronously produce</span></span>
+<span id="cb26-3"><a href="#cb26-3" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span><span class="fu">thenApply</span><span class="op">(</span>x <span class="op">-&gt;</span> x <span class="op">*</span> <span class="dv">2</span><span class="op">)</span>                    <span class="co">// transform (chained on the same thread)</span></span>
+<span id="cb26-4"><a href="#cb26-4" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span><span class="fu">thenCompose</span><span class="op">(</span>x <span class="op">-&gt;</span> CompletableFuture<span class="op">.</span><span class="fu">supplyAsync</span><span class="op">(()</span> <span class="op">-&gt;</span> x <span class="op">+</span> <span class="dv">1</span><span class="op">))</span> <span class="co">// flatten a nested future</span></span>
+<span id="cb26-5"><a href="#cb26-5" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span><span class="fu">thenAccept</span><span class="op">(</span><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">::</span>println<span class="op">)</span>          <span class="co">// consume, prints 21</span></span>
+<span id="cb26-6"><a href="#cb26-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span><span class="fu">exceptionally</span><span class="op">(</span>ex <span class="op">-&gt;</span> <span class="op">{</span> ex<span class="op">.</span><span class="fu">printStackTrace</span><span class="op">();</span> <span class="cf">return</span> <span class="kw">null</span><span class="op">;</span> <span class="op">})</span></span>
+<span id="cb26-7"><a href="#cb26-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span><span class="fu">join</span><span class="op">();</span> <span class="co">// wait for the chain to finish —— the common thread pool uses daemon threads, so if main does not wait it may exit early and miss the print</span></span></code></pre></div>
+<p>Similar to JS’s Promise / C++’s <code>std::future</code> +
+continuation. Runnable: <code>thenCombine</code> runs two tasks
+concurrently and then merges them; <code>exceptionally</code> recovers
+from an exception in the chain, and subsequent steps continue:</p>
+<div class="sourceCode" id="cb27"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">concurrent</span><span class="op">.</span><span class="im">CompletableFuture</span><span class="op">;</span></span>
+<span id="cb27-2"><a href="#cb27-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb27-3"><a href="#cb27-3" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> CFCompose <span class="op">{</span></span>
+<span id="cb27-4"><a href="#cb27-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="kw">throws</span> <span class="bu">Exception</span> <span class="op">{</span></span>
+<span id="cb27-5"><a href="#cb27-5" aria-hidden="true" tabindex="-1"></a>        CompletableFuture<span class="op">&lt;</span><span class="bu">Integer</span><span class="op">&gt;</span> a <span class="op">=</span> CompletableFuture<span class="op">.</span><span class="fu">supplyAsync</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="dv">3</span><span class="op">);</span></span>
+<span id="cb27-6"><a href="#cb27-6" aria-hidden="true" tabindex="-1"></a>        CompletableFuture<span class="op">&lt;</span><span class="bu">Integer</span><span class="op">&gt;</span> b <span class="op">=</span> CompletableFuture<span class="op">.</span><span class="fu">supplyAsync</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="dv">4</span><span class="op">);</span></span>
+<span id="cb27-7"><a href="#cb27-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb27-8"><a href="#cb27-8" aria-hidden="true" tabindex="-1"></a>        <span class="co">// combine: a and b execute concurrently, and merge when done</span></span>
+<span id="cb27-9"><a href="#cb27-9" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span> hypotSq <span class="op">=</span> a<span class="op">.</span><span class="fu">thenCombine</span><span class="op">(</span>b<span class="op">,</span> <span class="op">(</span>x<span class="op">,</span> y<span class="op">)</span> <span class="op">-&gt;</span> x <span class="op">*</span> x <span class="op">+</span> y <span class="op">*</span> y<span class="op">).</span><span class="fu">join</span><span class="op">();</span> <span class="co">// 25</span></span>
+<span id="cb27-10"><a href="#cb27-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb27-11"><a href="#cb27-11" aria-hidden="true" tabindex="-1"></a>        <span class="co">// chaining + exception recovery</span></span>
+<span id="cb27-12"><a href="#cb27-12" aria-hidden="true" tabindex="-1"></a>        <span class="bu">String</span> r <span class="op">=</span> CompletableFuture<span class="op">.</span><span class="fu">supplyAsync</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="dv">10</span><span class="op">)</span></span>
+<span id="cb27-13"><a href="#cb27-13" aria-hidden="true" tabindex="-1"></a>            <span class="op">.</span><span class="fu">thenApply</span><span class="op">(</span>x <span class="op">-&gt;</span> x <span class="op">/</span> <span class="dv">0</span><span class="op">)</span>                    <span class="co">// throws ArithmeticException</span></span>
+<span id="cb27-14"><a href="#cb27-14" aria-hidden="true" tabindex="-1"></a>            <span class="op">.</span><span class="fu">exceptionally</span><span class="op">(</span>ex <span class="op">-&gt;</span> <span class="op">-</span><span class="dv">1</span><span class="op">)</span>                  <span class="co">// recover to -1</span></span>
+<span id="cb27-15"><a href="#cb27-15" aria-hidden="true" tabindex="-1"></a>            <span class="op">.</span><span class="fu">thenApply</span><span class="op">(</span>x <span class="op">-&gt;</span> <span class="st">&quot;result=&quot;</span> <span class="op">+</span> x<span class="op">)</span></span>
+<span id="cb27-16"><a href="#cb27-16" aria-hidden="true" tabindex="-1"></a>            <span class="op">.</span><span class="fu">join</span><span class="op">();</span></span>
+<span id="cb27-17"><a href="#cb27-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb27-18"><a href="#cb27-18" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;hypotSq = &quot;</span> <span class="op">+</span> hypotSq<span class="op">);</span></span>
+<span id="cb27-19"><a href="#cb27-19" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>r<span class="op">);</span></span>
+<span id="cb27-20"><a href="#cb27-20" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb27-21"><a href="#cb27-21" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb27-22"><a href="#cb27-22" aria-hidden="true" tabindex="-1"></a><span class="co">// hypotSq = 25</span></span>
+<span id="cb27-23"><a href="#cb27-23" aria-hidden="true" tabindex="-1"></a><span class="co">// result=-1</span></span></code></pre></div>
+<h3 id="coordination-tools">Coordination tools</h3>
+<div class="sourceCode" id="cb28"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a><span class="co">// CountDownLatch: one-shot, wait for N events to complete (not resettable), like a one-way barrier</span></span>
+<span id="cb28-2"><a href="#cb28-2" aria-hidden="true" tabindex="-1"></a><span class="bu">CountDownLatch</span> latch <span class="op">=</span> <span class="kw">new</span> <span class="bu">CountDownLatch</span><span class="op">(</span><span class="dv">3</span><span class="op">);</span></span>
+<span id="cb28-3"><a href="#cb28-3" aria-hidden="true" tabindex="-1"></a><span class="co">// worker: latch.countDown();</span></span>
+<span id="cb28-4"><a href="#cb28-4" aria-hidden="true" tabindex="-1"></a>latch<span class="op">.</span><span class="fu">await</span><span class="op">();</span>   <span class="co">// the main thread waits for the count to reach zero</span></span>
+<span id="cb28-5"><a href="#cb28-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb28-6"><a href="#cb28-6" aria-hidden="true" tabindex="-1"></a><span class="co">// Semaphore: a semaphore, for rate limiting / limiting concurrency</span></span>
+<span id="cb28-7"><a href="#cb28-7" aria-hidden="true" tabindex="-1"></a><span class="bu">Semaphore</span> sem <span class="op">=</span> <span class="kw">new</span> <span class="bu">Semaphore</span><span class="op">(</span><span class="dv">2</span><span class="op">);</span>   <span class="co">// at most 2 enter simultaneously</span></span>
+<span id="cb28-8"><a href="#cb28-8" aria-hidden="true" tabindex="-1"></a>sem<span class="op">.</span><span class="fu">acquire</span><span class="op">();</span></span>
+<span id="cb28-9"><a href="#cb28-9" aria-hidden="true" tabindex="-1"></a><span class="cf">try</span> <span class="op">{</span> <span class="co">/* limited resource */</span> <span class="op">}</span> <span class="cf">finally</span> <span class="op">{</span> sem<span class="op">.</span><span class="fu">release</span><span class="op">();</span> <span class="op">}</span></span>
+<span id="cb28-10"><a href="#cb28-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb28-11"><a href="#cb28-11" aria-hidden="true" tabindex="-1"></a><span class="co">// CyclicBarrier: reusable, N threads wait for each other to converge and then continue together</span></span></code></pre></div>
+<h2 id="deadlock-and-how-to-avoid-it">9. Deadlock and how to avoid
+it</h2>
+<p>The four conditions for deadlock (consistent with OS textbooks):
+mutual exclusion, hold-and-wait, no preemption, and circular wait.
+Typical:</p>
+<div class="sourceCode" id="cb29"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Thread 1: lock A then B; Thread 2: lock B then A → circular wait</span></span>
+<span id="cb29-2"><a href="#cb29-2" aria-hidden="true" tabindex="-1"></a><span class="kw">synchronized</span> <span class="op">(</span>A<span class="op">)</span> <span class="op">{</span> <span class="kw">synchronized</span> <span class="op">(</span>B<span class="op">)</span> <span class="op">{</span> <span class="op">}</span> <span class="op">}</span>  <span class="co">// Thread 1</span></span>
+<span id="cb29-3"><a href="#cb29-3" aria-hidden="true" tabindex="-1"></a><span class="kw">synchronized</span> <span class="op">(</span>B<span class="op">)</span> <span class="op">{</span> <span class="kw">synchronized</span> <span class="op">(</span>A<span class="op">)</span> <span class="op">{</span> <span class="op">}</span> <span class="op">}</span>  <span class="co">// Thread 2</span></span></code></pre></div>
+<p>Means of avoidance: - <strong>Lock ordering</strong>: all threads
+acquire locks in a fixed global order (breaks circular wait). -
+<strong>tryLock with timeout</strong>:
+<code>ReentrantLock.tryLock</code> backs off and releases if it cannot
+acquire. - <strong>Reduce lock granularity/hold time</strong>, and be
+lock-free where possible (CAS, immutable objects). - Detection:
+<code>jstack &lt;pid&gt;</code> can report “Found one Java-level
+deadlock.”</p>
+<h2 id="bio-nio-aio">10. BIO / NIO / AIO</h2>
+<p>The problem the next section “virtual threads” sets out to solve—“a
+blocking IO request occupies an entire kernel thread”—was, before
+virtual threads appeared, already mitigated by Java from different
+angles through three generations of different IO models. Understanding
+the differences among these three is necessary background for
+understanding why virtual threads are designed the way they are.</p>
+<p>The core difference among the three is two independent dimensions:
+<strong>whether the thread must keep waiting</strong>
+(blocking/non-blocking), and <strong>who notifies of / completes the
+IO</strong> (synchronous/asynchronous)—these two dimensions are easily
+conflated, but describe different problems:</p>
+<table>
+<colgroup>
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+</colgroup>
+<thead>
+<tr>
+<th>Model</th>
+<th>Full name</th>
+<th>Blocking/non-blocking</th>
+<th>Synchronous/asynchronous</th>
+<th>Core mechanism</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>BIO</td>
+<td>Blocking IO</td>
+<td>Blocking</td>
+<td>Synchronous</td>
+<td>One connection one thread; after a <code>read()</code> call the
+thread is suspended until data arrives</td>
+</tr>
+<tr>
+<td>NIO</td>
+<td>Non-blocking IO</td>
+<td>Non-blocking</td>
+<td>Synchronous</td>
+<td>A single thread’s <code>Selector</code> polls the ready events of
+many <code>Channel</code>s; when ready, the thread does the
+<code>read()</code> itself</td>
+</tr>
+<tr>
+<td>AIO</td>
+<td>Asynchronous IO</td>
+<td>Non-blocking</td>
+<td>Asynchronous</td>
+<td>A <code>read()</code> returns immediately; after the OS finishes
+copying the data it proactively calls back, and the thread never
+participates in waiting</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Why “blocking/non-blocking” and “synchronous/asynchronous”
+are two different things</strong>: blocking is about “whether the thread
+that made the call can do something else while waiting for the
+result”—in BIO a thread calling <code>read()</code> just waits there
+dead, whereas in NIO a thread calling non-blocking <code>read()</code>
+immediately gets a result of “no data for now” or “there is data,”
+without waiting foolishly. Synchronous/asynchronous is about “who
+completes the IO operation itself”: in a synchronous model, blocking or
+not, the step of actually copying the data from the kernel buffer to
+user space is done by the thread that made the call (an NIO thread still
+has to call <code>read()</code> itself to move the data over, it just
+can go do something else first before moving, relying on the
+<code>Selector</code> to notify it that “it can move now”); in an
+asynchronous model, even the copying step is handed to the OS, and the
+thread is only called back at the very end to be told “the data is
+already where you wanted it.” NIO’s “non-blocking” happens in the phase
+of waiting for data to become ready, and the copying phase is still
+synchronous; AIO hands both the waiting and the copying phases to the
+OS, and this is the essential dividing line between NIO and AIO, not the
+superficial “AIO is just NIO plus a callback.”</p>
+<h3 id="bio-one-connection-one-thread">BIO: one connection one
+thread</h3>
+<div class="sourceCode" id="cb30"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb30-1"><a href="#cb30-1" aria-hidden="true" tabindex="-1"></a><span class="bu">ServerSocket</span> server <span class="op">=</span> <span class="kw">new</span> <span class="bu">ServerSocket</span><span class="op">(</span><span class="dv">8080</span><span class="op">);</span></span>
+<span id="cb30-2"><a href="#cb30-2" aria-hidden="true" tabindex="-1"></a><span class="cf">while</span> <span class="op">(</span><span class="kw">true</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb30-3"><a href="#cb30-3" aria-hidden="true" tabindex="-1"></a>    <span class="bu">Socket</span> socket <span class="op">=</span> server<span class="op">.</span><span class="fu">accept</span><span class="op">();</span>       <span class="co">// blocks: waits here as long as there is no new connection</span></span>
+<span id="cb30-4"><a href="#cb30-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">new</span> <span class="bu">Thread</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="op">{</span></span>
+<span id="cb30-5"><a href="#cb30-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">(</span><span class="bu">InputStream</span> in <span class="op">=</span> socket<span class="op">.</span><span class="fu">getInputStream</span><span class="op">())</span> <span class="op">{</span></span>
+<span id="cb30-6"><a href="#cb30-6" aria-hidden="true" tabindex="-1"></a>            in<span class="op">.</span><span class="fu">read</span><span class="op">(</span>buffer<span class="op">);</span>               <span class="co">// blocks: waits here as long as there is no data</span></span>
+<span id="cb30-7"><a href="#cb30-7" aria-hidden="true" tabindex="-1"></a>            <span class="co">// handle the request...</span></span>
+<span id="cb30-8"><a href="#cb30-8" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="cf">catch</span> <span class="op">(</span><span class="bu">IOException</span> e<span class="op">)</span> <span class="op">{</span> <span class="co">/* ... */</span> <span class="op">}</span></span>
+<span id="cb30-9"><a href="#cb30-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">}).</span><span class="fu">start</span><span class="op">();</span></span>
+<span id="cb30-10"><a href="#cb30-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Every incoming connection spins up a thread to serve it; the code is
+intuitive and easy to debug (the call stack is the real execution path).
+The drawback has appeared repeatedly above: the thread count is
+proportional to the connection count, and once connections grow, the
+thread stacks and context-switching overhead alone crush the machine
+first—this is the most direct manifestation, in network programming, of
+the previous section’s “in IO-intensive scenarios you cannot add threads
+without limit,” and the fundamental reason NIO was born. It suits
+scenarios with few and relatively fixed connections, e.g. a small number
+of long-lived connections between internal services.</p>
+<h3 id="nio-one-thread-manages-many-connections">NIO: one thread manages
+many connections</h3>
+<p>The trio <code>Selector</code> + <code>Channel</code> +
+<code>Buffer</code> lets one thread simultaneously “keep an eye on”
+hundreds or thousands of connections, handling only whoever’s data is
+ready, without opening a thread per connection:</p>
+<div class="sourceCode" id="cb31"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a><span class="bu">Selector</span> selector <span class="op">=</span> <span class="bu">Selector</span><span class="op">.</span><span class="fu">open</span><span class="op">();</span></span>
+<span id="cb31-2"><a href="#cb31-2" aria-hidden="true" tabindex="-1"></a>serverChannel<span class="op">.</span><span class="fu">configureBlocking</span><span class="op">(</span><span class="kw">false</span><span class="op">);</span></span>
+<span id="cb31-3"><a href="#cb31-3" aria-hidden="true" tabindex="-1"></a>serverChannel<span class="op">.</span><span class="fu">register</span><span class="op">(</span>selector<span class="op">,</span> <span class="bu">SelectionKey</span><span class="op">.</span><span class="fu">OP_ACCEPT</span><span class="op">);</span></span>
+<span id="cb31-4"><a href="#cb31-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb31-5"><a href="#cb31-5" aria-hidden="true" tabindex="-1"></a><span class="cf">while</span> <span class="op">(</span><span class="kw">true</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb31-6"><a href="#cb31-6" aria-hidden="true" tabindex="-1"></a>    selector<span class="op">.</span><span class="fu">select</span><span class="op">();</span>                      <span class="co">// blocks, but only on &quot;is any event ready&quot;</span></span>
+<span id="cb31-7"><a href="#cb31-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="bu">SelectionKey</span> key <span class="op">:</span> selector<span class="op">.</span><span class="fu">selectedKeys</span><span class="op">())</span> <span class="op">{</span></span>
+<span id="cb31-8"><a href="#cb31-8" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>key<span class="op">.</span><span class="fu">isAcceptable</span><span class="op">())</span> <span class="op">{</span> <span class="co">/* handle a new connection */</span> <span class="op">}</span></span>
+<span id="cb31-9"><a href="#cb31-9" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>key<span class="op">.</span><span class="fu">isReadable</span><span class="op">())</span>   <span class="op">{</span> <span class="co">/* this connection&#39;s data is ready, read it */</span> <span class="op">}</span></span>
+<span id="cb31-10"><a href="#cb31-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb31-11"><a href="#cb31-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Underneath, <code>Selector.select()</code> relies on OS-provided
+“multiplexing” mechanisms such as <strong>epoll</strong> on Linux and
+<strong>IOCP</strong> on Windows—it hands “polling hundreds or thousands
+of fds for data” to the kernel to do with a more efficient data
+structure (not a foolish application-layer loop asking one by one), and
+the kernel returns to user space only the list of connections that are
+actually ready, so the application layer need not dedicate a kernel
+thread per connection to wait. This is precisely why it can support
+high-concurrency connections with a small number of threads, and one
+reason frameworks like Netty choose to build on NIO rather than AIO—not
+that AIO’s philosophy is bad, but that AIO’s kernel-level implementation
+on mainstream operating systems (especially Linux) has long been not
+mature and efficient enough, whereas NIO is more stable and
+controllable.</p>
+<h3
+id="aio-the-thread-does-not-participate-in-waiting-at-all-after-initiating">AIO:
+the thread does not participate in waiting at all after initiating</h3>
+<div class="sourceCode" id="cb32"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a>AsynchronousServerSocketChannel server <span class="op">=</span></span>
+<span id="cb32-2"><a href="#cb32-2" aria-hidden="true" tabindex="-1"></a>    AsynchronousServerSocketChannel<span class="op">.</span><span class="fu">open</span><span class="op">().</span><span class="fu">bind</span><span class="op">(</span><span class="kw">new</span> <span class="bu">InetSocketAddress</span><span class="op">(</span><span class="dv">8080</span><span class="op">));</span></span>
+<span id="cb32-3"><a href="#cb32-3" aria-hidden="true" tabindex="-1"></a>server<span class="op">.</span><span class="fu">accept</span><span class="op">(</span><span class="kw">null</span><span class="op">,</span> <span class="kw">new</span> CompletionHandler<span class="op">&lt;</span>AsynchronousSocketChannel<span class="op">,</span> <span class="bu">Object</span><span class="op">&gt;()</span> <span class="op">{</span></span>
+<span id="cb32-4"><a href="#cb32-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">@Override</span></span>
+<span id="cb32-5"><a href="#cb32-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">void</span> <span class="fu">completed</span><span class="op">(</span>AsynchronousSocketChannel channel<span class="op">,</span> <span class="bu">Object</span> attachment<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb32-6"><a href="#cb32-6" aria-hidden="true" tabindex="-1"></a>        <span class="co">// the OS has already established the connection before calling back here; this thread did not block waiting at all before</span></span>
+<span id="cb32-7"><a href="#cb32-7" aria-hidden="true" tabindex="-1"></a>        server<span class="op">.</span><span class="fu">accept</span><span class="op">(</span><span class="kw">null</span><span class="op">,</span> <span class="kw">this</span><span class="op">);</span>   <span class="co">// continue to accept the next connection</span></span>
+<span id="cb32-8"><a href="#cb32-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb32-9"><a href="#cb32-9" aria-hidden="true" tabindex="-1"></a>    <span class="at">@Override</span></span>
+<span id="cb32-10"><a href="#cb32-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">void</span> <span class="fu">failed</span><span class="op">(</span><span class="bu">Throwable</span> exc<span class="op">,</span> <span class="bu">Object</span> attachment<span class="op">)</span> <span class="op">{</span> <span class="co">/* ... */</span> <span class="op">}</span></span>
+<span id="cb32-11"><a href="#cb32-11" aria-hidden="true" tabindex="-1"></a><span class="op">});</span></span></code></pre></div>
+<p>After initiating <code>accept</code>/<code>read</code>, the thread
+returns immediately to do other things, and the OS proactively calls the
+<code>completed</code> callback after finishing the connection
+establishment or data copy—this is the concrete meaning of the
+“asynchronous” column in the table above. The cost is that every IO
+operation needs a callback object, and the business logic gets
+fragmented into a pile of callback pieces; this is precisely the
+concrete example of the readability cost of “asynchronous/callback-style
+programming” that the next section “virtual threads” will mention at its
+start. AIO sees little actual use in the Java ecosystem, largely because
+the performance gain bought by this readability cost is not as stable on
+Linux as “NIO + a small number of threads.”</p>
+<h3 id="how-to-choose-among-the-three">How to choose among the
+three</h3>
+<ul>
+<li>Few, relatively fixed connections (calls between internal services):
+BIO, the simplest code and the lowest debugging cost.</li>
+<li>Many connections with short per-request handling time (typical web
+servers, gateways): NIO, using a small number of threads to withstand a
+large number of concurrent connections; the NIO modes of Netty and
+Tomcat are both this idea.</li>
+<li>Many connections with long per-request handling time, and
+callback-style programming is acceptable: AIO, in theory the most
+thread-thrifty, but its ecosystem and OS support are not as mature as
+NIO’s.</li>
+</ul>
+<p>These three models can reduce the thread count to varying degrees,
+but none solves the other half of the tension raised in the next
+section—NIO/AIO save threads but turn business code into event polling
+or callback chains, no longer the intuitive “execute top to bottom”
+form. The idea of virtual threads is the reverse: the problem of thread
+count is handed to the runtime to solve with M:N scheduling, while
+business code keeps the synchronous, intuitive BIO-style form—this is
+also why understanding the trade-offs of BIO/NIO/AIO helps in
+understanding what problem virtual threads really solve.</p>
+<h2 id="virtual-threads-loom-jdk-21">11. Virtual threads (Loom, JDK
+21)</h2>
+<p>The platform threads seen earlier (<code>new Thread(...)</code>) bind
+1:1 to a kernel thread, have about a 1MB stack, and are created via
+<code>pthread_create</code>. This is not much of a problem in
+<strong>CPU-intensive</strong> scenarios (the thread count should be
+close to the number of cores anyway), but in an
+<strong>IO-intensive</strong> service (e.g. a typical “one request one
+thread” web server) it hits a structural contradiction: while handling
+an HTTP request, the thread spends the vast majority of its time waiting
+for the database to return and for downstream RPC responses—during these
+waits the thread does no computation at all, but as long as it is a
+platform thread, it keeps occupying a precious kernel thread and about
+1MB of stack memory until the IO completes.</p>
+<p><strong>Why “enlarging the thread pool” cannot solve it</strong>:
+doing the arithmetic makes it clear—a thread pool of 100,000 platform
+threads consumes, for stack memory alone, 100,000 × 1MB = 100GB, which
+most machines simply cannot bear, not counting each thread’s kernel-mode
+scheduling cost; facing tens of thousands of threads, the OS scheduler’s
+context-switching overhead itself (save/restore registers, TLB flush,
+cache locality destroyed) grows significantly, and throughput drops
+instead. This is not a problem of “the parameters were not tuned well,”
+but the resource-consumption ceiling of the model “a waiting request
+occupies a complete kernel thread”—enlarging the thread pool only pushes
+this tension out, it does not eliminate it.</p>
+<p>Before virtual threads, the industry’s solution was
+<strong>asynchronous/callback-style programming</strong> (Java’s NIO +
+<code>CompletableFuture</code>, Netty’s Reactor model): rather than
+letting a thread block waiting on IO, register a callback, and after the
+IO is ready run the callback on some thread, so the same thread can
+handle other connections during the wait. This did solve the resource
+problem (Netty can withstand tens of thousands of concurrent connections
+with just a few threads), but at the cost of a changed programming
+model—the business logic gets split into a pile of pieces connected by
+callback chains, the originally linear logic of “read the database →
+compute a result → query once more → return” becomes deeply nested or
+chained <code>thenCompose</code>/<code>thenApply</code>, an exception
+must be handled explicitly at each stage, and the debug call stack no
+longer corresponds to “the call path this request actually went through”
+but to “in which scheduling of which thread pool this callback was
+triggered”—the intuition for troubleshooting is broken.</p>
+<p><strong>What virtual threads set out to solve is exactly this
+contradiction</strong>: to both escape the resource model of “a blocking
+request occupying a kernel thread” and preserve the simple, intuitive
+programming model of “write code top to bottom, use ordinary
+<code>try/catch</code>, and the call stack is the real call path.” From
+JDK 21 you can use <strong>virtual threads</strong>, whose syntax is
+almost the same as platform threads but which are extremely lightweight
+and can be created in the millions:</p>
+<div class="sourceCode" id="cb33"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">concurrent</span><span class="op">.</span><span class="im">Executors</span><span class="op">;</span></span>
+<span id="cb33-2"><a href="#cb33-2" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">concurrent</span><span class="op">.</span><span class="im">Future</span><span class="op">;</span></span>
+<span id="cb33-3"><a href="#cb33-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb33-4"><a href="#cb33-4" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> VirtualBasicDemo <span class="op">{</span></span>
+<span id="cb33-5"><a href="#cb33-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="kw">throws</span> <span class="bu">Exception</span> <span class="op">{</span></span>
+<span id="cb33-6"><a href="#cb33-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Thread</span> vt <span class="op">=</span> <span class="bu">Thread</span><span class="op">.</span><span class="fu">ofVirtual</span><span class="op">().</span><span class="fu">start</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;hello from virtual thread&quot;</span><span class="op">));</span></span>
+<span id="cb33-7"><a href="#cb33-7" aria-hidden="true" tabindex="-1"></a>        vt<span class="op">.</span><span class="fu">join</span><span class="op">();</span></span>
+<span id="cb33-8"><a href="#cb33-8" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;is virtual: &quot;</span> <span class="op">+</span> vt<span class="op">.</span><span class="fu">isVirtual</span><span class="op">());</span> <span class="co">// true</span></span>
+<span id="cb33-9"><a href="#cb33-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb33-10"><a href="#cb33-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">(</span><span class="dt">var</span> executor <span class="op">=</span> <span class="bu">Executors</span><span class="op">.</span><span class="fu">newVirtualThreadPerTaskExecutor</span><span class="op">())</span> <span class="op">{</span></span>
+<span id="cb33-11"><a href="#cb33-11" aria-hidden="true" tabindex="-1"></a>            <span class="bu">Future</span><span class="op">&lt;</span><span class="bu">Integer</span><span class="op">&gt;</span> f <span class="op">=</span> executor<span class="op">.</span><span class="fu">submit</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="dv">1</span> <span class="op">+</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb33-12"><a href="#cb33-12" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;result = &quot;</span> <span class="op">+</span> f<span class="op">.</span><span class="fu">get</span><span class="op">());</span> <span class="co">// 2</span></span>
+<span id="cb33-13"><a href="#cb33-13" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb33-14"><a href="#cb33-14" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb33-15"><a href="#cb33-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb33-16"><a href="#cb33-16" aria-hidden="true" tabindex="-1"></a><span class="co">// hello from virtual thread</span></span>
+<span id="cb33-17"><a href="#cb33-17" aria-hidden="true" tabindex="-1"></a><span class="co">// is virtual: true</span></span>
+<span id="cb33-18"><a href="#cb33-18" aria-hidden="true" tabindex="-1"></a><span class="co">// result = 2</span></span></code></pre></div>
+<p><code>Thread.ofVirtual().start(...)</code> starts a virtual thread
+directly; <code>Executors.newVirtualThreadPerTaskExecutor()</code> is a
+thread pool that “uses a new virtual thread to run each submitted task,”
+and the usage of <code>submit</code>/<code>get</code> is exactly the
+same as an ordinary thread pool.</p>
+<p>A <strong>virtual thread</strong> is a <strong>user-mode
+thread</strong> scheduled by the JVM (analogous to a Go goroutine): its
+stack grows on demand and lives on the heap, its creation and switching
+do not go through the OS, and it can be created in the
+millions—something a platform thread bound 1:1 to a kernel thread cannot
+do.</p>
+<div class="sourceCode" id="cb34"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a><span class="co">// one virtual thread per task; on blocking IO it is automatically unmounted, occupying no kernel thread</span></span>
+<span id="cb34-2"><a href="#cb34-2" aria-hidden="true" tabindex="-1"></a><span class="cf">try</span> <span class="op">(</span><span class="dt">var</span> executor <span class="op">=</span> <span class="bu">Executors</span><span class="op">.</span><span class="fu">newVirtualThreadPerTaskExecutor</span><span class="op">())</span> <span class="op">{</span></span>
+<span id="cb34-3"><a href="#cb34-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">1_000_000</span><span class="op">;</span> i<span class="op">++)</span> <span class="op">{</span></span>
+<span id="cb34-4"><a href="#cb34-4" aria-hidden="true" tabindex="-1"></a>        executor<span class="op">.</span><span class="fu">submit</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="op">{</span></span>
+<span id="cb34-5"><a href="#cb34-5" aria-hidden="true" tabindex="-1"></a>            <span class="bu">Thread</span><span class="op">.</span><span class="fu">sleep</span><span class="op">(</span><span class="bu">Duration</span><span class="op">.</span><span class="fu">ofSeconds</span><span class="op">(</span><span class="dv">1</span><span class="op">));</span> <span class="co">// blocking does not occupy the carrier thread</span></span>
+<span id="cb34-6"><a href="#cb34-6" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="kw">null</span><span class="op">;</span></span>
+<span id="cb34-7"><a href="#cb34-7" aria-hidden="true" tabindex="-1"></a>        <span class="op">});</span></span>
+<span id="cb34-8"><a href="#cb34-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb34-9"><a href="#cb34-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Runnable: start 100,000 virtual threads at once, each “blocking” for
+10ms. Placed on a few platform threads (carriers), they still finish in
+tens of milliseconds—the same number of platform threads simply cannot
+be created. Use <code>CountDownLatch</code> to wait for all to check in,
+and <code>AtomicInteger</code> to count:</p>
+<div class="sourceCode" id="cb35"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">concurrent</span><span class="op">.</span><span class="im">CountDownLatch</span><span class="op">;</span></span>
+<span id="cb35-2"><a href="#cb35-2" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">concurrent</span><span class="op">.</span><span class="im">Executors</span><span class="op">;</span></span>
+<span id="cb35-3"><a href="#cb35-3" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">concurrent</span><span class="op">.</span><span class="im">atomic</span><span class="op">.</span><span class="im">AtomicInteger</span><span class="op">;</span></span>
+<span id="cb35-4"><a href="#cb35-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb35-5"><a href="#cb35-5" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> VThreads <span class="op">{</span></span>
+<span id="cb35-6"><a href="#cb35-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="kw">throws</span> <span class="bu">Exception</span> <span class="op">{</span></span>
+<span id="cb35-7"><a href="#cb35-7" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span> n <span class="op">=</span> <span class="dv">100_000</span><span class="op">;</span></span>
+<span id="cb35-8"><a href="#cb35-8" aria-hidden="true" tabindex="-1"></a>        <span class="bu">AtomicInteger</span> done <span class="op">=</span> <span class="kw">new</span> <span class="bu">AtomicInteger</span><span class="op">();</span></span>
+<span id="cb35-9"><a href="#cb35-9" aria-hidden="true" tabindex="-1"></a>        <span class="bu">CountDownLatch</span> latch <span class="op">=</span> <span class="kw">new</span> <span class="bu">CountDownLatch</span><span class="op">(</span>n<span class="op">);</span></span>
+<span id="cb35-10"><a href="#cb35-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb35-11"><a href="#cb35-11" aria-hidden="true" tabindex="-1"></a>        <span class="co">// one virtual thread per task, 100,000 in total, each briefly blocking</span></span>
+<span id="cb35-12"><a href="#cb35-12" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">(</span><span class="dt">var</span> executor <span class="op">=</span> <span class="bu">Executors</span><span class="op">.</span><span class="fu">newVirtualThreadPerTaskExecutor</span><span class="op">())</span> <span class="op">{</span></span>
+<span id="cb35-13"><a href="#cb35-13" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> n<span class="op">;</span> i<span class="op">++)</span> <span class="op">{</span></span>
+<span id="cb35-14"><a href="#cb35-14" aria-hidden="true" tabindex="-1"></a>                executor<span class="op">.</span><span class="fu">submit</span><span class="op">(()</span> <span class="op">-&gt;</span> <span class="op">{</span></span>
+<span id="cb35-15"><a href="#cb35-15" aria-hidden="true" tabindex="-1"></a>                    <span class="bu">Thread</span><span class="op">.</span><span class="fu">sleep</span><span class="op">(</span><span class="dv">10</span><span class="op">);</span>         <span class="co">// blocking unmounts the carrier, rather than occupying a kernel thread</span></span>
+<span id="cb35-16"><a href="#cb35-16" aria-hidden="true" tabindex="-1"></a>                    done<span class="op">.</span><span class="fu">incrementAndGet</span><span class="op">();</span></span>
+<span id="cb35-17"><a href="#cb35-17" aria-hidden="true" tabindex="-1"></a>                    latch<span class="op">.</span><span class="fu">countDown</span><span class="op">();</span></span>
+<span id="cb35-18"><a href="#cb35-18" aria-hidden="true" tabindex="-1"></a>                    <span class="cf">return</span> <span class="kw">null</span><span class="op">;</span></span>
+<span id="cb35-19"><a href="#cb35-19" aria-hidden="true" tabindex="-1"></a>                <span class="op">});</span></span>
+<span id="cb35-20"><a href="#cb35-20" aria-hidden="true" tabindex="-1"></a>            <span class="op">}</span></span>
+<span id="cb35-21"><a href="#cb35-21" aria-hidden="true" tabindex="-1"></a>            latch<span class="op">.</span><span class="fu">await</span><span class="op">();</span>                    <span class="co">// wait for all tasks to check in</span></span>
+<span id="cb35-22"><a href="#cb35-22" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb35-23"><a href="#cb35-23" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;tasks done      = &quot;</span> <span class="op">+</span> done<span class="op">.</span><span class="fu">get</span><span class="op">());</span></span>
+<span id="cb35-24"><a href="#cb35-24" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;current is virtual: &quot;</span> <span class="op">+</span> <span class="bu">Thread</span><span class="op">.</span><span class="fu">currentThread</span><span class="op">().</span><span class="fu">isVirtual</span><span class="op">());</span></span>
+<span id="cb35-25"><a href="#cb35-25" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb35-26"><a href="#cb35-26" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb35-27"><a href="#cb35-27" aria-hidden="true" tabindex="-1"></a><span class="co">// tasks done      = 100000</span></span>
+<span id="cb35-28"><a href="#cb35-28" aria-hidden="true" tabindex="-1"></a><span class="co">// current is virtual: false   —— main is a platform thread; the 100,000 virtual threads are scheduled by a small number of carrier threads</span></span></code></pre></div>
+<p>(This example has been verified in practice: 100,000 virtual threads
++ 10ms of blocking each, total elapsed time about 0.15 seconds—if you
+switched to 100,000 platform threads, the creation overhead and stack
+memory alone would suffice to crush most machines.)</p>
+<h3 id="mount-and-unmount">Mount and unmount</h3>
+<p>A running virtual thread is <strong>mounted</strong> onto a platform
+thread (the <strong>carrier thread</strong>, from a ForkJoinPool). On
+encountering a blocking operation (such as network IO or
+<code>sleep</code>) it is <strong>unmounted</strong>: the virtual
+thread’s stack (in the form of a continuation) is saved to the heap, and
+the carrier thread is freed to run other virtual threads. After the
+blocking ends it is mounted onto some carrier again to continue—this is
+precisely the mechanistic core of how it simultaneously achieves
+“resource efficiency” and a “synchronous programming model”: the
+business code is still ordinary sequential blocking calls
+(<code>Thread.sleep</code>, blocking IO APIs), the call stack is still
+the request’s real call path, but the runtime translates “blocking” into
+“release the underlying resource and resume later,” a step completely
+transparent to the person writing the code.</p>
+<pre><code>platform thread pool (carriers, ~number of CPU cores)
+  Carrier-1: [VT-A running] --VT-A hits IO blocking--&gt; unmount VT-A, mount VT-B
+  Carrier-2: [VT-C running]
+             heap: [VT-A stack snapshot, awaiting wakeup] [VT-D stack snapshot] ...</code></pre>
+<p>Comparison: when a platform thread blocks, the entire kernel thread
+is suspended by the OS (occupied but unusable, and cannot be given to
+anyone else); when a virtual thread blocks, the kernel thread is freed
+to do work. Hence the synchronous “one request one thread” form can also
+achieve asynchronous throughput, without having to sacrifice the
+programming model for resource efficiency.</p>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 37%" />
+<col style="width: 37%" />
+</colgroup>
+<thead>
+<tr>
+<th>Dimension</th>
+<th>Platform thread</th>
+<th>Virtual thread</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Mapping</td>
+<td>1:1 kernel thread</td>
+<td>M:N, scheduled by the JVM onto carriers</td>
+</tr>
+<tr>
+<td>Order of magnitude</td>
+<td>Thousands</td>
+<td>Millions</td>
+</tr>
+<tr>
+<td>Stack</td>
+<td>Fixed ~1MB</td>
+<td>On demand, growable/shrinkable on the heap</td>
+</tr>
+<tr>
+<td>Cost of blocking</td>
+<td>Occupies a kernel thread</td>
+<td>Unmounted, frees the carrier</td>
+</tr>
+<tr>
+<td>Suitable for</td>
+<td>CPU-intensive</td>
+<td>IO-intensive, high concurrency</td>
+</tr>
+</tbody>
+</table>
+<p><strong>The pinning pitfall</strong>: if a virtual thread cannot be
+unmounted when it blocks, it <strong>pins</strong> the carrier thread,
+weakening the advantage. The root cause lies in how the monitor lock is
+implemented—<strong>in JDK 21–23</strong>, the
+<code>ObjectMonitor</code> underlying a <code>synchronized</code> block
+records the lock’s holder as the <strong>current operating-system
+thread</strong>, not the virtual thread itself; if a virtual thread is
+unmounted while holding the lock and later resumes execution mounted on
+a different carrier, the lock’s holder identity no longer matches the OS
+thread actually running it, which breaks the underlying assumption the
+monitor implementation relies on—“the lock holder = some definite OS
+thread.” To avoid this inconsistency, the JVM in JDK 21–23 chose to not
+unmount a virtual thread when it blocks inside a
+<code>synchronized</code> block, pinning the carrier directly, so the
+advice at the time was to switch critical sections involving blocking IO
+to <code>ReentrantLock</code> (whose lock state is recorded in a Java
+object and is not bound to an OS thread’s identity). <strong>From JDK 24
+(JEP 491), the monitor implementation was rewritten to record the lock
+holder by tracking the virtual thread itself rather than the underlying
+OS thread</strong>, eliminating this binding, so pinning caused by
+<code>synchronized</code> basically disappears and there is no longer a
+need to deliberately replace it with <code>ReentrantLock</code>. Calling
+a native method (JNI) still pins—for a different reason: a native stack
+frame is memory that genuinely belongs to the current OS thread’s call
+stack, and the JVM has no ability to migrate a piece of executing native
+code together with its stack frame onto another carrier thread; this is
+a hard constraint of the OS-level thread model, not a matter of JVM
+implementation choice, so this class of pinning currently cannot be
+eliminated.</p>
+<p>For the underlying memory barriers of <code>volatile</code>/CAS,
+review <a href="03-变量与内存模型.html">03 Variables and the Memory
+Model</a>. For tasks submitted to a thread pool and exception
+propagation, see <a href="09-错误处理与资源管理.html">09 Error Handling
+and Resource Management</a>.</p>
+<hr />
+<h2 id="summary">Summary</h2>
+<ul>
+<li><strong>Usage</strong>:
+<code>new Thread(() -&gt; ...).start()</code> starts a thread,
+<code>join()</code> waits for it to finish; when two threads modify the
+same variable, wrap it with <code>synchronized</code>, or use
+<code>ReentrantLock</code>/<code>AtomicInteger</code>; for batches of
+tasks use a thread pool’s <code>submit</code> and obtain results via
+<code>Future</code>/<code>CompletableFuture</code>; use
+<code>ConcurrentHashMap</code> instead of <code>HashMap</code> in
+concurrent scenarios;
+<code>Thread.ofVirtual()</code>/<code>newVirtualThreadPerTaskExecutor()</code>
+start virtual threads, with the same syntax as platform threads but
+creatable in the millions.</li>
+<li><strong>Principles</strong>: the root cause of multithreading going
+wrong is that “working memory / main memory” in the JMM abstraction are
+not synchronized, and this is not an implementation oversight but the
+inevitable cost of compilers/CPUs only committing to single-threaded
+as-if-serial semantics—the three independent problems of visibility,
+ordering, and atomicity are guaranteed respectively by
+volatile/synchronized/happens-before and CAS, and no single tool can
+solve all three at the lowest cost simultaneously.
+<code>synchronized</code>’s lock state is recorded in the object
+header’s mark word and goes through the upgrade biased lock →
+lightweight lock → heavyweight lock; behind the heavyweight lock are the
+four fields
+<code>Owner</code>/<code>EntryList</code>/<code>WaitSet</code>/<code>recursions</code>
+of <code>ObjectMonitor</code>; CAS is the hardware cornerstone of
+lock-free concurrency (but has the ABA problem);
+<code>ReentrantLock</code> is based on AQS;
+<code>ConcurrentHashMap</code> raises concurrency to the bucket level
+via “CAS for empty buckets + locking the head node of a non-empty
+bucket”; for thread pools, understand the submission flow of
+core/maximum thread count, queue, and rejection policy, and the
+context-switching cost behind the rule of thumb “thread count ≈ cores ×
+(1 + wait time / compute time)”; virtual threads use M:N scheduling and
+the mount/unmount mechanism to solve, while preserving the synchronous
+programming model, the structural resource problem of “blocking IO
+occupying an entire kernel thread,” but you must avoid the scenarios
+that cause pinning (pre-JDK 24 <code>synchronized</code> blocking,
+native calls).</li>
+<li><strong>Classification and selection</strong>: there are four ways
+to create threads—extend Thread / implement Runnable / implement
+Callable+FutureTask / submit to a thread pool—differing in whether they
+have a return value and whether they can declare checked exceptions;
+“what locks are there in Java” is a cross-dimensional classification
+table (optimistic/pessimistic, fair/unfair, reentrant/non-reentrant,
+exclusive/shared, spin/blocking, segmented), and the same lock often
+falls into several dimensions at once; among IO models, BIO (blocking +
+synchronous), NIO (non-blocking + synchronous, via epoll/IOCP
+multiplexing), and AIO (non-blocking + asynchronous, via callbacks) are
+three generations of solutions to the “IO waiting occupies threads”
+problem before virtual threads appeared, and virtual threads solve the
+same problem afresh at the runtime layer while preserving the
+synchronous programming model.</li>
+</ul>
+<hr />
+<p><a href="09-错误处理与资源管理.html">← Previous chapter: Error
+Handling and Resource Management</a> · <a href="index.html">Back to
+contents</a> · <a href="11-标准库算法.html">Next chapter: Standard
+Library Algorithms</a> →</p>
+</div>
+</body>
+</html>

@@ -1,0 +1,1131 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Runtime Model: javac, Bytecode, the JVM, and JIT</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../../assets/style.css" />
+</head>
+<body>
+<div class="topbar"><div class="wrap"><a class="home" href="../index.html"><span class="logo">📚</span><span class="brand">Other Languages for C/C++ Programmers</span></a>
+<a href="../java/index.html" style="color:var(--accent-dark);font-weight:700">Java</a>
+<a class="topnav-lang" href="#" onclick="switchLang();return false;" title="切换语言 / Switch language">🌐 <span class="lp">中文</span><span class="sep">/</span><span class="lp on">EN</span></a></div></div><script>function switchLang(){var p=location.pathname,en=p.indexOf('/en/')>-1,n=en?p.replace('/en/','/zh/'):p.replace('/zh/','/en/');try{localStorage.setItem('lang',en?'zh':'en')}catch(e){}location.href=n;}</script>
+<div class="wrap">
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#runtime-model-javac-bytecode-the-jvm-and-jit"
+id="toc-runtime-model-javac-bytecode-the-jvm-and-jit">Runtime Model:
+javac, Bytecode, the JVM, and JIT</a>
+<ul>
+<li><a href="#the-minimal-compile-and-run-flow"
+id="toc-the-minimal-compile-and-run-flow">1. The Minimal Compile-and-Run
+Flow</a></li>
+<li><a href="#from-source-to-bytecode-what-javac-produces"
+id="toc-from-source-to-bytecode-what-javac-produces">2. From Source to
+Bytecode: What javac Produces</a></li>
+<li><a href="#class-loading-getting-the-.class-into-the-jvm"
+id="toc-class-loading-getting-the-.class-into-the-jvm">3. Class Loading:
+Getting the .class into the JVM</a></li>
+<li><a href="#execution-the-mixed-mode-of-interpretation-jit"
+id="toc-execution-the-mixed-mode-of-interpretation-jit">4. Execution:
+The Mixed Mode of Interpretation + JIT</a></li>
+<li><a href="#runtime-memory-regions" id="toc-runtime-memory-regions">5.
+Runtime Memory Regions</a></li>
+<li><a href="#aot-graalvm-native-image"
+id="toc-aot-graalvm-native-image">6. AOT: GraalVM native-image</a></li>
+<li><a href="#a-quick-reference-of-common-jvm-parameters"
+id="toc-a-quick-reference-of-common-jvm-parameters">7. A Quick Reference
+of Common JVM Parameters</a></li>
+<li><a href="#summary" id="toc-summary">Summary</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1 id="runtime-model-javac-bytecode-the-jvm-and-jit">Runtime Model:
+javac, Bytecode, the JVM, and JIT</h1>
+<p>The compilation pipeline of C/C++ is single-stage:
+<code>gcc</code>/<code>clang</code> compiles <code>.c</code> source
+directly into machine code for the target CPU architecture, and after
+linking you get an executable bound to a specific OS/architecture. Java
+is <strong>two-stage</strong>: <code>javac</code> first compiles source
+into a platform-independent intermediate representation (bytecode), and
+then the JVM turns that bytecode into instructions actually executed on
+the target machine. This chapter clarifies every link in this chain, and
+why the extra bytecode layer is inserted — this is the foundation for
+understanding everything that follows: the memory model, the call stack,
+concurrency.</p>
+<h2 id="the-minimal-compile-and-run-flow">1. The Minimal Compile-and-Run
+Flow</h2>
+<p>The minimal skeleton of a Java program: one <strong>class</strong>
+containing one <code>main</code> method; the program starts running from
+<code>main</code>.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Hello.java</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Hello <span class="op">{</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;Hello, Java&quot;</span><span class="op">);</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>A few rules you can put to use right away:</p>
+<ul>
+<li><strong>The file name must exactly match the name of the
+<code>public class</code></strong>: this class is called
+<code>Hello</code>, so the file must be called
+<code>Hello.java</code>.</li>
+<li><strong>Compile</strong>: <code>javac Hello.java</code> — produces a
+<code>Hello.class</code> file.</li>
+<li><strong>Run</strong>: <code>java Hello</code> — note it’s the class
+name <code>Hello</code>, without the <code>.class</code> suffix, and not
+the file name.</li>
+</ul>
+<pre><code>javac Hello.java
+java Hello</code></pre>
+<p>Output:</p>
+<pre><code>Hello, Java</code></pre>
+<p>Let’s write another one with a variable and some arithmetic to
+reinforce the “compile → run” flow:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Add.java</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Add <span class="op">{</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span> a <span class="op">=</span> <span class="dv">3</span><span class="op">;</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span> b <span class="op">=</span> <span class="dv">4</span><span class="op">;</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span> sum <span class="op">=</span> a <span class="op">+</span> b<span class="op">;</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>sum<span class="op">);</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<pre><code>javac Add.java
+java Add</code></pre>
+<p>Output:</p>
+<pre><code>7</code></pre>
+<p><code>javac</code> compiles, <code>java</code> runs; the IDE merely
+automates these two steps for you. What lies behind these two steps is
+what this chapter sets out to unpack.</p>
+<h2 id="from-source-to-bytecode-what-javac-produces">2. From Source to
+Bytecode: What javac Produces</h2>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Hello.java</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Hello <span class="op">{</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span> sum <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">10</span><span class="op">;</span> i<span class="op">++)</span> <span class="op">{</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>            sum <span class="op">+=</span> i<span class="op">;</span></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>sum<span class="op">);</span></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Compile:</p>
+<pre><code>javac Hello.java     # produces Hello.class</code></pre>
+<p>The <strong>essential difference</strong> between <code>javac</code>
+and <code>gcc</code>: <code>gcc</code>’s output targets a real CPU, with
+an instruction set of x86-64 / ARM64; <code>javac</code>’s output
+targets a hypothetical <strong>stack-based virtual machine</strong>,
+whose instruction set is “bytecode.” Bytecode assumes no particular
+number of registers, no word size, no byte order — it targets only the
+abstract machine defined by the JVM specification. This is the technical
+foundation of “write once, run anywhere”: the <code>.class</code> file
+is <strong>byte-for-byte identical</strong> across Windows/Linux/macOS
+and x86/ARM.</p>
+<p>The <code>.class</code> file is a binary container with a strict
+format (beginning with the magic number <code>0xCAFEBABE</code>),
+containing:</p>
+<table>
+<colgroup>
+<col style="width: 26%" />
+<col style="width: 26%" />
+<col style="width: 47%" />
+</colgroup>
+<thead>
+<tr>
+<th>Section</th>
+<th>Contents</th>
+<th>C/C++ analogy</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>constant pool</td>
+<td>symbolic references to strings, class names, method names, and
+literals</td>
+<td>similar to <code>.rodata</code> + symbol table, but more
+structured</td>
+</tr>
+<tr>
+<td>field table</td>
+<td>the class’s field declarations</td>
+<td>struct member layout info</td>
+</tr>
+<tr>
+<td>method table</td>
+<td>each method’s bytecode + metadata</td>
+<td>function bodies, but with full type signatures</td>
+</tr>
+<tr>
+<td>attribute table</td>
+<td>line number table, local variable table, annotations, etc.</td>
+<td>debug info (like DWARF), but built in</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Why insert an extra bytecode layer, rather than compiling
+straight to machine code like <code>gcc</code></strong>: this is a
+deliberate trade-off between “portability” and “peak performance.”
+Compiling directly to machine code (AOT, Ahead-Of-Time) lets the
+compiler see the full set of target CPU features at compile time and
+perform deep static optimization, so the program runs at peak speed from
+startup — but the artifact is tightly bound to the target CPU
+architecture, operating system, and ABI. Moving it to a different CPU
+means recompiling; this is the cost of the C/C++ model of “write once,
+compile separately per platform.” Java defers the “translate into
+concrete machine instructions” step to run time; the compiler only needs
+to target an abstract stack-based virtual machine, and the resulting
+<code>.class</code> file is byte-for-byte identical on any machine with
+a JVM, buying “write once, run anywhere.” The cost is an extra round of
+translation at run time (interpretation or JIT compilation), so the
+program cannot immediately reach native-code speed during the startup
+phase. Section 4’s JIT and Section 6’s GraalVM AOT will show how this
+trade-off is specifically compensated for, or chosen in reverse.</p>
+<p>Key point: <strong><code>.class</code> retains complete type and
+symbolic information.</strong> After a C program is stripped, almost
+nothing but machine code remains and symbols are lost; whereas
+<code>.class</code> inherently carries class names, method signatures,
+and field types — this is the material basis for reflection, dynamic
+loading, and runtime type checking to exist.</p>
+<p>The following code relies on this retained information to read a
+method’s exact signature <strong>at run time</strong> — something you
+cannot do on a <code>strip</code>ped C binary:</p>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">lang</span><span class="op">.</span><span class="im">reflect</span><span class="op">.</span><span class="im">Method</span><span class="op">;</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="bu">Class</span><span class="op">&lt;?&gt;</span> c <span class="op">=</span> java<span class="op">.</span><span class="fu">util</span><span class="op">.</span><span class="fu">ArrayList</span><span class="op">.</span><span class="fu">class</span><span class="op">;</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;class = &quot;</span> <span class="op">+</span> c<span class="op">.</span><span class="fu">getName</span><span class="op">());</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a><span class="bu">Method</span> m <span class="op">=</span> c<span class="op">.</span><span class="fu">getMethod</span><span class="op">(</span><span class="st">&quot;add&quot;</span><span class="op">,</span> <span class="bu">Object</span><span class="op">.</span><span class="fu">class</span><span class="op">);</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;method = &quot;</span> <span class="op">+</span> m<span class="op">.</span><span class="fu">getName</span><span class="op">());</span></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;returns = &quot;</span> <span class="op">+</span> m<span class="op">.</span><span class="fu">getReturnType</span><span class="op">().</span><span class="fu">getName</span><span class="op">());</span></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a><span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;params = &quot;</span> <span class="op">+</span> m<span class="op">.</span><span class="fu">getParameterCount</span><span class="op">());</span></span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a><span class="co">// Output:</span></span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a><span class="co">// class = java.util.ArrayList</span></span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a><span class="co">// method = add</span></span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a><span class="co">// returns = boolean</span></span>
+<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a><span class="co">// params = 1</span></span></code></pre></div>
+<h3 id="viewing-bytecode-with-javap">Viewing Bytecode with javap</h3>
+<p><code>javap</code> is the disassembler bundled with the JDK, the
+equivalent of <code>objdump -d</code> in the Java world:</p>
+<pre><code>javap -c Hello.class</code></pre>
+<p>The <code>main</code> method’s bytecode looks roughly like this (the
+comments are mine):</p>
+<pre><code>0:  iconst_0        // push constant 0 onto the operand stack
+1:  istore_1        // pop the top of stack into local variable table slot 1 (i.e. sum)
+2:  iconst_0        // push constant 0
+3:  istore_2        // store into slot 2 (i.e. i)
+4:  iload_2         // load i onto the stack
+5:  bipush 10       // push constant 10
+7:  if_icmpge 20    // if i &gt;= 10, jump to offset 20 (exit the loop)
+10: iload_1         // load sum
+11: iload_2         // load i
+12: iadd            // add the top two values, leaving the result on the stack
+13: istore_1        // store back into sum
+14: iinc 2, 1       // increment slot 2 (i) by 1 directly, without going through the operand stack
+17: goto 4          // back to the loop condition
+20: getstatic ...   // fetch System.out
+23: iload_1
+24: invokevirtual println
+27: return</code></pre>
+<p>Note that instructions like
+<code>iconst</code>/<code>istore</code>/<code>iload</code>/<code>iadd</code>
+have <strong>no register operands</strong>. The JVM is a <strong>stack
+machine</strong>: the inputs and outputs of operations flow through the
+“operand stack,” rather than naming registers as x86 does with
+<code>add eax, ebx</code>. The <code>i</code> prefix indicates operating
+on the int type; there are also <code>l</code> (long), <code>f</code>
+(float), <code>d</code> (double), and <code>a</code> (reference,
+address). <code>iinc</code> is one of the rare instructions that can
+modify the local variable table directly.</p>
+<blockquote>
+<p>Each method declares in its bytecode how large an operand stack it
+needs (<code>stack=</code>) and how many local variable slots
+(<code>locals=</code>). These are fixed values computed at compile time,
+and the JVM allocates the stack frame accordingly — see <a
+href="06-函数与调用栈.html">“Functions and the Call Stack”</a>.</p>
+</blockquote>
+<h2 id="class-loading-getting-the-.class-into-the-jvm">3. Class Loading:
+Getting the .class into the JVM</h2>
+<p>When a C program starts, the loader maps the ELF segments into
+memory, does relocation, and binds dynamic library symbols, all in one
+shot. Java’s class loading is <strong>lazy, on-demand, and happens at
+run time</strong>, in three phases.</p>
+<p><strong>Why class loading is designed to be lazy</strong>: a typical
+Java program depends on hundreds or thousands of classes at compile time
+(the JDK core library + third-party libraries). If, at startup, it
+loaded and resolved all dependencies at once like C static linking,
+startup time would grow linearly with the size of the dependency graph —
+yet most of those classes are never used in a given run (an
+exception-handling class for a branch never taken, a feature module
+never triggered). Lazy loading spreads the cost of
+loading/linking/initialization out to the moment “this class is actually
+used for the first time”; untouched classes cost exactly nothing. This
+is a direct engineering choice under the “fast startup” goal. It has a
+secondary benefit too: classes can come from places that don’t even
+exist yet (the network, dynamically generated bytecode, an
+implementation a plugin only supplies at run time) — all that’s required
+is that the byte stream can be found before it’s actually used. This is
+impossible under a static linking model that “must see all symbols at
+link time.”</p>
+<h3 id="loading">3.1 Loading</h3>
+<p>Locate the <code>.class</code> byte stream by the class’s fully
+qualified name (from the file system, a jar, the network, or even
+generated at run time), parse it into an internal data structure in the
+method area / metaspace, and create on the heap a
+<code>java.lang.Class</code> object representing this class. This step
+is similar to <code>dlopen</code> opening a library, but at the
+granularity of a single class.</p>
+<h3 id="linking-three-sub-steps">3.2 Linking (three sub-steps)</h3>
+<ul>
+<li><strong>Verification</strong>: check that the bytecode is legal,
+that types are safe, and that the stack will not overflow/underflow.
+C/C++ has no counterpart — it trusts the machine code its compiler
+produces; the JVM, because it may load bytecode of unknown origin, must
+perform this layer of safety checking.</li>
+<li><strong>Preparation</strong>: allocate space for static fields and
+set them to <strong>zero values</strong> (int→0, reference→null). Note
+that user-supplied assignments are not executed at this point.</li>
+<li><strong>Resolution</strong>: replace the <strong>symbolic
+references</strong> in the constant pool (“method foo of class A”) with
+<strong>direct references</strong> (memory addresses/offsets). This is
+equivalent to C’s link-time symbol resolution, but happens at run time,
+and can be deferred until first use.</li>
+</ul>
+<h3 id="initialization">3.3 Initialization</h3>
+<p>Execute the static initializer blocks and the assignments of static
+fields (i.e. the <code>&lt;clinit&gt;</code> method). Trigger points:
+first <code>new</code>, accessing a static field/method, reflection,
+etc. The JVM guarantees that <code>&lt;clinit&gt;</code> runs
+<strong>exactly once</strong> even under multiple threads (with a lock),
+which is why the “static singleton + class loading” idiom is
+thread-safe.</p>
+<p>The following code verifies “lazy + exactly once”: the static
+initialization of <code>Config</code> does not happen until it is
+<strong>actively used for the first time</strong>, and a subsequent
+access does not repeat it:</p>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="dt">static</span> <span class="kw">class</span> Config <span class="op">{</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;  [Config &lt;clinit&gt; runs]&quot;</span><span class="op">);</span> <span class="op">}</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">final</span> <span class="dt">int</span> READY <span class="op">=</span> <span class="fu">compute</span><span class="op">();</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">int</span> <span class="fu">compute</span><span class="op">()</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;  [compute() runs]&quot;</span><span class="op">);</span> <span class="cf">return</span> <span class="dv">42</span><span class="op">;</span> <span class="op">}</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> a<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>    <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;main start&quot;</span><span class="op">);</span></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>    <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;before touching Config&quot;</span><span class="op">);</span></span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> v <span class="op">=</span> Config<span class="op">.</span><span class="fu">READY</span><span class="op">;</span>   <span class="co">// first active use -&gt; triggers &lt;clinit&gt;</span></span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>    <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;Config.READY = &quot;</span> <span class="op">+</span> v<span class="op">);</span></span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> v2 <span class="op">=</span> Config<span class="op">.</span><span class="fu">READY</span><span class="op">;</span>  <span class="co">// access again -&gt; &lt;clinit&gt; does not run again</span></span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a>    <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;Config.READY = &quot;</span> <span class="op">+</span> v2<span class="op">);</span></span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a><span class="co">// Output:</span></span>
+<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a><span class="co">// main start</span></span>
+<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a><span class="co">// before touching Config</span></span>
+<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a><span class="co">//   [Config &lt;clinit&gt; runs]</span></span>
+<span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a><span class="co">//   [compute() runs]</span></span>
+<span id="cb12-19"><a href="#cb12-19" aria-hidden="true" tabindex="-1"></a><span class="co">// Config.READY = 42</span></span>
+<span id="cb12-20"><a href="#cb12-20" aria-hidden="true" tabindex="-1"></a><span class="co">// Config.READY = 42</span></span></code></pre></div>
+<p>Note that <code>[Config &lt;clinit&gt; runs]</code> appears
+<strong>after</strong> <code>before touching Config</code> — class
+loading really is deferred to the moment the class is used.</p>
+<h3
+id="the-full-lifecycle-scenarios-that-trigger-initialization-and-class-unloading">The
+Full Lifecycle: Scenarios That Trigger Initialization, and Class
+Unloading</h3>
+<p>The demo above showed “first active use” triggering
+<code>&lt;clinit&gt;</code>; to list them out fully, the JVM
+specification actually defines several <strong>active use</strong>
+scenarios: initializing the main class containing <code>main</code> when
+the virtual machine starts; the first <code>new</code> of an instance of
+a class; the first access to a class’s static field or call to a static
+method (<strong>excluding</strong> <code>final</code> constants
+determinable at compile time — those are inlined directly into the
+caller’s constant pool at compile time, and do not trigger
+initialization of the referenced class); the first reflective access to
+a class (<code>Class.forName</code> triggers it with its default
+arguments); and, when initializing a class, if its superclass is not yet
+initialized, recursively initializing the superclass first. Any other
+“passive reference” (e.g. referencing a superclass static field through
+a subclass, declaring an array without instantiating it, referencing the
+compile-time constants just mentioned) does not trigger initialization —
+this is the “lazy loading” principle carried through to the end, and the
+concrete landing at the level of detail of the “lazy class loading”
+design goal.</p>
+<p>The <strong>Preparation</strong> step of linking also has an
+exception worth noting: an ordinary static field only receives its zero
+value at this step, but a <strong>constant</strong> modified with
+<code>static final</code> whose value is determinable at compile time is
+inlined directly into the constant pool of the class that references it
+at compile time; the Preparation step allocates no memory for it
+separately at all, nor does it need to wait for the target class to
+finish initializing. This is precisely the cause of the classic pitfall
+that “after a class’s <code>static final int</code> constant value is
+modified, caller code that hasn’t been recompiled still uses the old
+value”: what the caller obtained was never a “read once at run time”
+value, but a literal already copied into its own constant pool at
+compile time.</p>
+<p>Classes are likewise <strong>unloaded</strong>: only when three
+conditions are met simultaneously — all instances of the class have been
+reclaimed, the class loader that loaded it has itself been reclaimed,
+and its <code>java.lang.Class</code> object is not referenced anywhere
+(no longer reachable via reflection) — will the class metadata in the
+method area be reclaimed by GC. The core classes loaded by the Bootstrap
+ClassLoader are in practice never unloaded, because the lifetime of the
+Bootstrap ClassLoader itself equals that of the entire JVM process; what
+can be unloaded is usually only classes loaded by custom class loaders
+(common in container/plugin hot-deployment scenarios, and a failure to
+unload is precisely the root of “class loader leaks”). Note that class
+unloading reclaims <strong>the metadata in the method area</strong>,
+which is a different matter from the garbage collection of object
+instances on the heap — a class being unloaded does not mean all the
+instances it once created disappear with it; those instances are still
+judged separately by the heap’s reachability analysis (see <a
+href="09-错误处理与资源管理.html">“Error Handling and Resource
+Management”</a>).</p>
+<h3 id="the-parent-delegation-model">The Parent Delegation Model</h3>
+<p>There are multiple class loaders in the JVM, forming a hierarchy:</p>
+<pre><code>        Bootstrap ClassLoader   (C++ implementation, loads the java.* core classes)
+              ▲  delegates
+        Platform ClassLoader    (JDK platform modules)
+              ▲  delegates
+        Application ClassLoader (your classpath)
+              ▲  delegates
+        Custom ClassLoader</code></pre>
+<p>When loading a class, a child loader <strong>first delegates
+upward</strong> to its parent to try; only if the parent cannot load it
+does the child load it itself. The benefit: core classes (such as
+<code>java.lang.String</code>) are always loaded by Bootstrap, and you
+cannot substitute a forged <code>java.lang.String</code> for the system
+class — this is a guarantee of security and consistency. In C/C++, if
+two <code>.so</code> files each carry a symbol of the same name, the
+behavior depends on link order and is prone to problems; parent
+delegation avoids the “hijacking” of core classes by mechanism.</p>
+<h4 id="class-uniqueness-fully-qualified-name-class-loader">Class
+Uniqueness: Fully Qualified Name + Class Loader</h4>
+<p>When the JVM decides whether two classes “are the same class,” it
+looks not only at the class name but at the <strong>fully qualified name
++ the class loader that loaded it</strong>, together. Even if the
+bytecode is completely identical, as long as it is
+<code>defineClass</code>ed separately by two different class loaders,
+the JVM regards them as two unrelated types — <code>instanceof</code>
+evaluates to <code>false</code>, and casting between them throws
+<code>ClassCastException</code>. The following uses two custom class
+loaders to load the same <code>.class</code> bytecode separately to
+verify this (first compile a minimal <code>Sample.java</code> on its own
+to get <code>Sample.class</code>, then run the loaders below):</p>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Sample.java —— compile with javac first; the loaders below read its bytecode directly</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Sample <span class="op">{}</span></span></code></pre></div>
+<div class="sourceCode" id="cb15"><pre
+class="sourceCode java"><code class="sourceCode java"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">io</span><span class="op">.*;</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">nio</span><span class="op">.</span><span class="im">file</span><span class="op">.*;</span></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a><span class="co">// Custom class loader: override loadClass() (rather than the usually recommended findClass()),</span></span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a><span class="co">// &quot;skip upward delegation&quot; for the specified class name and load the byte stream ourselves ——</span></span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a><span class="co">// this is the most direct means of breaking parent delegation.</span></span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> BreakingLoader <span class="kw">extends</span> <span class="bu">ClassLoader</span> <span class="op">{</span></span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>    <span class="kw">private</span> <span class="dt">final</span> <span class="bu">String</span> targetClassName<span class="op">;</span></span>
+<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a>    <span class="fu">BreakingLoader</span><span class="op">(</span><span class="bu">String</span> targetClassName<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a>        <span class="kw">super</span><span class="op">(</span><span class="kw">null</span><span class="op">);</span> <span class="co">// no parent, to simulate the extreme case of &quot;no delegation at all&quot;</span></span>
+<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a>        <span class="kw">this</span><span class="op">.</span><span class="fu">targetClassName</span> <span class="op">=</span> targetClassName<span class="op">;</span></span>
+<span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb15-13"><a href="#cb15-13" aria-hidden="true" tabindex="-1"></a>    <span class="at">@Override</span></span>
+<span id="cb15-14"><a href="#cb15-14" aria-hidden="true" tabindex="-1"></a>    <span class="kw">protected</span> <span class="bu">Class</span><span class="op">&lt;?&gt;</span> <span class="fu">loadClass</span><span class="op">(</span><span class="bu">String</span> name<span class="op">,</span> <span class="dt">boolean</span> resolve<span class="op">)</span> <span class="kw">throws</span> <span class="bu">ClassNotFoundException</span> <span class="op">{</span></span>
+<span id="cb15-15"><a href="#cb15-15" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(!</span>name<span class="op">.</span><span class="fu">equals</span><span class="op">(</span>targetClassName<span class="op">))</span> <span class="op">{</span></span>
+<span id="cb15-16"><a href="#cb15-16" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="bu">ClassLoader</span><span class="op">.</span><span class="fu">getSystemClassLoader</span><span class="op">().</span><span class="fu">loadClass</span><span class="op">(</span>name<span class="op">);</span></span>
+<span id="cb15-17"><a href="#cb15-17" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb15-18"><a href="#cb15-18" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">{</span></span>
+<span id="cb15-19"><a href="#cb15-19" aria-hidden="true" tabindex="-1"></a>            <span class="dt">byte</span><span class="op">[]</span> bytes <span class="op">=</span> Files<span class="op">.</span><span class="fu">readAllBytes</span><span class="op">(</span>Paths<span class="op">.</span><span class="fu">get</span><span class="op">(</span><span class="st">&quot;Sample.class&quot;</span><span class="op">));</span></span>
+<span id="cb15-20"><a href="#cb15-20" aria-hidden="true" tabindex="-1"></a>            <span class="bu">Class</span><span class="op">&lt;?&gt;</span> c <span class="op">=</span> <span class="fu">defineClass</span><span class="op">(</span>name<span class="op">,</span> bytes<span class="op">,</span> <span class="dv">0</span><span class="op">,</span> bytes<span class="op">.</span><span class="fu">length</span><span class="op">);</span></span>
+<span id="cb15-21"><a href="#cb15-21" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> <span class="op">(</span>resolve<span class="op">)</span> <span class="fu">resolveClass</span><span class="op">(</span>c<span class="op">);</span></span>
+<span id="cb15-22"><a href="#cb15-22" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> c<span class="op">;</span></span>
+<span id="cb15-23"><a href="#cb15-23" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span> <span class="cf">catch</span> <span class="op">(</span><span class="bu">IOException</span> e<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb15-24"><a href="#cb15-24" aria-hidden="true" tabindex="-1"></a>            <span class="cf">throw</span> <span class="kw">new</span> <span class="bu">ClassNotFoundException</span><span class="op">(</span>name<span class="op">,</span> e<span class="op">);</span></span>
+<span id="cb15-25"><a href="#cb15-25" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb15-26"><a href="#cb15-26" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb15-27"><a href="#cb15-27" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb15-28"><a href="#cb15-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-29"><a href="#cb15-29" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> BreakDelegation <span class="op">{</span></span>
+<span id="cb15-30"><a href="#cb15-30" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="kw">throws</span> <span class="bu">Exception</span> <span class="op">{</span></span>
+<span id="cb15-31"><a href="#cb15-31" aria-hidden="true" tabindex="-1"></a>        BreakingLoader loader1 <span class="op">=</span> <span class="kw">new</span> <span class="fu">BreakingLoader</span><span class="op">(</span><span class="st">&quot;Sample&quot;</span><span class="op">);</span></span>
+<span id="cb15-32"><a href="#cb15-32" aria-hidden="true" tabindex="-1"></a>        BreakingLoader loader2 <span class="op">=</span> <span class="kw">new</span> <span class="fu">BreakingLoader</span><span class="op">(</span><span class="st">&quot;Sample&quot;</span><span class="op">);</span></span>
+<span id="cb15-33"><a href="#cb15-33" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Class</span><span class="op">&lt;?&gt;</span> c1 <span class="op">=</span> loader1<span class="op">.</span><span class="fu">loadClass</span><span class="op">(</span><span class="st">&quot;Sample&quot;</span><span class="op">);</span></span>
+<span id="cb15-34"><a href="#cb15-34" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Class</span><span class="op">&lt;?&gt;</span> c2 <span class="op">=</span> loader2<span class="op">.</span><span class="fu">loadClass</span><span class="op">(</span><span class="st">&quot;Sample&quot;</span><span class="op">);</span></span>
+<span id="cb15-35"><a href="#cb15-35" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-36"><a href="#cb15-36" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;c1 == c2 ? &quot;</span> <span class="op">+</span> <span class="op">(</span>c1 <span class="op">==</span> c2<span class="op">));</span></span>
+<span id="cb15-37"><a href="#cb15-37" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Object</span> o1 <span class="op">=</span> c1<span class="op">.</span><span class="fu">getDeclaredConstructor</span><span class="op">().</span><span class="fu">newInstance</span><span class="op">();</span></span>
+<span id="cb15-38"><a href="#cb15-38" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Object</span> o2 <span class="op">=</span> c2<span class="op">.</span><span class="fu">getDeclaredConstructor</span><span class="op">().</span><span class="fu">newInstance</span><span class="op">();</span></span>
+<span id="cb15-39"><a href="#cb15-39" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;o1.getClass() == o2.getClass() ? &quot;</span> <span class="op">+</span> <span class="op">(</span>o1<span class="op">.</span><span class="fu">getClass</span><span class="op">()</span> <span class="op">==</span> o2<span class="op">.</span><span class="fu">getClass</span><span class="op">()));</span></span>
+<span id="cb15-40"><a href="#cb15-40" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb15-41"><a href="#cb15-41" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb15-42"><a href="#cb15-42" aria-hidden="true" tabindex="-1"></a><span class="co">// c1 == c2 ? false</span></span>
+<span id="cb15-43"><a href="#cb15-43" aria-hidden="true" tabindex="-1"></a><span class="co">// o1.getClass() == o2.getClass() ? false</span></span>
+<span id="cb15-44"><a href="#cb15-44" aria-hidden="true" tabindex="-1"></a><span class="co">// (forcibly casting between them throws ClassCastException: Cannot cast Sample to Sample)</span></span></code></pre></div>
+<p>This is not a bug; it is the very core property that parent
+delegation exists to protect: <strong>the class loader + fully qualified
+name together constitute a type’s identity card.</strong> Precisely
+because of this, parent delegation turns “core class libraries can only
+be loaded by Bootstrap” into an enforceable constraint — even if a user
+defines a <code>java.lang.String</code> of the same name, parent
+delegation first delegates the load request to Bootstrap, and the one
+that ultimately takes effect is still the one that ships with the JDK;
+even if the forged version really were loaded, it would not be the same
+type as the <code>String</code> used everywhere else in the system, they
+would be incompatible, and so it would naturally fail to serve as a
+“replacement.”</p>
+<h4 id="how-to-break-parent-delegation">How to Break Parent
+Delegation</h4>
+<p>Parent delegation is not a rule enforced by the language, but a
+convention in the default implementation of
+<code>ClassLoader.loadClass()</code> — as long as you override this
+method, you can avoid the “ask the parent first” path. Three common
+approaches:</p>
+<ol type="1">
+<li><p><strong>A custom class loader overriding
+<code>loadClass()</code></strong>: the demo above is the most direct way
+— don’t call <code>super.loadClass()</code>, and decide for yourself
+whether to delegate and where to read the bytecode from. The JDK’s
+officially recommended conventional practice is usually to override only
+<code>findClass()</code> (which is called only after the parent loader
+fails), thereby preserving the “ask the parent first” order of parent
+delegation; overriding <code>loadClass()</code> itself directly, as
+above, is the true “breaking.”</p></li>
+<li><p><strong>The SPI mechanism + the thread context class
+loader</strong>: the classic conflict scenario is JDBC —
+<code>java.sql.DriverManager</code> is loaded by Bootstrap, but the
+concrete database driver implementation
+(e.g. <code>com.mysql.cj.jdbc.Driver</code>) is on the application’s
+classpath, loaded by the Application ClassLoader. Under standard parent
+delegation, the <code>DriverManager</code> loaded by Bootstrap cannot
+delegate in reverse to its “child” the Application ClassLoader to load
+the driver class. The JDK’s solution is to attach to each thread a
+<strong>thread context class loader</strong>, which by default is the
+Application ClassLoader; <code>DriverManager</code> internally obtains
+it via <code>Thread.currentThread().getContextClassLoader()</code> and
+“borrows” the child loader in reverse to load the driver — a workaround
+of reverse lookup from the top layer down to a lower layer.
+<code>java.util.ServiceLoader</code> (the core of the Java SPI
+mechanism) uses the same context-class-loader machinery to solve the
+loading problem of “the interface is defined in the core library, the
+concrete implementation is at the application layer.”</p></li>
+<li><p><strong>Tomcat’s class loader isolation</strong>: multiple web
+applications deployed in the same Tomcat may each depend on different
+versions of the same class library. Under strict parent delegation, all
+classes would ultimately delegate to the same Application ClassLoader,
+and same-named classes of different versions would conflict with one
+another. Tomcat’s solution is to give each web application its own
+independent <code>WebappClassLoader</code>, and to <strong>reverse the
+default lookup order</strong>: prefer loading classes under its own
+<code>WEB-INF/classes</code> and <code>WEB-INF/lib</code>, and only
+delegate upward to the common parent loader if not found — this way each
+application’s classes are isolated from one another, and same-named
+libraries of different versions can coexist in a single Tomcat process.
+This is the most common production landing of “breaking parent
+delegation.”</p></li>
+</ol>
+<h2 id="execution-the-mixed-mode-of-interpretation-jit">4. Execution:
+The Mixed Mode of Interpretation + JIT</h2>
+<p>Once it has the bytecode, how does the JVM execute it? Two techniques
+are used together (HotSpot’s default “mixed mode”):</p>
+<h3 id="interpreted-execution">Interpreted Execution</h3>
+<p>The JVM has a built-in bytecode interpreter that reads bytecode one
+instruction at a time, looks it up in a table, and executes the
+corresponding C++ logic. It starts fast (no need to wait for
+compilation), but each instruction carries interpretation overhead, one
+or two orders of magnitude slower than native machine code.</p>
+<h3 id="hot-spot-detection-jit-compilation">Hot-Spot Detection + JIT
+Compilation</h3>
+<p>The name HotSpot comes from its strategy: <strong>detecting hot
+code</strong> (Hot Spot). The JVM maintains counters for each method
+(number of method invocations + number of loop back-edges); once a
+threshold is exceeded, it deems the method “hot” and hands that bytecode
+to the <strong>JIT (Just-In-Time) compiler</strong> to compile
+<strong>at run time</strong> into native machine code, after which the
+machine code is executed directly.</p>
+<p>HotSpot has two JIT compilers (Tiered Compilation uses them
+cooperatively):</p>
+<table>
+<colgroup>
+<col style="width: 40%" />
+<col style="width: 30%" />
+<col style="width: 30%" />
+</colgroup>
+<thead>
+<tr>
+<th>Compiler</th>
+<th>Role</th>
+<th>Characteristics</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>C1 (Client)</td>
+<td>fast compilation</td>
+<td>few optimizations, compiles fast, steps in first</td>
+</tr>
+<tr>
+<td>C2 (Server)</td>
+<td>deep optimization</td>
+<td>aggressive optimizations, compiles slowly, used for the hottest
+code</td>
+</tr>
+</tbody>
+</table>
+<p>Typical path: interpreted execution → C1 compilation (with
+performance counters) → C2 recompilation of the hottest parts.</p>
+<p><strong>Why JIT is needed, rather than picking one of pure
+interpretation or pure AOT</strong>: all three schemes are each stuck at
+an extreme. A pure interpreter has zero startup latency (no waiting for
+compilation), but every bytecode goes through the
+“fetch-lookup-dispatch” overhead, and even long-running code stays slow
+forever; pure AOT (like <code>gcc</code>) can do deep optimization ahead
+of time, but the compiler cannot see information only known at run time
+(that in this run a certain virtual-method call site is in fact hit by
+only one implementing class, or that a certain loop actually iterates
+billions of times and is worth aggressive unrolling), and can only
+optimize conservatively based on static assumptions. JIT stitches the
+advantages of both together: it runs immediately via interpretation (or
+the fastest C1) to avoid startup waiting; meanwhile it uses counters to
+continuously observe run-time behavior, and only once a piece of code is
+proven “hot” does it invest the higher compilation cost of the more
+aggressive C2, using the actually-observed branch probabilities and type
+information to do the <strong>speculative optimizations</strong> a
+static compiler wouldn’t dare. <strong>Tiered Compilation</strong> is
+precisely the reconciliation of the conflict between “startup latency”
+and “peak throughput”: C1 compiles fast and optimizes conservatively,
+responsible for getting code out of slow interpretation as early as
+possible; C2 compiles slowly and optimizes aggressively, invested only
+in the few genuine hot methods, avoiding wasting compile time on code
+that runs only once. A speculative optimization that bet wrong can
+<strong>deoptimize</strong> back to interpreted execution to re-collect
+information — this is the fallback mechanism for the cost that “run-time
+information may be stale or incomplete.”</p>
+<p><strong>This is why Java “gets faster as it runs,” and can sometimes
+approach or even locally surpass C</strong>: the JIT possesses
+<strong>run-time information</strong> — which branch is actually taken,
+that a certain virtual method is actually called by only one
+implementing class, what a certain loop’s bound is. It can accordingly
+do the <strong>speculative optimizations</strong> a static compiler
+cannot; if it bets wrong, it “deoptimizes” back to interpreted
+execution. Whereas <code>gcc</code>, at compile time, knows nothing
+about run time and can only be conservative.</p>
+<h3
+id="a-few-key-jit-optimizations-with-big-effects-on-memory-behavior">A
+Few Key JIT Optimizations (with Big Effects on Memory Behavior)</h3>
+<ul>
+<li><strong>Inlining</strong>: embed the callee’s method body directly
+at the call site, eliminating call overhead and further opening up the
+horizon for subsequent optimizations. Equivalent to C’s
+<code>inline</code>, but the JIT decides it automatically <strong>at run
+time</strong> based on hotness.</li>
+<li><strong>Escape Analysis</strong>: analyze whether a reference to an
+object “escapes” the current method (whether it is returned, stored into
+another object on the heap, or seen by another thread). If it
+<strong>does not escape</strong>, the JVM can do:
+<ul>
+<li><strong>Scalar Replacement</strong>: <strong>break apart</strong> an
+object that would have been <code>new</code>ed on the heap into its
+individual fields, treating them as ordinary local variables placed
+directly into <strong>stack frame slots or even registers</strong>. Note
+this is not “moving the whole object onto the stack”; rather, the object
+as a whole <strong>no longer exists at all</strong> — so there is
+neither a heap allocation nor a need for GC to reclaim it. (HotSpot does
+not actually have real “whole-object stack allocation”; the mechanism
+that eliminates heap allocation is scalar replacement.)</li>
+</ul></li>
+</ul>
+<p>This point is important for your understanding of Java memory: at the
+Java language level “objects are all on the heap,” but at the HotSpot
+implementation level, escape analysis may keep short-lived, non-escaping
+objects out of the heap entirely. This closes part of the performance
+gap between Java and C (which puts structs on the stack). See <a
+href="03-变量与内存模型.html">“Variables and the Memory Model”</a>.</p>
+<h2 id="runtime-memory-regions">5. Runtime Memory Regions</h2>
+<p>A running JVM divides memory into several regions (defined by the JVM
+specification, implemented by HotSpot):</p>
+<pre><code>┌───────────────────────────────────────────────────────┐
+│                       JVM process                       │
+│                                                         │
+│  Shared by all threads ↓                                │
+│  ┌─────────────────────┐   ┌───────────────────────┐   │
+│  │        Heap          │   │ Method Area / Metaspace│   │
+│  │  all objects, arrays │   │ class metadata,        │   │
+│  │  the main GC arena   │   │ method bytecode        │   │
+│  │  (everything new&#39;ed) │   │ runtime constant pool  │   │
+│  │                      │   │ (metaspace in native mem)│ │
+│  └─────────────────────┘   └───────────────────────┘   │
+│                                                         │
+│  Private to each thread ↓                               │
+│  ┌───────────┐ ┌───────────┐ ┌──────────┐ ┌──────────┐ │
+│  │ JVM stack  │ │ PC register│ │native    │ │ ...      │ │
+│  │ a pile of  │ │ current    │ │method    │ │one per   │ │
+│  │ stack frames│ │ instruction│ │stack(JNI)│ │thread    │ │
+│  └───────────┘ └───────────┘ └──────────┘ └──────────┘ │
+└───────────────────────────────────────────────────────┘</code></pre>
+<table>
+<colgroup>
+<col style="width: 19%" />
+<col style="width: 19%" />
+<col style="width: 25%" />
+<col style="width: 35%" />
+</colgroup>
+<thead>
+<tr>
+<th>Region</th>
+<th>Whose</th>
+<th>Stores</th>
+<th>C/C++ analogy</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Heap</td>
+<td>shared</td>
+<td>all object and array instances</td>
+<td>the malloc heap, but reclaimed automatically by GC</td>
+</tr>
+<tr>
+<td>Method Area / Metaspace</td>
+<td>shared</td>
+<td>class structures, method bytecode, the runtime constant pool, and
+the <strong>metadata</strong> of static fields (the field
+<strong>values</strong> are stored in the <code>Class</code> mirror
+object on the heap, not in metaspace)</td>
+<td>code segment + read-only data segment (but can grow at run
+time)</td>
+</tr>
+<tr>
+<td>JVM stack</td>
+<td>per-thread</td>
+<td>stack frames (local variable table, operand stack)</td>
+<td>the thread call stack; logically the same</td>
+</tr>
+<tr>
+<td>PC register</td>
+<td>per-thread</td>
+<td>the address of the bytecode currently being executed</td>
+<td>the program counter PC/RIP</td>
+</tr>
+<tr>
+<td>Native method stack</td>
+<td>per-thread</td>
+<td>the stack when executing native (JNI) methods</td>
+<td>the native stack on the C side</td>
+</tr>
+</tbody>
+</table>
+<p>The table above is how runtime <strong>data</strong> is laid out;
+calling these native methods relies on two other components. The
+<strong>Native Method Interface (i.e. JNI)</strong>: when a method is
+marked with the <code>native</code> keyword, the execution engine does
+not interpret/compile its bytecode (it has no bytecode body at all), but
+jumps through the JNI layer to the native implementation. The
+<strong>Native Method Library</strong>: stores the actual
+implementations of these native methods
+(<code>.so</code>/<code>.dll</code>) — for example, the file-reading
+operation of <code>java.io.FileInputStream</code>, and thread creation
+and scheduling, ultimately have to be completed by calling into the
+system calls provided by the operating system through the native method
+library. The Java language itself cannot directly touch operating-system
+kernel resources; this is an inevitable cost of its cross-platform
+design, and the native interface + native method library are precisely
+what fill this “must deal with the specific OS” gap. At this point, the
+class loader (this section’s “class loading”), the runtime data areas
+(the table above), the execution engine (interpreter + JIT, the previous
+section), the native method interface, and the native method library —
+the five major components defined by the JVM specification — all have
+their corresponding landing places in this chapter.</p>
+<h3
+id="how-the-heap-is-subdivided-internally-tlab-the-survivor-ratio-large-objects-the-string-constant-pool">How
+the Heap Is Subdivided Internally: TLAB, the Survivor Ratio, Large
+Objects, the String Constant Pool</h3>
+<p>The table above treats the heap as a single monolithic “object
+storehouse”; in the actual implementation HotSpot subdivides the heap
+more finely, and these details are used repeatedly in the GC chapter of
+<a href="09-错误处理与资源管理.html">“Error Handling and Resource
+Management”</a>. Here we first establish a static understanding:</p>
+<ul>
+<li><strong>Default heap size</strong>: when
+<code>-Xmx</code>/<code>-Xms</code> are not specified explicitly,
+HotSpot gives default values as a fraction of physical memory — the
+initial heap size is about 1/64 of physical memory, and the maximum heap
+size is about 1/4 of physical memory (the exact ratios vary slightly by
+JDK version and platform). Production environments almost always set
+these two parameters explicitly rather than relying on defaults; the
+reason is in the next section.</li>
+<li><strong>TLAB (Thread Local Allocation Buffer)</strong>: the Eden
+region carves out a small portion (by default about 1% of Eden) as a
+small “thread-local allocation buffer” owned exclusively and privately
+by each thread. New objects are allocated first in the thread’s own TLAB
+via pointer bumping, without needing a lock; only when the TLAB is full
+does the thread go and contend for the allocation lock over the whole of
+Eden. This is the key optimization by which “multiple threads
+<code>new</code>ing objects at once” avoids lock contention, and the
+concrete mechanism behind the impression that “object allocation is very
+fast.”</li>
+<li><strong>The default Eden : Survivor0 : Survivor1 ratio is 8 : 1 :
+1</strong> (<code>-XX:SurvivorRatio=8</code>): this ratio is based on
+the weak generational hypothesis that “most objects don’t survive a
+single Minor GC” — the Survivor space left for surviving objects need
+not be large, and leaving more space for Eden makes Minor GC trigger
+less often.</li>
+<li><strong>Large objects go straight to the old generation</strong>:
+objects exceeding the <code>-XX:PretenureSizeThreshold</code> threshold
+(the typical scenario being large arrays) skip the young generation and
+are allocated directly into the old generation — avoiding the cost of
+copying a large object back and forth between Eden/Survivor, and
+avoiding forcing a premature Minor GC because the young generation can’t
+fit the large object.</li>
+<li><strong>The String Constant Pool (String Pool)</strong>: since JDK 7
+it was moved from the permanent generation into the heap, used to hold
+strings after <code>String.intern()</code>, ensuring that string
+literals with identical contents have only one copy in the pool,
+avoiding duplicate objects — literal concatenations determinable at
+compile time such as <code>"a" + "b"</code> are automatically interned,
+but <code>new String("ab")</code> is not.</li>
+<li><strong>Direct Memory</strong>: what
+<code>ByteBuffer.allocateDirect()</code> allocates is
+<strong>off-heap</strong> memory, not subject to <code>-Xmx</code>, not
+directly managed by GC, and freed via the
+phantom-reference/<code>Cleaner</code> mechanism as a side effect when
+the associated Java object is reclaimed (<a
+href="09-错误处理与资源管理.html">“Error Handling and Resource
+Management”</a> has a full example of phantom references).
+<code>-XX:MaxDirectMemorySize</code> specifically caps its upper bound,
+and is a separate accounting system from heap memory.</li>
+</ul>
+<p>A few comparisons with C: - <strong>Metaspace is in native
+memory</strong>, not in the GC heap (this is the design since JDK 8,
+replacing the old “permanent generation, PermGen”). - <strong>Heap
+reclamation is automatic</strong>: there is no
+<code>free</code>/<code>delete</code>; GC reclaims what it judges
+unreachable. You almost never manage the heap lifecycle manually — this
+is the biggest mental difference from C, and the reason why in <a
+href="09-错误处理与资源管理.html">“Error Handling and Resource
+Management”</a> <code>try-with-resources</code> targets only “non-memory
+resources” (files/sockets): memory is left to GC, but handles still need
+to be closed explicitly. - <strong>The semantics of the stack are almost
+the same as C’s</strong>: each method call pushes a stack frame, popped
+on return; if the stack gets too deep it triggers
+<code>StackOverflowError</code> (corresponding to C’s stack overflow,
+but the JVM throws an exception rather than segfaulting directly).</p>
+<h2 id="aot-graalvm-native-image">6. AOT: GraalVM native-image</h2>
+<p>Java can also, like C, be <strong>Ahead-Of-Time compiled</strong>
+into a native executable. <strong>GraalVM’s
+<code>native-image</code></strong> performs closure analysis at build
+time, statically compiling and packaging the classes and methods used,
+and even a slimmed-down runtime (including a GC), into a single
+standalone executable:</p>
+<pre><code>native-image Hello        # produces a native executable, hello
+./hello                   # no JVM needed, millisecond startup</code></pre>
+<p>Costs and trade-offs: - <strong>Advantages</strong>: extremely fast
+startup, small memory footprint, no need to ship a JVM — suitable for
+CLI tools and Serverless/function-computing cold starts. Here it is much
+like C’s distribution model: a single native binary. -
+<strong>Costs</strong>: at build time all classes that will be used must
+be known, so <strong>reflection, dynamic proxies, and runtime class
+generation</strong> need extra configuration; and it loses JIT’s
+run-time speculative optimizations, so peak throughput <strong>may be
+inferior</strong> to C2 after a long warm-up.</p>
+<p>So, for comparative memory: - <code>javac</code> → bytecode,
+cross-platform, runs via JVM + JIT run-time optimization (the mainstream
+for long-running services). - <code>native-image</code> → native code,
+platform-bound, fixed at build time (the choice for fast-startup,
+short-lived processes). - <code>gcc/clang</code> → native code,
+platform-bound, fixed at compile time (C/C++’s only path).</p>
+<h2 id="a-quick-reference-of-common-jvm-parameters">7. A Quick Reference
+of Common JVM Parameters</h2>
+<p>The sections above separately explained the principles of heap
+generations, metaspace, and class loading; here we gather the
+corresponding startup parameters into one quick-reference table — those
+<code>-X</code>/<code>-XX</code>-prefixed parameters after the
+<code>java</code> command are exactly what turn the “concepts” of the
+previous sections into “tunable knobs.”</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>Category</th>
+<th>Parameter</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Heap memory</td>
+<td><code>-Xms&lt;size&gt;</code></td>
+<td>initial heap size</td>
+</tr>
+<tr>
+<td>Heap memory</td>
+<td><code>-Xmx&lt;size&gt;</code></td>
+<td>maximum heap size (production recommendation: set equal to
+<code>-Xms</code> to avoid the extra pause of dynamic resizing at run
+time)</td>
+</tr>
+<tr>
+<td>Heap memory</td>
+<td><code>-Xmn&lt;size&gt;</code></td>
+<td>young generation size (set directly; takes priority over
+<code>-XX:NewRatio</code>)</td>
+</tr>
+<tr>
+<td>Heap memory</td>
+<td><code>-XX:NewRatio=&lt;n&gt;</code></td>
+<td>old-gen/young-gen ratio, default 2 (old gen occupies about 2/3)</td>
+</tr>
+<tr>
+<td>Heap memory</td>
+<td><code>-XX:SurvivorRatio=&lt;n&gt;</code></td>
+<td>Eden/single-Survivor ratio, default 8</td>
+</tr>
+<tr>
+<td>Stack</td>
+<td><code>-Xss&lt;size&gt;</code></td>
+<td>per-thread JVM stack size; shrinking it lets you spawn more threads
+when total memory is limited, enlarging it is the direct means of
+dealing with <code>StackOverflowError</code> (deep recursion)</td>
+</tr>
+<tr>
+<td>Method area</td>
+<td><code>-XX:MetaspaceSize=&lt;size&gt;</code></td>
+<td>the <strong>initial threshold at which metaspace triggers a Full
+GC</strong> (not a hard cap); when usage exceeds it, a GC is first
+triggered to try to reclaim class metadata, after which the JVM
+dynamically raises the threshold as appropriate</td>
+</tr>
+<tr>
+<td>Method area</td>
+<td><code>-XX:MaxMetaspaceSize=&lt;size&gt;</code></td>
+<td>the hard cap on metaspace; only exceeding it truly OOMs; unset, it
+is by default almost unbounded (constrained only by native memory)</td>
+</tr>
+<tr>
+<td>Method area (deprecated)</td>
+<td><code>-XX:PermSize</code> / <code>-XX:MaxPermSize</code></td>
+<td>the permanent-generation parameters of JDK 7 and earlier; since JDK
+8 the permanent generation is replaced by metaspace and these parameters
+no longer take effect</td>
+</tr>
+<tr>
+<td>GC selection</td>
+<td><code>-XX:+UseSerialGC</code> / <code>-XX:+UseParallelGC</code> /
+<code>-XX:+UseG1GC</code> / <code>-XX:+UseZGC</code></td>
+<td>select the collector, see <a
+href="09-错误处理与资源管理.html">“Error Handling and Resource
+Management · The Evolution of Collectors”</a></td>
+</tr>
+<tr>
+<td>GC tuning</td>
+<td><code>-XX:MaxGCPauseMillis=&lt;ms&gt;</code></td>
+<td>the target pause time for G1/ZGC (a soft goal, not a hard
+guarantee)</td>
+</tr>
+<tr>
+<td>GC tuning</td>
+<td><code>-XX:ParallelGCThreads=&lt;n&gt;</code></td>
+<td>the number of threads in the parallel GC phase, default equal to the
+number of CPU cores</td>
+</tr>
+<tr>
+<td>GC tuning</td>
+<td><code>-XX:MaxTenuringThreshold=&lt;n&gt;</code></td>
+<td>how many Minor GCs an object survives in Survivor before being
+promoted to the old generation, default 15</td>
+</tr>
+<tr>
+<td>Diagnostics</td>
+<td><code>-Xlog:gc*</code></td>
+<td>print GC logs (JDK 9+ unified logging framework); the first step in
+tuning is always to look at the logs first</td>
+</tr>
+<tr>
+<td>Diagnostics</td>
+<td><code>-verbose:class</code></td>
+<td>print class-loading information, to investigate
+parent-delegation-related questions like “who exactly loaded this class”
+or “why was it loaded twice”</td>
+</tr>
+<tr>
+<td>Diagnostics</td>
+<td><code>-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=&lt;path&gt;</code></td>
+<td>automatically export a heap snapshot on OOM, to find memory leaks
+with MAT/VisualVM</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Why <code>-Xms</code> and <code>-Xmx</code> should be set
+equal in production</strong>: the process of the heap growing from its
+initial size to its maximum size itself requires requesting new memory
+from the operating system and recomputing generation boundaries, and
+this action triggers an extra pause; if the heap size keeps oscillating
+during the run (growing, then shrinking after GC), you are stacking a
+layer of resize overhead on top of the normal GC pauses. Fixing them to
+the same value is equivalent to grabbing “the memory you’ll use later”
+all at once at startup, trading space for stability — which is also why,
+in high-concurrency, latency-sensitive scenarios (like flash sales), the
+first step of tuning is always to lock
+<code>-Xms</code>/<code>-Xmx</code> to the same value before talking
+about other parameters; by the same token, <code>-Xmn</code> is usually
+enlarged to between 1/2 and 2/3 of <code>-Xms</code>, because such
+scenarios produce a large number of extremely short-lived temporary
+objects, and you want them reclaimed by the copying algorithm within the
+young generation as much as possible, to avoid premature promotion to
+the old generation slowing down Major GC.</p>
+<p><strong>The difference between <code>-XX:MetaspaceSize</code> and
+<code>-Xmx</code> is worth emphasizing on its own</strong>: it is not a
+“maximum” but “the threshold for the first Full GC that reclaims class
+metadata” — when metaspace usage reaches this value, the JVM first
+attempts a Full GC to unload no-longer-used classes; if reclamation is
+insufficient it dynamically raises this threshold, and so on repeatedly;
+the true hard cap is <code>-XX:MaxMetaspaceSize</code>. This is also the
+common cause of a service that “loads many classes but hasn’t configured
+<code>MaxMetaspaceSize</code>” having its native memory endlessly eaten
+by metaspace after long running (the typical scenario: frameworks that
+generate lots of classes dynamically, where a bytecode-enhancement
+library keeps producing new classes while the corresponding class
+loaders are not reclaimed — the aforementioned “class loader leak”).</p>
+<h2 id="summary">Summary</h2>
+<ul>
+<li><strong>Flow</strong>: <code>javac filename.java</code> compiles
+(the class name must match the file name) → <code>java classname</code>
+(no suffix) runs; the IDE just automates these two steps.</li>
+<li><code>javac</code> produces <strong>platform-independent
+bytecode</strong> rather than machine code; the cost is that at run time
+the JVM, this stack-based virtual machine, must translate it once more,
+and what you buy is that the same <code>.class</code> runs anywhere;
+this is the trade-off between portability and AOT peak performance.</li>
+<li>Class loading is <strong>run-time, lazy, and layered (parent
+delegation)</strong> — lazy loading spreads the cost out to the moment a
+class is actually used, avoiding paying the startup cost for classes
+never used; parent delegation ensures core classes won’t be replaced by
+forged versions, and a class’s uniqueness is determined jointly by
+“fully qualified name + class loader.”</li>
+<li>Parent delegation can be broken: a custom class loader overriding
+<code>loadClass()</code>, the SPI mechanism doing reverse lookup via the
+thread context class loader, and Tomcat giving each web application an
+independent <code>WebappClassLoader</code> and reversing the lookup
+order — three approaches serving three different practical needs.</li>
+<li>HotSpot <strong>interprets first, then JITs after detecting hot
+spots</strong> (C1 steps in with fast compilation, C2 deeply optimizes
+the hottest code); Tiered Compilation is precisely the reconciliation of
+the conflict between “startup latency” and “peak throughput”; escape
+analysis can perform <strong>scalar replacement</strong> on non-escaping
+objects (breaking them into scalars placed into stack frames/registers,
+rather than whole-object stack allocation).</li>
+<li>Runtime memory divides into the <strong>shared
+heap/metaspace</strong> and the <strong>per-thread JVM stack/PC/native
+stack</strong>; the heap is reclaimed automatically by GC; internally
+the heap also has TLAB, the 8:1:1 Survivor ratio, large objects going
+straight to the old generation, the string constant pool, and other
+finer partitions — all concrete landings of the weak generational
+hypothesis.</li>
+<li>JVM parameters turn “concepts” into “knobs”: production advice is to
+lock <code>-Xms</code>/<code>-Xmx</code> to the same value to avoid
+dynamic-resize pauses, and <code>-XX:MetaspaceSize</code> is the
+threshold that triggers a Full GC rather than a hard cap — the
+difference between the two is the easiest thing to confuse when
+investigating memory problems.</li>
+<li>When you need a C-style fast-startup native binary, use GraalVM
+<code>native-image</code> for AOT; the cost is sacrificing run-time
+dynamism and peak optimization.</li>
+</ul>
+<hr />
+<p><a href="index.html">← Previous chapter: Contents</a> · <a
+href="index.html">Back to contents</a> · <a href="02-基础语法.html">Next
+chapter: Basic Syntax</a> →</p>
+</div>
+</body>
+</html>

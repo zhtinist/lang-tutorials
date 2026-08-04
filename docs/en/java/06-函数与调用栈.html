@@ -1,10 +1,11 @@
 <!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml" lang="zh-CN" xml:lang="zh-CN">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
-  <title>函数与调用栈:方法与参数传递的真相</title>
+  <title>Functions and the Call Stack: The Truth About Methods and
+Parameter Passing</title>
   <style>
     /* Default styles provided by pandoc.
     ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
@@ -93,53 +94,57 @@
   <link rel="stylesheet" href="../../assets/style.css" />
 </head>
 <body>
-<div class="topbar"><div class="wrap"><a class="home" href="../index.html"><span class="logo">📚</span><span class="brand">面向 C/C++ 程序员的其他语言教程</span></a>
-<a href="../python/index.html">Python</a>
+<div class="topbar"><div class="wrap"><a class="home" href="../index.html"><span class="logo">📚</span><span class="brand">Other Languages for C/C++ Programmers</span></a>
 <a href="../java/index.html" style="color:var(--accent-dark);font-weight:700">Java</a>
-<a href="../go/index.html">Go</a>
-<a href="../algo/index.html">算法笔记</a>
-<a href="../architecture/index.html">架构设计</a>
-<a href="../oodlld/index.html">OOD/LLD</a>
-<a href="../container/index.html">容器对照</a>
-<a href="../cpp/index.html">C++ 教程</a>
-<a href="../baguwen/index.html">面试八股</a>
-<a href="../csbase/index.html">计算机基础</a>
-<a href="../javaeco/index.html">Java 生态</a>
-<a class="topnav-lang" href="#" onclick="switchLang();return false;" title="切换语言 / Switch language">🌐 <span class="lp on">中文</span><span class="sep">/</span><span class="lp">EN</span></a></div></div><script>function switchLang(){var p=location.pathname,en=p.indexOf('/en/')>-1,n=en?p.replace('/en/','/zh/'):p.replace('/zh/','/en/');try{localStorage.setItem('lang',en?'zh':'en')}catch(e){}location.href=n;}</script>
+<a class="topnav-lang" href="#" onclick="switchLang();return false;" title="切换语言 / Switch language">🌐 <span class="lp">中文</span><span class="sep">/</span><span class="lp on">EN</span></a></div></div><script>function switchLang(){var p=location.pathname,en=p.indexOf('/en/')>-1,n=en?p.replace('/en/','/zh/'):p.replace('/zh/','/en/');try{localStorage.setItem('lang',en?'zh':'en')}catch(e){}location.href=n;}</script>
 <div class="wrap">
 <nav id="TOC" role="doc-toc">
 <ul>
-<li><a href="#函数与调用栈方法与参数传递的真相"
-id="toc-函数与调用栈方法与参数传递的真相">函数与调用栈:方法与参数传递的真相</a>
+<li><a
+href="#functions-and-the-call-stack-the-truth-about-methods-and-parameter-passing"
+id="toc-functions-and-the-call-stack-the-truth-about-methods-and-parameter-passing">Functions
+and the Call Stack: The Truth About Methods and Parameter Passing</a>
 <ul>
-<li><a href="#一方法定义与重载"
-id="toc-一方法定义与重载">一、方法定义与重载</a></li>
-<li><a href="#二java-只有值传递" id="toc-二java-只有值传递">二、Java
-只有值传递</a></li>
-<li><a href="#三栈帧结构" id="toc-三栈帧结构">三、栈帧结构</a></li>
-<li><a href="#四方法分派静态绑定-vs-动态绑定"
-id="toc-四方法分派静态绑定-vs-动态绑定">四、方法分派:静态绑定 vs
-动态绑定</a></li>
-<li><a href="#五递归与-stackoverflowerror"
-id="toc-五递归与-stackoverflowerror">五、递归与
+<li><a href="#method-definition-and-overloading"
+id="toc-method-definition-and-overloading">1. Method Definition and
+Overloading</a></li>
+<li><a href="#java-has-only-pass-by-value"
+id="toc-java-has-only-pass-by-value">2. Java Has Only
+Pass-by-Value</a></li>
+<li><a href="#stack-frame-structure" id="toc-stack-frame-structure">3.
+Stack Frame Structure</a></li>
+<li><a href="#method-dispatch-static-binding-vs-dynamic-binding"
+id="toc-method-dispatch-static-binding-vs-dynamic-binding">4. Method
+Dispatch: Static Binding vs Dynamic Binding</a></li>
+<li><a href="#recursion-and-stackoverflowerror"
+id="toc-recursion-and-stackoverflowerror">5. Recursion and
 StackOverflowError</a></li>
-<li><a href="#六可变参数varargs"
-id="toc-六可变参数varargs">六、可变参数(varargs)</a></li>
-<li><a href="#七lambda-与方法引用invokedynamic-的舞台"
-id="toc-七lambda-与方法引用invokedynamic-的舞台">七、lambda
-与方法引用:invokedynamic 的舞台</a></li>
-<li><a href="#小结" id="toc-小结">小结</a></li>
+<li><a href="#variadic-parameters-varargs"
+id="toc-variadic-parameters-varargs">6. Variadic Parameters
+(varargs)</a></li>
+<li><a href="#lambdas-and-method-references-the-stage-for-invokedynamic"
+id="toc-lambdas-and-method-references-the-stage-for-invokedynamic">7.
+Lambdas and Method References: the Stage for invokedynamic</a></li>
+<li><a href="#summary" id="toc-summary">Summary</a></li>
 </ul></li>
 </ul>
 </nav>
 <h1
-id="函数与调用栈方法与参数传递的真相">函数与调用栈:方法与参数传递的真相</h1>
-<p>在 C++
-里你有全局函数、成员函数、静态成员函数、函数指针、引用参数、<code>std::move</code>……Java
-把这一切收窄成一个概念:<strong>方法(method)</strong>,方法永远属于某个类,没有游离于类之外的函数。但收窄不代表简单——方法调用背后的<strong>栈帧布局</strong>、<strong>分派机制</strong>和<strong>只有值传递</strong>这条铁律,才是本章要拆开的底层真相。</p>
-<h2 id="一方法定义与重载">一、方法定义与重载</h2>
-<p>Java 的方法必须写在某个类里面,由
-<code>返回类型 方法名(参数列表) { 方法体 }</code> 组成:</p>
+id="functions-and-the-call-stack-the-truth-about-methods-and-parameter-passing">Functions
+and the Call Stack: The Truth About Methods and Parameter Passing</h1>
+<p>In C++ you have global functions, member functions, static member
+functions, function pointers, reference parameters,
+<code>std::move</code>… Java narrows all of this down to a single
+concept: the <strong>method</strong>. A method always belongs to some
+class; there is no function floating free outside a class. But narrowing
+doesn’t mean simple — the <strong>stack frame layout</strong>, the
+<strong>dispatch mechanism</strong>, and the iron rule of
+<strong>pass-by-value only</strong> behind a method call are the
+underlying truths this chapter pries open.</p>
+<h2 id="method-definition-and-overloading">1. Method Definition and
+Overloading</h2>
+<p>A Java method must be written inside some class, composed of
+<code>return-type methodName(parameter-list) { method-body }</code>:</p>
 <div class="sourceCode" id="cb1"><pre
 class="sourceCode java"><code class="sourceCode java"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> MethodDemo <span class="op">{</span></span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">int</span> <span class="fu">add</span><span class="op">(</span><span class="dt">int</span> a<span class="op">,</span> <span class="dt">int</span> b<span class="op">)</span> <span class="op">{</span></span>
@@ -157,31 +162,38 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb1-1"><a href="
 <span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
 <span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <ul>
-<li>没有返回值就写 <code>void</code>,方法体里可以没有
-<code>return</code>,也可以用不带值的 <code>return;</code>
-提前退出。</li>
-<li>调用方法就是 <code>方法名(实参...)</code>,和 C 一样。</li>
-<li>上面用的都是 <code>static</code> 方法(属于类本身,不需要先
-<code>new</code> 一个对象就能调),普通实例方法需要先有一个对象再
-<code>对象.方法名(...)</code> 调用,这在<a
-href="08-面向对象与类型系统.html">「面向对象与类型系统」</a>详细展开。</li>
+<li>If there’s no return value, write <code>void</code>; the method body
+may have no <code>return</code>, or may use a value-less
+<code>return;</code> to exit early.</li>
+<li>Calling a method is just <code>methodName(actual-args...)</code>,
+the same as C.</li>
+<li>The above all use <code>static</code> methods (which belong to the
+class itself and can be called without first <code>new</code>-ing an
+object); an ordinary instance method requires an object first, then
+<code>object.methodName(...)</code>, which is detailed in <a
+href="08-面向对象与类型系统.html">Object-Oriented Programming and the
+Type System</a>.</li>
 </ul>
-<p>一个类里可以有多个<strong>同名但参数列表不同</strong>的方法,这叫<strong>重载(overload)</strong>,调用时编译器按实参类型自动选中对应的一个:</p>
+<p>A single class can have multiple methods with <strong>the same name
+but different parameter lists</strong>; this is called
+<strong>overloading</strong>, and at the call site the compiler
+automatically selects the matching one based on the argument types:</p>
 <div class="sourceCode" id="cb2"><pre
 class="sourceCode java"><code class="sourceCode java"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Greeter <span class="op">{</span></span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">say</span><span class="op">(</span><span class="bu">String</span> name<span class="op">)</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;Hi, &quot;</span> <span class="op">+</span> name<span class="op">);</span> <span class="op">}</span></span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">say</span><span class="op">(</span><span class="dt">int</span> times<span class="op">)</span>   <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;repeat &quot;</span> <span class="op">+</span> times <span class="op">+</span> <span class="st">&quot; times&quot;</span><span class="op">);</span> <span class="op">}</span></span>
 <span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>        <span class="fu">say</span><span class="op">(</span><span class="st">&quot;Ada&quot;</span><span class="op">);</span>   <span class="co">// Hi, Ada          -- 选中 say(String)</span></span>
-<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>        <span class="fu">say</span><span class="op">(</span><span class="dv">3</span><span class="op">);</span>       <span class="co">// repeat 3 times   -- 选中 say(int)</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>        <span class="fu">say</span><span class="op">(</span><span class="st">&quot;Ada&quot;</span><span class="op">);</span>   <span class="co">// Hi, Ada          -- selects say(String)</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>        <span class="fu">say</span><span class="op">(</span><span class="dv">3</span><span class="op">);</span>       <span class="co">// repeat 3 times   -- selects say(int)</span></span>
 <span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
 <span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
-<p>方法签名 = 方法名 + 参数类型列表(<strong>不含返回类型</strong>,这点和
-C++
-一致)。重载(overload)在<strong>编译期</strong>根据实参的静态类型选定目标,与
-C++ 的重载决议同理,但 Java
-没有默认参数,只能靠多个重载或可变参数模拟。</p>
+<p>A method signature = method name + parameter type list (<strong>not
+including the return type</strong>, the same as C++). Overloading is
+resolved at <strong>compile time</strong> based on the static types of
+the arguments, just like C++ overload resolution, but Java has no
+default parameters, so you can only emulate them with multiple overloads
+or varargs.</p>
 <div class="sourceCode" id="cb3"><pre
 class="sourceCode java"><code class="sourceCode java"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Overload <span class="op">{</span></span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">f</span><span class="op">(</span><span class="dt">int</span> x<span class="op">)</span>    <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;int: &quot;</span> <span class="op">+</span> x<span class="op">);</span> <span class="op">}</span></span>
@@ -189,161 +201,203 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb3-1"><a href="
 <span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">f</span><span class="op">(</span><span class="bu">Object</span> x<span class="op">)</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;Object: &quot;</span> <span class="op">+</span> x<span class="op">);</span> <span class="op">}</span></span>
 <span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>        <span class="fu">f</span><span class="op">(</span><span class="dv">1</span><span class="op">);</span>        <span class="co">// int:任何时候优先精确匹配</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>        <span class="fu">f</span><span class="op">(</span><span class="dv">1</span><span class="op">);</span>        <span class="co">// int: an exact match is always preferred</span></span>
 <span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>        <span class="fu">f</span><span class="op">(</span><span class="dv">1L</span><span class="op">);</span>       <span class="co">// long</span></span>
 <span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>        <span class="fu">f</span><span class="op">(</span><span class="st">&quot;hi&quot;</span><span class="op">);</span>     <span class="co">// Object</span></span>
-<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>        <span class="co">// 重载决议顺序:精确匹配 → 拓宽(widening) → 装箱(boxing) → 可变参数</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Overload resolution order: exact match → widening → boxing → varargs</span></span>
 <span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>        <span class="dt">byte</span> b <span class="op">=</span> <span class="dv">5</span><span class="op">;</span></span>
-<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>        <span class="fu">f</span><span class="op">(</span>b<span class="op">);</span>        <span class="co">// int:byte 拓宽成 int,而不是装箱成 Object</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>        <span class="fu">f</span><span class="op">(</span>b<span class="op">);</span>        <span class="co">// int: byte is widened to int, rather than boxed to Object</span></span>
 <span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
 <span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
-<p>关键:重载决议在编译期完成,<code>javac</code>
-直接把调用点绑定到某个具体签名。运行期的对象实际类型对<strong>重载</strong>毫无影响——这与下文的<strong>重写(override)</strong>是两码事。</p>
-<p>“重载看静态类型”这一点最容易和重写混淆。看这个例子:同一个对象,声明类型不同,选中的重载就不同:</p>
+<p>Key point: overload resolution happens at compile time, and
+<code>javac</code> directly binds the call site to a specific signature.
+The runtime actual type of an object has no effect whatsoever on
+<strong>overloading</strong> — this is a completely different matter
+from <strong>overriding</strong>, discussed below.</p>
+<p>The point that “overloading looks at the static type” is the easiest
+to confuse with overriding. Look at this example: the same object, with
+a different declared type, selects a different overload:</p>
 <div class="sourceCode" id="cb4"><pre
 class="sourceCode java"><code class="sourceCode java"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> OverloadStatic <span class="op">{</span></span>
 <span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">f</span><span class="op">(</span><span class="bu">Object</span> o<span class="op">)</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;Object&quot;</span><span class="op">);</span> <span class="op">}</span></span>
 <span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">f</span><span class="op">(</span><span class="bu">String</span> s<span class="op">)</span> <span class="op">{</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;String&quot;</span><span class="op">);</span> <span class="op">}</span></span>
 <span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Object</span> x <span class="op">=</span> <span class="st">&quot;hi&quot;</span><span class="op">;</span>        <span class="co">// 运行期实际类型是 String</span></span>
-<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>        <span class="fu">f</span><span class="op">(</span>x<span class="op">);</span>                   <span class="co">// Object —— 只看 x 的静态类型 Object</span></span>
-<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>        <span class="fu">f</span><span class="op">(</span><span class="st">&quot;hi&quot;</span><span class="op">);</span>                <span class="co">// String —— 字面量静态类型 String</span></span>
-<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>        <span class="fu">f</span><span class="op">((</span><span class="bu">Object</span><span class="op">)</span> <span class="st">&quot;hi&quot;</span><span class="op">);</span>       <span class="co">// Object —— 强转改变静态类型</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Object</span> x <span class="op">=</span> <span class="st">&quot;hi&quot;</span><span class="op">;</span>        <span class="co">// the runtime actual type is String</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>        <span class="fu">f</span><span class="op">(</span>x<span class="op">);</span>                   <span class="co">// Object —— only looks at x&#39;s static type, Object</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>        <span class="fu">f</span><span class="op">(</span><span class="st">&quot;hi&quot;</span><span class="op">);</span>                <span class="co">// String —— the literal&#39;s static type is String</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>        <span class="fu">f</span><span class="op">((</span><span class="bu">Object</span><span class="op">)</span> <span class="st">&quot;hi&quot;</span><span class="op">);</span>       <span class="co">// Object —— the cast changes the static type</span></span>
 <span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
 <span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
-<p><code>x</code> 运行期明明装着 <code>String</code>,但
-<code>f(x)</code> 仍选中
-<code>f(Object)</code>——因为重载在<strong>编译期</strong>按变量的<strong>声明类型</strong>定死,运行期实际类型不参与。这恰好和重写(override,按运行期实际类型走
-vtable)相反:一个看静态类型编译期定,一个看动态类型运行期定。</p>
-<h2 id="二java-只有值传递">二、Java 只有值传递</h2>
-<p>C++ 里你可以显式区分值传递、指针传递、引用传递。Java
-只有一种:<strong>值传递(pass-by-value)</strong>。争议全部来自”引用类型传的是什么值”。</p>
-<p>答案:<strong>传的是引用值(reference,可理解为对象地址)的一份副本</strong>。不是对象本身,也不是
-C++ 意义上的”引用别名”。</p>
+<p><code>x</code> clearly holds a <code>String</code> at runtime, but
+<code>f(x)</code> still selects <code>f(Object)</code> — because
+overloading is fixed at <strong>compile time</strong> by the variable’s
+<strong>declared type</strong>, and the runtime actual type does not
+participate. This is exactly the opposite of overriding (override, which
+follows the runtime actual type via the vtable): one is looked up by
+static type and fixed at compile time, the other by dynamic type and
+decided at runtime.</p>
+<h2 id="java-has-only-pass-by-value">2. Java Has Only Pass-by-Value</h2>
+<p>In C++ you can explicitly distinguish pass-by-value, pass-by-pointer,
+and pass-by-reference. Java has only one:
+<strong>pass-by-value</strong>. The whole controversy stems from “what
+value is passed for a reference type”.</p>
+<p>The answer: <strong>what is passed is a copy of the reference value
+(the reference, which you can think of as the object’s
+address)</strong>. Not the object itself, and not a C++-style “reference
+alias”.</p>
 <ul>
-<li>基本类型:拷贝那 4/8 字节的数值。</li>
-<li>引用类型:拷贝那个”指向堆对象的引用值”(HotSpot 64
-位默认开启指针压缩,通常是 4 字节的 oop)。</li>
+<li>Primitive types: the 4/8 bytes of numeric value are copied.</li>
+<li>Reference types: that “reference value pointing to the heap object”
+is copied (with pointer compression enabled by default on HotSpot
+64-bit, this is usually a 4-byte oop).</li>
 </ul>
-<p>副本和原变量指向<strong>同一个堆对象</strong>,所以你能改对象内容;但重新赋值副本,原变量纹丝不动。</p>
-<p><strong>为什么 Java 只留值传递这一种机制,而不像 C++
-一样再提供引用参数/指针参数</strong>:这是”参数传递规则单一、可预测”与”调用点表达力”之间的取舍。C++
-里同一个函数签名 <code>void f(T x)</code> /
-<code>void f(T&amp; x)</code> / <code>void f(T* x)</code>
-传递语义完全不同,读调用点 <code>f(a)</code>
-时,若不看函数声明根本无法判断 <code>a</code> 会不会被就地修改——这是 C++
-里一个常见的可读性负担,需要靠命名约定或文档弥补。Java
-的设计是:参数传递永远只有一条规则——拷贝调用方变量里的比特,这条规则对基本类型和引用类型一视同仁,与<a
-href="03-变量与内存模型.html">「变量与内存模型」</a>里
-<code>a = b</code>
-的赋值规则完全统一,不需要为参数传递单独学一套语义。代价是牺牲了”就地修改调用方那个引用本身”的能力(即前面
-<code>swap</code>
-例子里证明的、无法真正交换两个引用),想要这种效果只能换一种表达方式:通过共享对象的字段/数组承载可变状态,或返回新值。这与”Java
-没有指针算术、没有默认参数”背后是同一种设计哲学:用更少但完全一致的规则,换取任何调用点都无需查看签名细节就能推断参数传递的实际效果。</p>
-<h3 id="swap-反例证明改不了调用方的指向">swap
-反例:证明改不了调用方的指向</h3>
+<p>The copy and the original variable point to <strong>the same heap
+object</strong>, so you can change the object’s contents; but
+reassigning the copy leaves the original variable untouched.</p>
+<p><strong>Why Java kept only this single mechanism of pass-by-value,
+rather than also offering reference/pointer parameters like
+C++</strong>: this is a trade-off between “parameter-passing rules that
+are singular and predictable” and “expressiveness at the call site”. In
+C++, the same function signature <code>void f(T x)</code> /
+<code>void f(T&amp; x)</code> / <code>void f(T* x)</code> has completely
+different passing semantics, and when reading the call site
+<code>f(a)</code> you simply cannot tell whether <code>a</code> will be
+modified in place without looking at the function declaration — a common
+readability burden in C++, to be papered over with naming conventions or
+documentation. Java’s design is: parameter passing always has exactly
+one rule — copy the bits in the caller’s variable — and this rule treats
+primitives and reference types alike, fully unified with the
+<code>a = b</code> assignment rule in <a
+href="03-变量与内存模型.html">Variables and the Memory Model</a>, so you
+don’t have to learn a separate set of semantics for parameter passing.
+The price is giving up the ability to “modify the caller’s reference
+itself in place” (i.e., what the <code>swap</code> example below proves
+— the inability to genuinely swap two references); to get that effect
+you can only switch to a different expression: carry the mutable state
+through fields/arrays of a shared object, or return a new value. This is
+the same design philosophy behind “Java has no pointer arithmetic, no
+default parameters”: exchange fewer but fully consistent rules for the
+property that any call site can infer the actual effect of parameter
+passing without inspecting the signature’s details.</p>
+<h3
+id="the-swap-counterexample-proving-you-cant-change-the-callers-reference">The
+swap Counterexample: Proving You Can’t Change the Caller’s
+Reference</h3>
 <div class="sourceCode" id="cb5"><pre
 class="sourceCode java"><code class="sourceCode java"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Swap <span class="op">{</span></span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="kw">class</span> <span class="bu">Box</span> <span class="op">{</span> <span class="dt">int</span> v<span class="op">;</span> <span class="bu">Box</span><span class="op">(</span><span class="dt">int</span> v<span class="op">)</span> <span class="op">{</span> <span class="kw">this</span><span class="op">.</span><span class="fu">v</span> <span class="op">=</span> v<span class="op">;</span> <span class="op">}</span> <span class="op">}</span></span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 试图交换两个引用——注定失败</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">// an attempt to swap two references — doomed to fail</span></span>
 <span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">swap</span><span class="op">(</span><span class="bu">Box</span> a<span class="op">,</span> <span class="bu">Box</span> b<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Box</span> t <span class="op">=</span> a<span class="op">;</span> a <span class="op">=</span> b<span class="op">;</span> b <span class="op">=</span> t<span class="op">;</span>   <span class="co">// 只交换了副本 a、b 的指向</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Box</span> t <span class="op">=</span> a<span class="op">;</span> a <span class="op">=</span> b<span class="op">;</span> b <span class="op">=</span> t<span class="op">;</span>   <span class="co">// only swaps the copies a and b</span></span>
 <span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
 <span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>    <span class="co">// 能改对象内容——成功</span></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>    <span class="co">// able to change the object&#39;s contents — succeeds</span></span>
 <span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">fill</span><span class="op">(</span><span class="bu">Box</span> x<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>        x<span class="op">.</span><span class="fu">v</span> <span class="op">=</span> <span class="dv">999</span><span class="op">;</span>                 <span class="co">// 通过副本引用写堆里的字段</span></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>        x<span class="op">.</span><span class="fu">v</span> <span class="op">=</span> <span class="dv">999</span><span class="op">;</span>                 <span class="co">// writes the heap field through the copied reference</span></span>
 <span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
 <span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
 <span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>        <span class="bu">Box</span> p <span class="op">=</span> <span class="kw">new</span> <span class="bu">Box</span><span class="op">(</span><span class="dv">1</span><span class="op">),</span> q <span class="op">=</span> <span class="kw">new</span> <span class="bu">Box</span><span class="op">(</span><span class="dv">2</span><span class="op">);</span></span>
 <span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>        <span class="fu">swap</span><span class="op">(</span>p<span class="op">,</span> q<span class="op">);</span></span>
-<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>p<span class="op">.</span><span class="fu">v</span> <span class="op">+</span> <span class="st">&quot; &quot;</span> <span class="op">+</span> q<span class="op">.</span><span class="fu">v</span><span class="op">);</span> <span class="co">// 1 2:调用方指向没变</span></span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>p<span class="op">.</span><span class="fu">v</span> <span class="op">+</span> <span class="st">&quot; &quot;</span> <span class="op">+</span> q<span class="op">.</span><span class="fu">v</span><span class="op">);</span> <span class="co">// 1 2: the caller&#39;s references didn&#39;t change</span></span>
 <span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>        <span class="fu">fill</span><span class="op">(</span>p<span class="op">);</span></span>
-<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>p<span class="op">.</span><span class="fu">v</span><span class="op">);</span>             <span class="co">// 999:对象内容被改了</span></span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>p<span class="op">.</span><span class="fu">v</span><span class="op">);</span>             <span class="co">// 999: the object&#39;s contents were changed</span></span>
 <span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
 <span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
-<p>内存图(<code>swap</code> 执行到 <code>b = t;</code> 时):</p>
-<pre><code>   main 栈帧                     swap 栈帧
+<p>Memory diagram (when <code>swap</code> reaches
+<code>b = t;</code>):</p>
+<pre><code>   main frame                    swap frame
  +----------+                 +----------+
- |  p ------|----+       +----|  a ------|--&gt; 指回 Box(2)
- |  q ------|--+ |       |    |  b ------|--&gt; 指回 Box(1)
+ |  p ------|----+       +----|  a ------|--&gt; points back to Box(2)
+ |  q ------|--+ |       |    |  b ------|--&gt; points back to Box(1)
  +----------+  | |       |    |  t ------|--&gt; Box(1)
                | |       |    +----------+
                | +-------|-----------+
                |         |           |
                v         |           v
-        堆: Box(1) &lt;-----+    堆: Box(2)
+        heap: Box(1) &lt;---+    heap: Box(2)
              v=999            v=2</code></pre>
-<p><code>main</code> 里的 <code>p</code>、<code>q</code>
-从头到尾指向不变;<code>swap</code> 交换的是它自己栈帧里的
-<code>a</code>、<code>b</code>。方法返回后 <code>swap</code> 栈帧连同
-<code>a</code>、<code>b</code>、<code>t</code> 一起弹栈销毁。</p>
+<p><code>p</code> and <code>q</code> in <code>main</code> point to the
+same thing from start to finish; what <code>swap</code> swaps is
+<code>a</code> and <code>b</code> in its own frame. After the method
+returns, the <code>swap</code> frame, along with <code>a</code>,
+<code>b</code>, and <code>t</code>, is popped off the stack and
+destroyed.</p>
 <blockquote>
-<p>想在 Java
-里实现真交换?只能返回新值、传入可变容器(数组/持有者对象),或用字段。没有
-C++ 的 <code>Box*&amp;</code> 或 <code>Box&amp;</code>。</p>
+<p>Want a real swap in Java? You can only return new values, pass in a
+mutable container (array/holder object), or use fields. There is no C++
+<code>Box*&amp;</code> or <code>Box&amp;</code>.</p>
 </blockquote>
-<p>对照表:</p>
+<p>Comparison table:</p>
 <table>
+<colgroup>
+<col style="width: 35%" />
+<col style="width: 29%" />
+<col style="width: 35%" />
+</colgroup>
 <thead>
 <tr>
-<th>场景</th>
+<th>Scenario</th>
 <th>C++</th>
 <th>Java</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>传基本类型</td>
-<td>值/引用/指针可选</td>
-<td>只有值(拷贝数值)</td>
+<td>Passing a primitive</td>
+<td>Value/reference/pointer optional</td>
+<td>Value only (copy the number)</td>
 </tr>
 <tr>
-<td>传对象</td>
-<td>值(深/浅拷贝构造)/引用/指针</td>
-<td>只有值(拷贝引用值,不拷贝对象)</td>
+<td>Passing an object</td>
+<td>Value (deep/shallow copy constructor)/reference/pointer</td>
+<td>Value only (copy the reference value, not the object)</td>
 </tr>
 <tr>
-<td>改对象内容影响调用方</td>
-<td>引用/指针可以</td>
-<td>可以(共享同一堆对象)</td>
+<td>Changing object contents affects the caller</td>
+<td>Reference/pointer can</td>
+<td>Can (sharing the same heap object)</td>
 </tr>
 <tr>
-<td>改指向影响调用方</td>
-<td>引用/指针可以</td>
-<td><strong>不可能</strong></td>
+<td>Changing the pointing affects the caller</td>
+<td>Reference/pointer can</td>
+<td><strong>Impossible</strong></td>
 </tr>
 </tbody>
 </table>
-<h2 id="三栈帧结构">三、栈帧结构</h2>
-<p>每次方法调用,JVM 在当前线程的<strong>Java
-虚拟机栈</strong>上压入一个<strong>栈帧(frame)</strong>。这与 C++
-的调用栈概念一致,但结构是 JVM 规范明确规定的:</p>
-<pre><code>线程栈(高地址在下,向下增长示意)
+<h2 id="stack-frame-structure">3. Stack Frame Structure</h2>
+<p>On every method call, the JVM pushes a <strong>frame</strong> onto
+the current thread’s <strong>Java Virtual Machine stack</strong>. This
+is the same as C++’s call-stack concept, but the structure is explicitly
+mandated by the JVM specification:</p>
+<pre><code>Thread stack (high address at the bottom, illustration grows downward)
  +--------------------------------------+
- | 栈帧 A (main)                        |
- |  局部变量表 Local Variable Table     |  &lt;- 类似 C++ 局部变量+参数区
- |  操作数栈    Operand Stack            |  &lt;- 字节码计算用的工作区(C++ 用寄存器/隐式栈)
- |  帧数据:返回地址、指向常量池的引用   |
+ | Frame A (main)                       |
+ |  Local Variable Table                |  &lt;- similar to C++ locals + parameter area
+ |  Operand Stack                       |  &lt;- the work area for bytecode computation (C++ uses registers/an implicit stack)
+ |  Frame data: return address, reference to the constant pool |
  +--------------------------------------+
- | 栈帧 B (被 A 调用的方法)             |  &lt;- 栈顶,当前活动帧
+ | Frame B (the method called by A)     |  &lt;- top of stack, the currently active frame
  |  ...                                 |
  +--------------------------------------+</code></pre>
 <ul>
-<li><strong>局部变量表</strong>:数组式结构,按 slot
-编号。<code>long</code>/<code>double</code> 占 2 个 slot,其余占 1
-个。实例方法的 slot 0 是
-<code>this</code>。方法的最大局部变量数在编译期算好,写进
-<code>Code</code> 属性的 <code>locals</code>。</li>
-<li><strong>操作数栈</strong>:JVM 是<strong>栈式虚拟机</strong>(不同于
-x86 的寄存器机)。<code>iadd</code> 从操作数栈弹两个
-int、相加、压回结果。最大深度也在编译期确定(<code>stack</code>)。</li>
-<li><strong>帧数据</strong>:返回地址(调用者的下一条指令)、异常表引用等。</li>
+<li><strong>Local Variable Table</strong>: an array-like structure,
+numbered by slot. <code>long</code>/<code>double</code> occupy 2 slots,
+everything else occupies 1. Slot 0 of an instance method is
+<code>this</code>. The method’s maximum number of local variables is
+computed at compile time and written into the <code>Code</code>
+attribute’s <code>locals</code>.</li>
+<li><strong>Operand Stack</strong>: the JVM is a <strong>stack-based
+virtual machine</strong> (unlike x86’s register machine).
+<code>iadd</code> pops two ints off the operand stack, adds them, and
+pushes the result back. The maximum depth is also determined at compile
+time (<code>stack</code>).</li>
+<li><strong>Frame data</strong>: the return address (the caller’s next
+instruction), a reference to the exception table, and so on.</li>
 </ul>
-<p>用 <code>javap</code> 看真相:</p>
+<p>Use <code>javap</code> to see the truth:</p>
 <div class="sourceCode" id="cb8"><pre
 class="sourceCode java"><code class="sourceCode java"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Frame.java</span></span>
 <span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> <span class="bu">Frame</span> <span class="op">{</span></span>
@@ -352,78 +406,93 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb8-1"><a href="
 <pre><code>$ javac Frame.java &amp;&amp; javap -c -v Frame.class
 static int add(int, int);
   Code:
-   stack=2, locals=3, args_size=2   // 操作数栈深2,局部变量表3个slot(a,b,c)
-     0: iload_0        // 把 slot0(a)压入操作数栈
-     1: iload_1        // 把 slot1(b)压入
-     2: iadd           // 弹两个,相加,压回
-     3: istore_2       // 弹出存入 slot2(c)
-     4: iload_2        // 再压 c
-     5: ireturn        // 弹出作为返回值</code></pre>
-<p>返回值通过操作数栈传递:被调方 <code>ireturn</code> 弹出栈顶,JVM
-将其压入调用方栈帧的操作数栈。参数传递则相反:调用方把实参压在自己操作数栈上,<code>invoke*</code>
-指令消费它们并填入新帧的局部变量表低位 slot。</p>
-<h2 id="四方法分派静态绑定-vs-动态绑定">四、方法分派:静态绑定 vs
-动态绑定</h2>
-<p>C++ 里非虚函数是静态绑定,虚函数走 vtable。Java
-的对应关系更规整,由<strong>四条字节码指令</strong>体现:</p>
+   stack=2, locals=3, args_size=2   // operand stack depth 2, local variable table 3 slots (a, b, c)
+     0: iload_0        // push slot0 (a) onto the operand stack
+     1: iload_1        // push slot1 (b)
+     2: iadd           // pop two, add, push back
+     3: istore_2       // pop and store into slot2 (c)
+     4: iload_2        // push c again
+     5: ireturn        // pop as the return value</code></pre>
+<p>The return value is passed through the operand stack: the callee’s
+<code>ireturn</code> pops the top of the stack, and the JVM pushes it
+onto the caller’s frame’s operand stack. Parameter passing is the
+reverse: the caller pushes the actual arguments onto its own operand
+stack, and the <code>invoke*</code> instruction consumes them and fills
+them into the low slots of the new frame’s local variable table.</p>
+<h2 id="method-dispatch-static-binding-vs-dynamic-binding">4. Method
+Dispatch: Static Binding vs Dynamic Binding</h2>
+<p>In C++ non-virtual functions are statically bound, and virtual
+functions go through the vtable. Java’s counterpart is more regular,
+embodied by <strong>four bytecode instructions</strong>:</p>
 <table>
+<colgroup>
+<col style="width: 27%" />
+<col style="width: 27%" />
+<col style="width: 45%" />
+</colgroup>
 <thead>
 <tr>
-<th>指令</th>
-<th>用途</th>
-<th>绑定时机</th>
+<th>Instruction</th>
+<th>Purpose</th>
+<th>Binding time</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td><code>invokestatic</code></td>
-<td>静态方法</td>
-<td>静态(编译期)</td>
+<td>Static methods</td>
+<td>Static (compile time)</td>
 </tr>
 <tr>
 <td><code>invokespecial</code></td>
-<td>构造器、<code>private</code>、<code>super.</code> 调用</td>
-<td>静态</td>
+<td>Constructors, <code>private</code>, <code>super.</code> calls</td>
+<td>Static</td>
 </tr>
 <tr>
 <td><code>invokevirtual</code></td>
-<td>普通实例方法</td>
-<td>动态(运行期查 vtable)</td>
+<td>Ordinary instance methods</td>
+<td>Dynamic (look up the vtable at runtime)</td>
 </tr>
 <tr>
 <td><code>invokeinterface</code></td>
-<td>接口方法</td>
-<td>动态(查 itable)</td>
+<td>Interface methods</td>
+<td>Dynamic (look up the itable)</td>
 </tr>
 <tr>
 <td><code>invokedynamic</code></td>
-<td>lambda、方法引用、动态语言</td>
-<td>运行期首次链接后固化</td>
+<td>lambdas, method references, dynamic languages</td>
+<td>Fixed after the first link at runtime</td>
 </tr>
 </tbody>
 </table>
-<h3 id="静态绑定">静态绑定</h3>
-<p><code>static</code>、<code>private</code>、<code>final</code>
-方法,以及<strong>重载决议</strong>,都在编译期定死。<code>final</code>
-方法虽然用 <code>invokevirtual</code>,但 JIT
-可以去虚化(devirtualize)并内联,因为它不可能被重写。</p>
-<h3 id="动态绑定与-vtable">动态绑定与 vtable</h3>
-<p>普通实例方法调用编译成 <code>invokevirtual</code>。运行期 JVM
-通过对象头里的<strong>类型指针(klass
-pointer)</strong>找到实际类的方法元数据,在其<strong>虚方法表(vtable)</strong>中按固定索引取出目标方法入口。这与
-C++ 的 vptr → vtable 机制几乎一模一样,区别在于:</p>
+<h3 id="static-binding">Static Binding</h3>
+<p><code>static</code>, <code>private</code>, and <code>final</code>
+methods, as well as <strong>overload resolution</strong>, are all fixed
+at compile time. Although a <code>final</code> method uses
+<code>invokevirtual</code>, the JIT can devirtualize and inline it,
+because it can never be overridden.</p>
+<h3 id="dynamic-binding-and-the-vtable">Dynamic Binding and the
+vtable</h3>
+<p>An ordinary instance method call compiles to
+<code>invokevirtual</code>. At runtime the JVM uses the <strong>type
+pointer (klass pointer)</strong> in the object header to find the actual
+class’s method metadata, and retrieves the target method’s entry from
+its <strong>virtual method table (vtable)</strong> at a fixed index.
+This is almost identical to C++’s vptr → vtable mechanism, differing
+in:</p>
 <ul>
-<li>C++:对象里存 <code>vptr</code>,vtable 在只读数据段。</li>
-<li>HotSpot:对象头(mark word + klass pointer)里的 klass pointer
-指向元空间(Metaspace)的 <code>InstanceKlass</code>,vtable
-紧跟其后。</li>
+<li>C++: the object stores a <code>vptr</code>, and the vtable lives in
+the read-only data segment.</li>
+<li>HotSpot: the klass pointer in the object header (mark word + klass
+pointer) points to an <code>InstanceKlass</code> in the Metaspace, with
+the vtable immediately following it.</li>
 </ul>
-<pre><code>对象(堆)              InstanceKlass(元空间)
+<pre><code>object (heap)         InstanceKlass (Metaspace)
 +-------------+       +------------------+
-| mark word   |       | ... 元数据 ...   |
+| mark word   |       | ... metadata ... |
 | klass ptr --|------&gt;| vtable[0] -&gt; ...  |
 +-------------+       | vtable[1] -&gt; Dog.speak
-| 实例字段    |       | vtable[2] -&gt; ...  |
+| instance fields |   | vtable[2] -&gt; ...  |
 +-------------+       +------------------+</code></pre>
 <div class="sourceCode" id="cb11"><pre
 class="sourceCode java"><code class="sourceCode java"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> <span class="bu">Dispatch</span> <span class="op">{</span></span>
@@ -432,21 +501,47 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb11-1"><a href=
 <span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
 <span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>        Animal a <span class="op">=</span> <span class="kw">new</span> <span class="fu">Dog</span><span class="op">();</span></span>
-<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>        a<span class="op">.</span><span class="fu">speak</span><span class="op">();</span>   <span class="co">// invokevirtual:静态类型 Animal,运行期查到 Dog 的 vtable 槽 -&gt; &quot;Woof&quot;</span></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>        a<span class="op">.</span><span class="fu">speak</span><span class="op">();</span>   <span class="co">// invokevirtual: static type Animal, at runtime finds Dog&#39;s vtable slot -&gt; &quot;Woof&quot;</span></span>
 <span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
 <span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
-<p><code>invokeinterface</code> 稍慢:接口方法在实现类里的 vtable
-索引不固定,需查 itable(interface method table)或做搜索,JIT
-会用内联缓存(inline cache)优化。</p>
-<p><strong>为什么重载走编译期静态分派、重写走运行期动态分派,而不是统一成一种机制</strong>:这是因为两者解决的是完全不同层次的问题,统一成一种反而会两头不讨好。重载(overload)解决的是”同一个方法名在不同参数类型下该执行哪段代码”——这个问题的答案只依赖<strong>调用点能看到的信息</strong>(实参的静态类型),在编译期就有充分数据可以决定,没有理由拖到运行期,编译期决议还带来一个直接好处:调用开销更低(<code>invokestatic</code>/<code>invokespecial</code>
-无需查表)、且行为在编译时就完全确定,不会因为运行时对象的实际类型不同而跳到”意料之外”的重载版本(参见前面
-<code>f(x)</code> 恒选 <code>f(Object)</code>
-的例子)。重写(override)解决的是完全不同的问题——“同一段调用代码,面对运行期可能变化的具体子类实现,该调用哪个版本”,这个问题的本质是多态:调用方写代码时往往只知道声明类型(如
-<code>Animal</code>),真正的目标方法必须等到运行期才能知道对象的实际类型(<code>Dog</code>),因此必须用
-<code>invokevirtual</code> 查 vtable
-动态决定。把这两种问题混为一谈——比如让重载也按运行期类型决议——会让”调用哪个重载”这种本该编译期就能确定、廉价的操作,变成每次调用都要运行期查询实参真实类型的开销,且让静态类型检查这道编译期安全网失去意义。分开设计,才能让”参数类型选哪个方法体”和”哪个子类实现被执行”各自用最省成本的方式解决。</p>
-<h2 id="五递归与-stackoverflowerror">五、递归与 StackOverflowError</h2>
-<p>递归方法就是方法体里调用自己,和 C 里写法完全一样:</p>
+<p><code>invokeinterface</code> is slightly slower: an interface
+method’s vtable index in an implementing class is not fixed, so it
+requires looking up the itable (interface method table) or a search, and
+the JIT optimizes it with an inline cache.</p>
+<p><strong>Why overloading goes through compile-time static dispatch and
+overriding goes through runtime dynamic dispatch, rather than unifying
+them into one mechanism</strong>: it’s because the two solve problems at
+completely different levels, and unifying them would please neither
+side. Overloading solves “which piece of code should a single method
+name execute under different parameter types” — the answer to this
+question depends only on <strong>information visible at the call
+site</strong> (the static types of the arguments), and there’s enough
+data to decide it at compile time, with no reason to defer it to
+runtime; compile-time resolution also brings a direct benefit: lower
+call overhead (<code>invokestatic</code>/<code>invokespecial</code> need
+no table lookup), and the behavior is fully determined at compile time,
+so it won’t jump to an “unexpected” overload version because the runtime
+object’s actual type differs (recall the earlier example where
+<code>f(x)</code> always selects <code>f(Object)</code>). Overriding
+solves a completely different problem — “for the same piece of calling
+code, facing a concrete subclass implementation that may vary at
+runtime, which version should be called” — and the essence of this
+problem is polymorphism: when writing the call, the caller often knows
+only the declared type (such as <code>Animal</code>), and the true
+target method can only be known at runtime from the object’s actual type
+(<code>Dog</code>), so it must use <code>invokevirtual</code> to look up
+the vtable and decide dynamically. Lumping these two problems together —
+e.g., letting overloading also resolve by runtime type — would turn
+“which overload to call”, an operation that should be cheaply determined
+at compile time, into a runtime query of the arguments’ true types on
+every call, and would render the compile-time safety net of static type
+checking meaningless. Only by designing them separately can “which
+method body a parameter type selects” and “which subclass implementation
+gets executed” each be solved in the most cost-effective way.</p>
+<h2 id="recursion-and-stackoverflowerror">5. Recursion and
+StackOverflowError</h2>
+<p>A recursive method simply calls itself in its own body, written
+exactly as in C:</p>
 <div class="sourceCode" id="cb12"><pre
 class="sourceCode java"><code class="sourceCode java"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Factorial <span class="op">{</span></span>
 <span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">long</span> <span class="fu">fact</span><span class="op">(</span><span class="dt">int</span> n<span class="op">)</span> <span class="op">{</span></span>
@@ -457,48 +552,56 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb12-1"><a href=
 <span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="fu">fact</span><span class="op">(</span><span class="dv">5</span><span class="op">));</span>   <span class="co">// 120</span></span>
 <span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
 <span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
-<p>每层递归压一个栈帧。Java 栈容量由 <code>-Xss</code> 决定(默认约
-512KB~1MB,平台相关)。栈耗尽抛 <code>StackOverflowError</code>(注意是
-<code>Error</code> 不是 <code>Exception</code>,见<a
-href="09-错误处理与资源管理.html">第 9 章</a>)。JVM
-<strong>不做尾调用优化</strong>(TCO),即便是尾递归也照样吃栈——这是与许多函数式语言、部分
-C++ 编译器的重要区别。</p>
+<p>Each level of recursion pushes a frame. Java’s stack capacity is set
+by <code>-Xss</code> (default about 512KB~1MB, platform-dependent). When
+the stack is exhausted it throws <code>StackOverflowError</code> (note
+it’s an <code>Error</code>, not an <code>Exception</code>, see <a
+href="09-错误处理与资源管理.html">Chapter 9</a>). The JVM does
+<strong>not do tail-call optimization</strong> (TCO); even tail
+recursion still eats the stack — an important difference from many
+functional languages and some C++ compilers.</p>
 <div class="sourceCode" id="cb13"><pre
 class="sourceCode java"><code class="sourceCode java"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Recur <span class="op">{</span></span>
 <span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">long</span> depth <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
-<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">dive</span><span class="op">()</span> <span class="op">{</span> depth<span class="op">++;</span> <span class="fu">dive</span><span class="op">();</span> <span class="op">}</span>   <span class="co">// 无终止,故意撑爆栈</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">void</span> <span class="fu">dive</span><span class="op">()</span> <span class="op">{</span> depth<span class="op">++;</span> <span class="fu">dive</span><span class="op">();</span> <span class="op">}</span>   <span class="co">// no termination, deliberately blows the stack</span></span>
 <span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
 <span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span> <span class="op">{</span> <span class="fu">dive</span><span class="op">();</span> <span class="op">}</span></span>
 <span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">catch</span> <span class="op">(</span><span class="bu">StackOverflowError</span> e<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;爆栈深度约: &quot;</span> <span class="op">+</span> depth<span class="op">);</span> <span class="co">// 每帧越大,层数越少</span></span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>            <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="st">&quot;stack blew up at depth approx: &quot;</span> <span class="op">+</span> depth<span class="op">);</span> <span class="co">// the larger each frame, the fewer levels</span></span>
 <span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
 <span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
 <span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
-<p>深递归应改写为迭代 + 显式 <code>Deque</code>
-模拟栈,把帧数据从线程栈搬到堆上。</p>
-<h2 id="六可变参数varargs">六、可变参数(varargs)</h2>
-<p>参数类型后面加 <code>...</code>,调用时可以传任意个数的实参(包括 0
-个),方法内部当数组用:</p>
+<p>Deep recursion should be rewritten as iteration + an explicit
+<code>Deque</code> simulating a stack, moving the frame data from the
+thread stack onto the heap.</p>
+<h2 id="variadic-parameters-varargs">6. Variadic Parameters
+(varargs)</h2>
+<p>Adding <code>...</code> after a parameter type lets you pass any
+number of arguments at the call site (including 0), and inside the
+method it’s used as an array:</p>
 <div class="sourceCode" id="cb14"><pre
 class="sourceCode java"><code class="sourceCode java"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Varargs <span class="op">{</span></span>
-<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">int</span> <span class="fu">sum</span><span class="op">(</span><span class="dt">int</span><span class="kw">...</span> xs<span class="op">)</span> <span class="op">{</span>          <span class="co">// 编译为 int[] xs</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">static</span> <span class="dt">int</span> <span class="fu">sum</span><span class="op">(</span><span class="dt">int</span><span class="kw">...</span> xs<span class="op">)</span> <span class="op">{</span>          <span class="co">// compiled as int[] xs</span></span>
 <span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span> s <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> x <span class="op">:</span> xs<span class="op">)</span> s <span class="op">+=</span> x<span class="op">;</span> <span class="cf">return</span> s<span class="op">;</span></span>
 <span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
 <span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="fu">sum</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">));</span> <span class="co">// 编译器生成 new int[]{1,2,3}</span></span>
-<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="fu">sum</span><span class="op">());</span>        <span class="co">// 传空数组 new int[]{},不是 null</span></span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="fu">sum</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="dv">2</span><span class="op">,</span> <span class="dv">3</span><span class="op">));</span> <span class="co">// the compiler generates new int[]{1,2,3}</span></span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="fu">sum</span><span class="op">());</span>        <span class="co">// passes an empty array new int[]{}, not null</span></span>
 <span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a>        <span class="dt">int</span><span class="op">[]</span> arr <span class="op">=</span> <span class="op">{</span><span class="dv">4</span><span class="op">,</span> <span class="dv">5</span><span class="op">};</span></span>
-<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="fu">sum</span><span class="op">(</span>arr<span class="op">));</span>     <span class="co">// 直接传数组,不再包一层</span></span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span><span class="fu">sum</span><span class="op">(</span>arr<span class="op">));</span>     <span class="co">// passes the array directly, without wrapping another layer</span></span>
 <span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
 <span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
-<p><code>T...</code> 在字节码里就是
-<code>T[]</code>。编译器在调用点自动把散列实参打包成一个<strong>堆上的数组</strong>——所以每次调用都可能有一次数组分配。重载
-+ varargs 时,固定参数版本优先于 varargs 版本(varargs
-是决议的最后一档)。</p>
-<h2 id="七lambda-与方法引用invokedynamic-的舞台">七、lambda
-与方法引用:invokedynamic 的舞台</h2>
-<p>lambda 是”没有名字的方法体”,写法是
-<code>(参数) -&gt; 表达式或代码块</code>,常用来当作一个”可传递的行为”传给别的方法:</p>
+<p><code>T...</code> is just <code>T[]</code> in bytecode. At the call
+site the compiler automatically packs the scattered arguments into a
+<strong>heap array</strong> — so every call may incur an array
+allocation. When overloading + varargs are involved, the fixed-parameter
+version takes precedence over the varargs version (varargs is the last
+tier of resolution).</p>
+<h2 id="lambdas-and-method-references-the-stage-for-invokedynamic">7.
+Lambdas and Method References: the Stage for invokedynamic</h2>
+<p>A lambda is a “method body with no name”, written as
+<code>(parameters) -&gt; expression or code block</code>, commonly used
+as a “transferable behavior” passed to another method:</p>
 <div class="sourceCode" id="cb15"><pre
 class="sourceCode java"><code class="sourceCode java"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">function</span><span class="op">.</span><span class="im">IntBinaryOperator</span><span class="op">;</span></span>
 <span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> LambdaBasic <span class="op">{</span></span>
@@ -507,46 +610,58 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb15-1"><a href=
 <span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>add<span class="op">.</span><span class="fu">applyAsInt</span><span class="op">(</span><span class="dv">3</span><span class="op">,</span> <span class="dv">4</span><span class="op">));</span>   <span class="co">// 7</span></span>
 <span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
 <span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
-<p>方法引用是 lambda 的简写,<code>类::方法名</code>
-直接把一个已有方法当作行为传递,比如
-<code>System.out::println</code>。</p>
-<p>C++ 的 lambda 在编译期生成一个匿名闭包类(带
-<code>operator()</code>)。Java <strong>没有</strong>在编译期为每个
-lambda 生成 <code>.class</code>,而是用 <code>invokedynamic</code>
-把实现推迟到<strong>运行期</strong>。</p>
+<p>A method reference is shorthand for a lambda;
+<code>Class::methodName</code> passes an existing method directly as a
+behavior, e.g., <code>System.out::println</code>.</p>
+<p>A C++ lambda generates an anonymous closure class (with
+<code>operator()</code>) at compile time. Java does <strong>not</strong>
+generate a <code>.class</code> for each lambda at compile time; instead
+it uses <code>invokedynamic</code> to defer the implementation to
+<strong>runtime</strong>.</p>
 <div class="sourceCode" id="cb16"><pre
 class="sourceCode java"><code class="sourceCode java"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">function</span><span class="op">.</span><span class="im">IntBinaryOperator</span><span class="op">;</span></span>
 <span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span> <span class="kw">class</span> Lambda <span class="op">{</span></span>
 <span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>        IntBinaryOperator add <span class="op">=</span> <span class="op">(</span>a<span class="op">,</span> b<span class="op">)</span> <span class="op">-&gt;</span> a <span class="op">+</span> b<span class="op">;</span>   <span class="co">// 编译成一个 invokedynamic 调用点</span></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>        IntBinaryOperator add <span class="op">=</span> <span class="op">(</span>a<span class="op">,</span> b<span class="op">)</span> <span class="op">-&gt;</span> a <span class="op">+</span> b<span class="op">;</span>   <span class="co">// compiled into an invokedynamic call site</span></span>
 <span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">(</span>add<span class="op">.</span><span class="fu">applyAsInt</span><span class="op">(</span><span class="dv">3</span><span class="op">,</span> <span class="dv">4</span><span class="op">));</span></span>
 <span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
 <span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
-<p><code>javap -c</code> 会看到 <code>invokedynamic #N, 0</code>
-与一个引导方法(bootstrap
-method)<code>LambdaMetafactory.metafactory</code>。机制:</p>
+<p><code>javap -c</code> shows an <code>invokedynamic #N, 0</code> with
+a bootstrap method <code>LambdaMetafactory.metafactory</code>. The
+mechanism:</p>
 <ol type="1">
-<li>lambda 体本身被 <code>javac</code>
-编译成宿主类里的一个<strong>私有静态/实例方法</strong>(如
-<code>lambda$main$0</code>)。</li>
-<li>首次执行到该 <code>invokedynamic</code> 时,JVM 调用引导方法,由
-<code>LambdaMetafactory</code>
-<strong>在运行期动态生成</strong>一个实现了
-<code>IntBinaryOperator</code> 的类,其抽象方法转调那个私有方法。</li>
-<li>生成的实现被绑定到该调用点的
-<code>CallSite</code>,后续调用直接命中,近乎零开销。</li>
+<li>The lambda body itself is compiled by <code>javac</code> into a
+<strong>private static/instance method</strong> in the host class (such
+as <code>lambda$main$0</code>).</li>
+<li>The first time execution reaches that <code>invokedynamic</code>,
+the JVM calls the bootstrap method, and <code>LambdaMetafactory</code>
+<strong>dynamically generates at runtime</strong> a class implementing
+<code>IntBinaryOperator</code>, whose abstract method delegates to that
+private method.</li>
+<li>The generated implementation is bound to that call site’s
+<code>CallSite</code>, and subsequent calls hit it directly, at nearly
+zero overhead.</li>
 </ol>
-<p>好处:避免”每个 lambda
-一个类文件”的膨胀,把生成策略留给运行时(未来可换成更优实现,而字节码不用变)。方法引用(<code>String::length</code>、<code>System.out::println</code>、<code>ArrayList::new</code>)走完全相同的机制,只是目标方法直接指向已有方法而非合成方法。</p>
-<p>捕获变量(capture)方面:被 lambda 捕获的局部变量必须是
-<strong>effectively
-final</strong>(事实最终)。因为捕获的是变量<strong>值的副本</strong>(引用类型则是引用值副本),在生成实例时作为构造参数存入——这和
-C++ 的 <code>[=]</code> 按值捕获语义相近,而 Java 不允许
-<code>[&amp;]</code>
-式的按引用捕获局部变量(局部变量在栈上,方法返回即失效,捕获引用会悬空)。</p>
-<p>一个直观的可运行验证:循环里每轮把 <code>i</code> 存进一个新的
-<code>cur</code>(每次迭代都是新变量、事实最终),各 lambda
-捕获的是各自那一份值:</p>
+<p>Benefit: it avoids the bloat of “one class file per lambda” and
+leaves the generation strategy to the runtime (a better implementation
+can be swapped in the future without changing the bytecode). Method
+references (<code>String::length</code>,
+<code>System.out::println</code>, <code>ArrayList::new</code>) go
+through exactly the same mechanism, except the target method points
+directly to an existing method rather than a synthetic one.</p>
+<p>On the capture front: a local variable captured by a lambda must be
+<strong>effectively final</strong>. Because what’s captured is a
+<strong>copy of the variable’s value</strong> (a copy of the reference
+value for a reference type), stored as a constructor argument when the
+instance is generated — this is close to C++’s <code>[=]</code> by-value
+capture semantics, whereas Java does not allow
+<code>[&amp;]</code>-style by-reference capture of a local variable (a
+local variable lives on the stack and expires when the method returns,
+so capturing a reference would dangle).</p>
+<p>An intuitive runnable verification: in a loop, each iteration stores
+<code>i</code> into a new <code>cur</code> (each iteration a new,
+effectively-final variable), and each lambda captures its own copy of
+the value:</p>
 <div class="sourceCode" id="cb17"><pre
 class="sourceCode java"><code class="sourceCode java"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.*;</span></span>
 <span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">java</span><span class="op">.</span><span class="im">util</span><span class="op">.</span><span class="im">function</span><span class="op">.</span><span class="im">Supplier</span><span class="op">;</span></span>
@@ -554,35 +669,48 @@ class="sourceCode java"><code class="sourceCode java"><span id="cb17-1"><a href=
 <span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">public</span> <span class="dt">static</span> <span class="dt">void</span> <span class="fu">main</span><span class="op">(</span><span class="bu">String</span><span class="op">[]</span> args<span class="op">)</span> <span class="op">{</span></span>
 <span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>        <span class="bu">List</span><span class="op">&lt;</span>Supplier<span class="op">&lt;</span><span class="bu">Integer</span><span class="op">&gt;&gt;</span> fns <span class="op">=</span> <span class="kw">new</span> <span class="bu">ArrayList</span><span class="op">&lt;&gt;();</span></span>
 <span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">3</span><span class="op">;</span> i<span class="op">++)</span> <span class="op">{</span></span>
-<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a>            <span class="dt">int</span> cur <span class="op">=</span> i<span class="op">;</span>              <span class="co">// 每轮一个新的、事实最终的变量</span></span>
-<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a>            fns<span class="op">.</span><span class="fu">add</span><span class="op">(()</span> <span class="op">-&gt;</span> cur<span class="op">);</span>       <span class="co">// 捕获 cur 当时的值</span></span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a>            <span class="dt">int</span> cur <span class="op">=</span> i<span class="op">;</span>              <span class="co">// a new, effectively-final variable each iteration</span></span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a>            fns<span class="op">.</span><span class="fu">add</span><span class="op">(()</span> <span class="op">-&gt;</span> cur<span class="op">);</span>       <span class="co">// captures cur&#39;s value at that moment</span></span>
 <span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
 <span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span><span class="dt">var</span> f <span class="op">:</span> fns<span class="op">)</span> <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">print</span><span class="op">(</span>f<span class="op">.</span><span class="fu">get</span><span class="op">()</span> <span class="op">+</span> <span class="st">&quot; &quot;</span><span class="op">);</span>  <span class="co">// 0 1 2</span></span>
 <span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a>        <span class="bu">System</span><span class="op">.</span><span class="fu">out</span><span class="op">.</span><span class="fu">println</span><span class="op">();</span></span>
 <span id="cb17-12"><a href="#cb17-12" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
 <span id="cb17-13"><a href="#cb17-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
-<p>三个 lambda 分别打印
-<code>0 1 2</code>,因为每个捕获的是<strong>创建时刻 <code>cur</code>
-的值副本</strong>,而非共享同一个变量。这与 JavaScript 里
-<code>var</code> 闭包全部捕获到同一个最终 <code>i</code>(常打印
-<code>3 3 3</code>)形成对比——Java 靠”捕获值副本 +
-事实最终”从根上避免了这类共享可变状态的坑。</p>
+<p>The three lambdas print <code>0 1 2</code> respectively, because each
+captures a <strong>copy of <code>cur</code>’s value at creation
+time</strong>, not a shared single variable. This contrasts with
+JavaScript, where <code>var</code> closures all capture the same final
+<code>i</code> (often printing <code>3 3 3</code>) — Java, by “capturing
+a value copy + effectively final”, roots out this class of
+shared-mutable-state pitfalls at the source.</p>
 <hr />
-<h2 id="小结">小结</h2>
+<h2 id="summary">Summary</h2>
 <ul>
-<li>方法永远属于某个类,没有游离的自由函数;传参永远是值传递——引用类型传的是引用值的副本,这条统一规则换来的是任何调用点都无需查看签名就能判断传参效果,代价是无法就地修改调用方的引用本身。</li>
-<li>重载在编译期按<strong>静态类型</strong>决议,重写在运行期按<strong>动态类型</strong>走
-vtable——两者解决的是不同层次的问题(前者是”选哪段代码”,后者是”多态调用哪个实现”),混为一谈会让本可编译期定死的开销拖到运行期。</li>
-<li>栈帧由局部变量表 + 操作数栈 +
-帧数据构成;<code>invokestatic/special</code>
-静态绑定,<code>invokevirtual/interface</code> 走 vtable/itable
-动态分派,<code>invokedynamic</code> 承载 lambda 的运行期生成。</li>
-<li>JVM 不做尾调用优化,深递归会 <code>StackOverflowError</code>。</li>
+<li>A method always belongs to some class; there are no free-floating
+functions. Parameter passing is always pass-by-value — for a reference
+type, what’s passed is a copy of the reference value. This unified rule
+buys the property that any call site can judge the effect of parameter
+passing without inspecting the signature, at the price of being unable
+to modify the caller’s reference itself in place.</li>
+<li>Overloading is resolved at compile time by <strong>static
+type</strong>, overriding at runtime by <strong>dynamic type</strong>
+via the vtable — the two solve problems at different levels (the former
+is “which piece of code to select”, the latter is “which implementation
+a polymorphic call invokes”), and lumping them together would drag an
+overhead that could have been fixed at compile time out to runtime.</li>
+<li>A stack frame is composed of the local variable table + operand
+stack + frame data; <code>invokestatic/special</code> are statically
+bound, <code>invokevirtual/interface</code> go through the vtable/itable
+for dynamic dispatch, and <code>invokedynamic</code> carries the runtime
+generation of lambdas.</li>
+<li>The JVM does not do tail-call optimization, so deep recursion will
+<code>StackOverflowError</code>.</li>
 </ul>
 <hr />
-<p><a href="05-控制流.html">← 上一章:控制流</a> · <a
-href="index.html">返回目录</a> · <a
-href="07-复合数据结构.html">下一章:复合数据结构</a> →</p>
+<p><a href="05-控制流.html">← Previous chapter: Control Flow</a> · <a
+href="index.html">Back to Contents</a> · <a
+href="07-复合数据结构.html">Next chapter: Composite Data Structures</a>
+→</p>
 </div>
 </body>
 </html>
