@@ -5,6 +5,14 @@
 > for example, when you write `a = b`, does `a` receive a reference (pointer) to an object, or is a fresh block of memory allocated? How do mutable and immutable objects differ in memory?
 > How are `list` and `dict` implemented internally? Why does the GIL exist?
 
+## How Each Chapter Is Laid Out
+
+Every chapter is written on two levels, so you can read it either way:
+
+1. **Section 0 — "Get Familiar with Usage First"**: the syntax and the everyday calls, understandable with zero background. Read only these and you can already write working Python.
+2. **"How to Use It" / "Internals vs. C++"**: each section afterwards leads with usage, then explains what CPython is actually doing underneath and how it compares with C/C++.
+3. **The chapter summary** is likewise split into a *Usage level* bullet and *Internals level* bullets—useful as a review checklist.
+
 ## Suggested Reading Order
 
 | # | Chapter | One-line summary |

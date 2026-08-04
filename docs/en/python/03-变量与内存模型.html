@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.10" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Variables and the Memory Model</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../../assets/style.css" />
+</head>
+<body>
+<div class="topbar"><div class="wrap"><a class="home" href="../index.html"><span class="logo">📚</span><span class="brand">Other Languages for C/C++ Programmers</span></a>
+<a href="../python/index.html" style="color:var(--accent-dark);font-weight:700">Python</a>
+<a href="../java/index.html">Java</a>
+<a class="topnav-lang" href="#" onclick="switchLang();return false;" title="切换语言 / Switch language">🌐 <span class="lp">中文</span><span class="sep">/</span><span class="lp on">EN</span></a></div></div><script>function switchLang(){var p=location.pathname,en=p.indexOf('/en/')>-1,n=en?p.replace('/en/','/zh/'):p.replace('/zh/','/en/');try{localStorage.setItem('lang',en?'zh':'en')}catch(e){}location.href=n;}</script>
+<div class="wrap">
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#variables-and-the-memory-model"
+id="toc-variables-and-the-memory-model">Variables and the Memory Model
+⭐</a>
+<ul>
+<li><a
+href="#get-familiar-with-usage-first-the-four-rules-that-prevent-every-surprise"
+id="toc-get-familiar-with-usage-first-the-four-rules-that-prevent-every-surprise">0.
+Get Familiar with Usage First: The Four Rules That Prevent Every
+Surprise</a></li>
+<li><a href="#a-variable-is-not-a-box-its-a-name-tag"
+id="toc-a-variable-is-not-a-box-its-a-name-tag">1. A Variable Is Not a
+Box, It’s a Name Tag</a></li>
+<li><a href="#what-does-a-b-actually-copy"
+id="toc-what-does-a-b-actually-copy">2. What Does <code>a = b</code>
+Actually Copy</a></li>
+<li><a href="#reference-counting-who-is-pointing-at-me"
+id="toc-reference-counting-who-is-pointing-at-me">3. Reference Counting:
+Who Is Pointing at Me</a></li>
+<li><a
+href="#mutable-vs.-immutable-the-line-that-determines-aliasing-behavior"
+id="toc-mutable-vs.-immutable-the-line-that-determines-aliasing-behavior">4.
+Mutable vs. Immutable: the Line That Determines Aliasing
+Behavior</a></li>
+<li><a href="#small-integer-caching-and-string-interning"
+id="toc-small-integer-caching-and-string-interning">5. Small-Integer
+Caching and String Interning</a></li>
+<li><a
+href="#namespaces-are-dictionaries-but-local-variables-are-fast-locals"
+id="toc-namespaces-are-dictionaries-but-local-variables-are-fast-locals">6.
+Namespaces Are Dictionaries, but Local Variables Are Fast
+Locals</a></li>
+<li><a href="#shallow-copy-vs.-deep-copy"
+id="toc-shallow-copy-vs.-deep-copy">7. Shallow Copy vs. Deep
+Copy</a></li>
+<li><a href="#the-mutable-default-argument-trap"
+id="toc-the-mutable-default-argument-trap">8. The Mutable Default
+Argument Trap</a></li>
+<li><a href="#summary" id="toc-summary">Summary</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1 id="variables-and-the-memory-model">Variables and the Memory Model
+⭐</h1>
+<p>For C/C++ engineers, most of Python’s “paranormal events”—changing
+one list and another changes with it, modifying a parameter inside a
+function and having the outside change too, a default argument
+remembering last time’s value—all trace back to one thing: <strong>a
+Python variable is not a memory slot, but a binding of a name to a heap
+object.</strong> Once this model is nailed down, every seemingly bizarre
+behavior that follows becomes predictable. This chapter proves it
+repeatedly with <code>id()</code>, <code>is</code>, and
+<code>sys.getrefcount</code>, paired with memory diagrams
+throughout.</p>
+<p><strong>First we cover the rules you need in order to not get bitten:
+what assignment does, when two names share one object, which types can
+be changed in place, and how to make a real copy—no low-level knowledge
+required to follow along; then we get into the internals: the
+name-binding model, reference counting, small-integer caching, and fast
+locals.</strong> If you just want to write correct code, reading each
+section’s “How to Use It” is enough; if you want to know <em>why</em>
+Python behaves this way, keep reading “Internals vs. C++” below it.</p>
+<blockquote>
+<p>This is the single most important chapter in the tutorial. C’s
+variable <strong>is</strong> the memory; Python’s variable merely
+<strong>points at</strong> the memory. Almost everything surprising
+about Python is a corollary of that one sentence.</p>
+</blockquote>
+<hr />
+<h2
+id="get-familiar-with-usage-first-the-four-rules-that-prevent-every-surprise">0.
+Get Familiar with Usage First: The Four Rules That Prevent Every
+Surprise</h2>
+<p>Four rules cover essentially every aliasing bug you would otherwise
+write:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Rule 1: assignment never copies data—it makes a second name for the same object.</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> [<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>]</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> a</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>b.append(<span class="dv">4</span>)</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a)              <span class="co"># [1, 2, 3, 4]   a changed too, because a and b ARE the same list</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Rule 2: lists/dicts/sets can be changed in place; ints/floats/strs/tuples cannot.</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>s <span class="op">=</span> <span class="st">&quot;hello&quot;</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="co"># s[0] = &quot;H&quot;          # TypeError: strings are immutable</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>s <span class="op">=</span> <span class="st">&quot;H&quot;</span> <span class="op">+</span> s[<span class="dv">1</span>:]        <span class="co"># to &quot;change&quot; one, you build a new object and rebind the name</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="co"># Rule 3: to actually copy, ask for a copy.</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> copy</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>shallow <span class="op">=</span> a[:]                  <span class="co"># or list(a) / a.copy() / copy.copy(a)</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>deep    <span class="op">=</span> copy.deepcopy(a)      <span class="co"># needed when the elements are themselves mutable</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a><span class="co"># Rule 4: compare values with ==, and identity with is (use is only for None).</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a <span class="op">==</span> shallow)   <span class="co"># True    same contents</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a <span class="kw">is</span> shallow)   <span class="co"># False   different objects</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(b <span class="kw">is</span> a)         <span class="co"># True    same object</span></span></code></pre></div>
+<p>And the one function that lets you check any of this at any time:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>x <span class="op">=</span> [<span class="dv">1</span>, <span class="dv">2</span>]</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>y <span class="op">=</span> x</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">id</span>(x), <span class="bu">id</span>(y))   <span class="co"># identical numbers -&gt; same object</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">id</span>(x) <span class="op">==</span> <span class="bu">id</span>(y)) <span class="co"># True; this is exactly what `x is y` tests</span></span></code></pre></div>
+<p>The practical upshot: <strong>whenever you pass a list/dict/set
+somewhere, or store it in two places, assume both sides can see each
+other’s changes—unless you explicitly copied it.</strong> Below we work
+out where that behavior comes from—<strong>usage first, internals
+second</strong>.</p>
+<hr />
+<h2 id="a-variable-is-not-a-box-its-a-name-tag">1. A Variable Is Not a
+Box, It’s a Name Tag</h2>
+<h3 id="how-to-use-it">How to Use It</h3>
+<p>You never declare a variable’s type, and the same name may point at
+anything over its lifetime:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>x <span class="op">=</span> <span class="dv">3</span>            <span class="co"># x now names an int object</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>x <span class="op">=</span> <span class="st">&quot;three&quot;</span>      <span class="co"># perfectly legal—x now names a str object</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>x <span class="op">=</span> [<span class="dv">3</span>]          <span class="co"># ...and now a list</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">id</span>(x))     <span class="co"># e.g. 4310721234 —— the identity of the object x currently names</span></span></code></pre></div>
+<p><code>id(obj)</code> returns an object’s identity, <strong>which in
+CPython is the object’s memory address</strong> (the language only
+guarantees it’s unique and constant within a single lifetime; the
+address is an implementation detail). It’s the equivalent of
+<code>&amp;</code>, except read-only and applied to objects rather than
+variables.</p>
+<h3 id="internals-vs.-c">Internals vs. C++</h3>
+<p>C’s mental model is “the box”: <code>int x</code> is a named chunk of
+memory, <code>x = 3</code> stuffs a value into the box,
+<code>x = 5</code> overwrites it—the variable <strong>is</strong> that
+memory.</p>
+<p>Python is nothing like this. Recall <a href="01-运行模型.html">The
+Execution Model</a>: every value is a <code>PyObject</code> on the heap.
+A variable is merely <strong>a name in a namespace</strong>, bound to
+some heap object—you can think of it as a “sticky note attached to an
+object,” or: <strong>a variable is a pointer holding an object’s
+address, except you can never take its address, and you can’t do pointer
+arithmetic on it.</strong></p>
+<pre><code>C&#39;s model: variable is memory       Python&#39;s model: name points to heap object
+┌─────────┐                name x         heap
+│  x: 3   │  ← box is the  ┌────┐        ┌──────────────┐
+└─────────┘     value      │ ●──┼──────► │ int object: 3│
+                           └────┘        └──────────────┘
+                           sticky note     the real value lives here</code></pre>
+<p><strong>Why does Python choose this “name binding” model instead of
+C’s “memory slot” model?</strong> The root cause is, again, dynamic
+typing. In C, once <code>int x</code> is declared, this chunk of
+memory’s size and how it’s interpreted (4 bytes, read as a
+two’s-complement integer) are both fixed at compile time—the variable
+and the value it stores are naturally one and the same thing. In Python,
+the same name can point first to an <code>int</code>, then a
+<code>str</code>, then any arbitrary custom object—these types have
+completely different sizes and internal layouts, so there’s no way for a
+fixed-size “box” to hold a value of arbitrary type. The variable has to
+store only one uniformly sized thing (a pointer), leaving the actual
+data and type information in the heap object being pointed to. The
+name-binding model is the inevitable memory-level implementation of
+dynamic typing, not an arbitrary design preference.</p>
+<hr />
+<h2 id="what-does-a-b-actually-copy">2. What Does <code>a = b</code>
+Actually Copy</h2>
+<h3 id="how-to-use-it-1">How to Use It</h3>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> [<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>]</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> a</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>b.append(<span class="dv">4</span>)</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a)        <span class="co"># [1, 2, 3, 4]</span></span></code></pre></div>
+<p><code>==</code> compares whether <strong>values</strong> are equal
+(calls <code>__eq__</code>); <code>is</code> compares whether it’s
+<strong>the same object</strong> (compares <code>id</code>), equivalent
+to comparing two pointers in C:</p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> [<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>]</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> a</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>c <span class="op">=</span> [<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>]          <span class="co"># build another list with identical contents</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a <span class="op">==</span> b)          <span class="co"># True, values equal</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a <span class="kw">is</span> b)          <span class="co"># True, same object (aliases)</span></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a <span class="op">==</span> c)          <span class="co"># True, values equal</span></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a <span class="kw">is</span> c)          <span class="co"># False, different objects</span></span></code></pre></div>
+<p><code>a is b</code> being true while <code>a is c</code> is false
+proves that <code>b = a</code> created an alias, while
+<code>c = [1,2,3]</code> is a brand-new object. Use <code>is</code> to
+ask “is it the same thing,” <code>==</code> to ask “are the values
+equal” (the <code>is None</code> idiom comes precisely from
+here—<code>None</code> is a singleton, so identity comparison is both
+correct and skips the cost of calling <code>__eq__</code>).</p>
+<h3 id="internals-vs.-c-1">Internals vs. C++</h3>
+<p>A C++ engineer’s first reaction is usually “didn’t <code>b = a</code>
+make a copy? How does modifying b move a?”—because <code>b = a</code>
+<strong>copies neither the object nor the data, only that pointer
+value</strong>. After this executes, <code>a</code> and <code>b</code>
+are two sticky notes attached to <strong>the same heap
+object</strong>:</p>
+<pre><code>a = [1, 2, 3]
+b = a
+
+  name a ─┐
+          ├──► ┌──────────────────────┐
+  name b ─┘    │ list object          │
+               │ [ ●, ●, ● ]          │ ← the same object
+               └──┼──┼──┼─────────────┘
+                  ▼  ▼  ▼
+                  1  2  3   (each also a heap int object)</code></pre>
+<p><code>b.append(4)</code> reaches that list object through b and
+<strong>modifies it in place</strong>; a points to the same object, so
+of course it looks changed from a’s side too. This isn’t a bug in copy
+semantics; it’s <strong>aliasing</strong>—two names are two aliases of
+the same object. The C++ analogy: <code>b = a</code> is more like
+<code>int* b = a;</code> (copying a pointer), and never
+<code>std::vector&lt;int&gt; b = a;</code> (copy construction).
+<strong>Python assignment is always “copy the reference,” never a call
+to a copy constructor</strong>—behind this is a deliberate design
+trade-off: if assignment defaulted to a deep copy, then any plain
+<code>b = a</code> where a happens to be a large object would silently
+imply an expensive full copy, when in most cases what the programmer
+actually wants is just “give this object another name.” Python makes
+“cheap, always O(1)” the basic contract of assignment semantics; when
+you genuinely need a copy, you must explicitly call
+<code>copy</code>/<code>deepcopy</code> (see section 7)—the cost is
+stated up front in the semantics, which beats hiding an unpredictable
+performance cost in the default behavior.</p>
+<hr />
+<h2 id="reference-counting-who-is-pointing-at-me">3. Reference Counting:
+Who Is Pointing at Me</h2>
+<h3 id="how-to-use-it-2">How to Use It</h3>
+<p>You normally never manage memory by hand—objects go away on their own
+once nothing refers to them. Two tools let you observe it:</p>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sys</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>x <span class="op">=</span> <span class="bu">object</span>()</span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.getrefcount(x))   <span class="co"># e.g. 2</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>y <span class="op">=</span> x                        <span class="co"># one more reference</span></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.getrefcount(x))   <span class="co"># 3</span></span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a><span class="kw">del</span> y                        <span class="co"># remove one reference (del unbinds a name, it does not delete the object!)</span></span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.getrefcount(x))   <span class="co"># back down to 2</span></span></code></pre></div>
+<p><code>sys.getrefcount(x)</code>’s result is always one higher than
+intuition suggests, because passing <code>x</code> as an argument to the
+function itself temporarily adds one more reference. <code>del y</code>
+deletes the <strong>name binding</strong>, not the object—the object is
+only truly freed once its refcnt hits zero, which is completely unlike
+C++’s <code>delete</code> semantics; <code>del</code> is more like
+“letting go of one hand,” and the object is only gone once the last hand
+lets go.</p>
+<h3 id="internals-vs.-c-2">Internals vs. C++</h3>
+<p>Recall <a href="01-运行模型.html">The Execution Model</a>: every
+<code>PyObject</code> header carries <code>ob_refcnt</code>. Each
+additional name/container pointing at it adds 1; each one removed
+subtracts 1; hitting zero reclaims it immediately (CPython’s primary
+memory-management mechanism—reference cycles are handled separately by a
+garbage collector, see <a href="09-错误处理与资源管理.html">Error
+Handling and Resource Management</a>).</p>
+<p><strong>Why does CPython choose reference counting as its primary
+reclamation mechanism, instead of relying purely on a tracing GC the way
+Java/Go do?</strong> Reference counting’s core advantage is
+<strong>determinism</strong>—an object is freed the instant its last
+reference disappears, giving a smooth memory-usage curve with no need
+for a dedicated GC pause to scan the whole heap. That mattered a lot in
+the 1990s, when memory was generally tight and Python was, from the very
+start, meant to interoperate with a huge amount of C extension code: a C
+extension can manage references directly with
+<code>Py_INCREF</code>/<code>Py_DECREF</code> without needing to
+understand a complex tracing collector. The cost is equally clear:
+reference counting itself has maintenance overhead (almost every
+assignment and argument pass has to update a count), and it
+<strong>can’t handle reference cycles</strong> (two objects referencing
+each other will never have either count truly reach zero). CPython
+therefore layers a dedicated generational garbage collector for cycle
+detection on top of reference counting as a patch—the two work together
+rather than being an either/or choice.</p>
+<hr />
+<h2
+id="mutable-vs.-immutable-the-line-that-determines-aliasing-behavior">4.
+Mutable vs. Immutable: the Line That Determines Aliasing Behavior</h2>
+<h3 id="how-to-use-it-3">How to Use It</h3>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> <span class="dv">1</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> a</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> b <span class="op">+</span> <span class="dv">1</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a, b)     <span class="co"># 1 2 —— a didn&#39;t change</span></span></code></pre></div>
+<p>Why doesn’t this have the “modifying b moves a” problem? The
+difference is that list is <strong>mutable</strong>, while int is
+<strong>immutable</strong>.</p>
+<ul>
+<li><strong>Mutable objects</strong> (list, dict, set, most custom class
+instances): their contents can be modified in place;
+<code>b.append(4)</code>, <code>b[0] = 9</code> change the object
+itself, and every alias sees it.</li>
+<li><strong>Immutable objects</strong> (int, float, str, tuple, bool,
+frozenset, None): their contents cannot change; any “modification”
+operation actually <strong>builds a new object</strong> and rebinds the
+name to point to it.</li>
+</ul>
+<p>One pitfall: <code>+=</code> behaves differently for mutable and
+immutable objects. <code>b += [4]</code> on a list is an in-place
+extension (equivalent to <code>extend</code>, affecting aliases);
+<code>b += 1</code> on an int is a rebind (not affecting aliases):</p>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> [<span class="dv">1</span>, <span class="dv">2</span>]</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> a</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>a <span class="op">+=</span> [<span class="dv">3</span>]        <span class="co"># a list&#39;s += is an in-place extension (__iadd__), still the same object</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(b)        <span class="co"># [1, 2, 3]   alias b follows the change</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> a <span class="op">+</span> [<span class="dv">4</span>]     <span class="co"># + builds a new list, then rebinds a to point at it</span></span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(b)        <span class="co"># [1, 2, 3]   b no longer follows</span></span></code></pre></div>
+<h3 id="internals-vs.-c-3">Internals vs. C++</h3>
+<p>Under the hood of <code>b = b + 1</code>: <code>b + 1</code> computes
+a <strong>new</strong> int object <code>2</code>, and <code>b =</code>
+rebinds the name b to this new object; the original <code>1</code>
+object is left completely untouched, and a still points to it:</p>
+<pre><code>a = 1; b = a                b = b + 1
+
+ a ─┐                        a ────► [ int 1 ]   ← a still points to the old object
+    ├──► [ int 1 ]           b ────► [ int 2 ]   ← b now points to a new object
+ b ─┘                        (newly allocated object)</code></pre>
+<p>Compare this with in-place modification of a mutable object:</p>
+<pre><code>a = [1,2,3]; b = a          b.append(4)
+
+ a ─┐                        a ─┐
+    ├──► [1,2,3]                ├──► [1,2,3,4]   ← the same object is modified
+ b ─┘                        b ─┘                  both names see the change</code></pre>
+<p>The core rule: <strong>in-place modification</strong> of a mutable
+object affects every alias; <strong>rebinding</strong>
+(<code>b = ...</code>) of any object only changes where the name b
+itself points. Immutable objects have no “in-place modification” path at
+all, so their aliases are always safe. The reason <code>+=</code> splits
+along the same line is that mutable objects implement an in-place
+<code>__iadd__</code>, while immutable objects don’t, so <code>+=</code>
+falls back to plain <code>b = b + 1</code>.</p>
+<p><strong>Why does Python design an “immutable object” category at all,
+instead of making everything mutable (which would fit more cleanly with
+the unified model of “everything is an object, a variable is just a
+reference”)?</strong> Immutability buys three concrete benefits, worth
+giving up the simplicity of “everything is uniformly mutable” for:
+first, immutable objects can naturally be shared safely—multiple names
+pointing at the same <code>int</code>/<code>str</code> object don’t need
+to worry that some code elsewhere quietly changed it, and this is the
+precondition that lets sharing optimizations like small-integer caching
+and string interning (section 5) exist safely at all; second, immutable
+objects can safely be used as <code>dict</code> keys or put into a
+<code>set</code> (if a mutable object’s hash value changed along with
+its contents, you’d lose track of it in a hash table the moment its
+contents changed, so Python simply disallows mutable types from being
+hashable by default); third, functional-programming style code is
+relieved of the mental burden of worrying “will the value I passed in
+get modified behind my back.” The cost is that modifying the content
+requires constructing a new object, which has a real performance cost in
+scenarios like frequent string concatenation (avoidable with mutable
+containers in the <code>list</code>/<code>StringBuilder</code> style—see
+<a href="07-复合数据结构.html">Composite Data Structures</a>).</p>
+<hr />
+<h2 id="small-integer-caching-and-string-interning">5. Small-Integer
+Caching and String Interning</h2>
+<h3 id="how-to-use-it-4">How to Use It</h3>
+<p>The practical rule is short: <strong>test equality with
+<code>==</code>, and reserve <code>is</code> for
+<code>None</code>.</strong> Everything below is the reason why.</p>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> <span class="dv">100</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> <span class="dv">100</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a <span class="kw">is</span> b)      <span class="co"># True, both point to the one cached 100 object</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>m <span class="op">=</span> <span class="bu">int</span>(<span class="st">&quot;257&quot;</span>)</span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>n <span class="op">=</span> <span class="bu">int</span>(<span class="st">&quot;257&quot;</span>)</span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(m <span class="kw">is</span> n)      <span class="co"># False, the two int() calls each built a fresh 257 object on the heap</span></span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(m <span class="op">==</span> n)      <span class="co"># True, the values are of course equal</span></span></code></pre></div>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>a <span class="op">=</span> <span class="st">&quot;hello&quot;</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> <span class="st">&quot;hello&quot;</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(a <span class="kw">is</span> b)      <span class="co"># usually True, interned</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sys</span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>u <span class="op">=</span> <span class="st">&quot;hello world!&quot;</span>.upper().lower()</span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>v <span class="op">=</span> <span class="st">&quot;hello world!&quot;</span>.upper().lower()</span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(u <span class="kw">is</span> v)                              <span class="co"># usually False, built at runtime, not interned</span></span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(sys.<span class="bu">intern</span>(u) <span class="kw">is</span> sys.<span class="bu">intern</span>(v))      <span class="co"># True, after manual interning they share the same object</span></span></code></pre></div>
+<h3 id="internals-vs.-c-4">Internals vs. C++</h3>
+<p>Both of these are CPython implementation details, not language
+semantics—but you will definitely run into them when using
+<code>is</code>.</p>
+<p>CPython pre-creates every integer object from <code>-5</code> to
+<code>256</code> at startup and caches them for reuse; identical values
+within this range are <strong>the same object</strong>. <strong>Why do
+this caching at all?</strong> Small integers get used extremely
+frequently in real code (loop counters, indices, and the machinery
+behind boolean checks are all small integers under the hood);
+pre-building them once and reusing them forever avoids the overhead of
+repeatedly allocating and freeing objects for the same common value—a
+classic case of trading a small chunk of permanently resident memory for
+avoiding a large number of repeated runtime allocations. The range
+<code>[-5, 256]</code> is a CPython implementation choice hardcoded into
+the interpreter, and other implementations or versions may
+differ—<strong>always use <code>==</code> to test numeric equality,
+never <code>is</code></strong>; <code>is</code> merely happens to “work”
+for small integers, and outside that range it will give you a misleading
+<code>False</code>.</p>
+<p>String interning works the same way: CPython interns certain strings
+(especially literals that look like identifiers) into a global table, so
+identical contents share the same object, letting dict key lookups and
+identifier comparisons check pointers (<code>is</code>) first for a fast
+equality test, rather than comparing content character by character. The
+conditions that trigger interning vary by version and
+context—<strong>never rely on it</strong>; here too, only ever use
+<code>==</code> to test equality.</p>
+<hr />
+<h2
+id="namespaces-are-dictionaries-but-local-variables-are-fast-locals">6.
+Namespaces Are Dictionaries, but Local Variables Are Fast Locals</h2>
+<h3 id="how-to-use-it-5">How to Use It</h3>
+<p>Two things follow from this section in practice. First, module-level
+globals really are a dict you can inspect:</p>
+<div class="sourceCode" id="cb15"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>x <span class="op">=</span> <span class="dv">10</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">globals</span>()[<span class="st">&quot;x&quot;</span>])    <span class="co"># 10, the global namespace is just a dict</span></span></code></pre></div>
+<p>Second—the reason this matters—reading a local is measurably cheaper
+than reading a global or an attribute, so in a hot loop you hoist what
+you need into a local first:</p>
+<div class="sourceCode" id="cb16"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> math</span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> slow(xs):</span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> [math.sqrt(v) <span class="cf">for</span> v <span class="kw">in</span> xs]      <span class="co"># looks up math, then .sqrt, every iteration</span></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> fast(xs):</span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>    sqrt <span class="op">=</span> math.sqrt                        <span class="co"># hoist once into a local</span></span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> [sqrt(v) <span class="cf">for</span> v <span class="kw">in</span> xs]            <span class="co"># now it&#39;s an array-index load per iteration</span></span></code></pre></div>
+<h3 id="internals-vs.-c-5">Internals vs. C++</h3>
+<p>A module’s global namespace and an object’s attributes really are,
+under the hood, dicts (keys are name strings, values are object
+references). But local variables inside a function are an important
+exception. When CPython compiles a function, it can statically count
+exactly how many local variables there are and what each one is, so it
+places them into a <strong>fixed-length array</strong> (“fast locals”),
+accessed by index, rather than looking them up in a dict by string every
+time—recall the <code>LOAD_FAST</code> we saw with <code>dis</code> in
+<a href="01-运行模型.html">The Execution Model</a>:</p>
+<div class="sourceCode" id="cb17"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> dis</span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>g <span class="op">=</span> <span class="dv">1</span></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> f(a):</span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>    b <span class="op">=</span> a <span class="op">+</span> g       <span class="co"># a, b are locals (fast); g is global</span></span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> b</span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a>dis.dis(f)</span></code></pre></div>
+<pre><code>  4           RESUME                   0
+
+  5           LOAD_FAST_BORROW         0 (a)
+              LOAD_GLOBAL              0 (g)
+              BINARY_OP                0 (+)
+              STORE_FAST               1 (b)
+
+  6           LOAD_FAST_BORROW         1 (b)
+              RETURN_VALUE</code></pre>
+<p>(<code>LOAD_FAST_BORROW</code> is 3.14’s optimized variant for
+reading a local—it “borrows” the reference, skipping refcnt
+increments/decrements, but it’s still fundamentally an indexed local
+access underneath; globals are still <code>LOAD_GLOBAL</code>.)</p>
+<p><code>LOAD_FAST</code>/<code>STORE_FAST</code> use an array index,
+O(1), no hashing, no string comparison; <code>LOAD_GLOBAL</code> goes
+through a dict lookup (this module’s globals first, then
+builtins)—noticeably more expensive. <strong>Why optimize function
+locals into an array specifically, instead of uniformly using a dict the
+way the global namespace does?</strong> A function body is statically
+known at compile time—which local variable names a function uses, and
+how many there are in total, can be determined by a single pass over the
+source, and this set never grows or shrinks dynamically at runtime
+(unlike module globals or object attributes, where new names can be
+added arbitrarily at runtime). Since the set of names is already fixed
+at compile time, there’s no need to pay the cost of hashing and string
+comparison on every access—you can just allocate a fixed-length array
+and map each name to a fixed index at compile time. This is a concrete
+instance of the optimization principle “don’t leave information to be
+recomputed at runtime if it can already be determined at compile time”;
+the module-level global namespace can’t get this same optimization,
+because it has to support adding and removing names dynamically at
+runtime (e.g. via <code>exec</code> or a dynamic
+<code>import</code>).</p>
+<p>This explains the hoisting trick above: it is exactly swapping
+<code>LOAD_GLOBAL</code> (dict lookup) for <code>LOAD_FAST</code> (array
+lookup). It also explains why reading and writing a global inside a
+function requires a <code>global</code> declaration—the compiler decides
+whether to treat a name as local or global based on whether the function
+assigns to that name anywhere in its body, and this decision has to be
+made at compile time; it can’t be deferred to runtime and decided
+situationally. The full story is in <a
+href="06-函数与调用栈.html">Functions and the Call Stack</a>.</p>
+<hr />
+<h2 id="shallow-copy-vs.-deep-copy">7. Shallow Copy vs. Deep Copy</h2>
+<h3 id="how-to-use-it-6">How to Use It</h3>
+<p><code>b = a</code> only copies the pointer; if you actually want a
+copy of the data, use the <code>copy</code> module, and you need to
+distinguish shallow from deep copy—the same question as in C++: “is copy
+construction shallow or deep, do I need to write my own deep copy.”</p>
+<div class="sourceCode" id="cb19"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> copy</span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>original <span class="op">=</span> [[<span class="dv">1</span>, <span class="dv">2</span>], [<span class="dv">3</span>, <span class="dv">4</span>]]</span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a>alias    <span class="op">=</span> original                 <span class="co"># alias, same object</span></span>
+<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a>shallow  <span class="op">=</span> copy.copy(original)      <span class="co"># shallow copy: new outer container, inner elements still shared</span></span>
+<span id="cb19-7"><a href="#cb19-7" aria-hidden="true" tabindex="-1"></a>deep     <span class="op">=</span> copy.deepcopy(original)  <span class="co"># deep copy: recursively copies every layer</span></span>
+<span id="cb19-8"><a href="#cb19-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-9"><a href="#cb19-9" aria-hidden="true" tabindex="-1"></a>original[<span class="dv">0</span>].append(<span class="dv">99</span>)</span>
+<span id="cb19-10"><a href="#cb19-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-11"><a href="#cb19-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(alias)    <span class="co"># [[1, 2, 99], [3, 4]]   changes too (same object)</span></span>
+<span id="cb19-12"><a href="#cb19-12" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(shallow)  <span class="co"># [[1, 2, 99], [3, 4]]   changes too, the inner layer is shared</span></span>
+<span id="cb19-13"><a href="#cb19-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(deep)     <span class="co"># [[1, 2], [3, 4]]       independent, unchanged</span></span></code></pre></div>
+<p>Other common ways to produce a shallow copy—<code>list(x)</code>,
+<code>x[:]</code>, <code>dict(x)</code>, <code>x.copy()</code>—are all
+shallow, just like <code>copy.copy</code>. Rule of thumb: <strong>a flat
+container of immutable elements is fine with a shallow copy; the moment
+the elements are themselves mutable, you need
+<code>deepcopy</code></strong> (which carries the cost of recursive
+traversal and extra allocation and shouldn’t be reached for
+thoughtlessly).</p>
+<h3 id="internals-vs.-c-6">Internals vs. C++</h3>
+<pre><code>original ─► [ ●, ● ]            outer list
+              │  │
+              ▼  ▼
+           [1,2] [3,4]          two inner lists
+
+shallow = copy.copy(original):
+shallow ─► [ ●, ● ]  ← a new outer object
+             │  │
+             └──┴──► point to the same [1,2] and [3,4]  (the inner layer wasn&#39;t copied)
+
+deep = copy.deepcopy(original):
+deep ─► [ ●, ● ]  ← new outer
+          │  │
+          ▼  ▼
+       [1,2]&#39;[3,4]&#39;  ← even the inner layer is new objects, fully independent</code></pre>
+<p><strong>Why does the default shallow copy only copy one layer,
+instead of just always deep-copying, which would seem safer?</strong>
+Nested structures can be arbitrarily deep; blindly deep-copying a large
+nested object (say, a big tree or graph) is expensive, and deep copy
+also needs to correctly handle reference cycles (an object referencing
+itself), which is more complex to implement. Shallow copy hands the
+decision of “how deep to copy” back to the caller—in most scenarios the
+container itself needs to be independent, but it’s perfectly acceptable
+for the objects inside to remain shared (e.g. copying a “list of
+pointers,” where what the pointers point to is meant to be shared
+anyway). This is a classic instance of the design convention “provide a
+cheap default operation; the expensive operation must be requested
+explicitly,” the same principle behind “assignment defaults to copying a
+reference rather than deep-copying” from earlier.</p>
+<hr />
+<h2 id="the-mutable-default-argument-trap">8. The Mutable Default
+Argument Trap</h2>
+<h3 id="how-to-use-it-7">How to Use It</h3>
+<p>With this chapter’s model in hand, you can now make sense of one of
+Python’s most famous pitfalls:</p>
+<div class="sourceCode" id="cb21"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> add_item(item, bucket<span class="op">=</span>[]):    <span class="co"># dangerous: the default [] is created only once</span></span>
+<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a>    bucket.append(item)</span>
+<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> bucket</span>
+<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(add_item(<span class="dv">1</span>))   <span class="co"># [1]</span></span>
+<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(add_item(<span class="dv">2</span>))   <span class="co"># [1, 2]   you might expect [2], but it remembered last time</span></span></code></pre></div>
+<p>The fix is mechanical, and it’s worth learning as a reflex:
+<strong>never put a mutable object in a default argument—use
+<code>None</code> as the sentinel and build the real default inside the
+body.</strong></p>
+<div class="sourceCode" id="cb22"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> add_item(item, bucket<span class="op">=</span><span class="va">None</span>):</span>
+<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> bucket <span class="kw">is</span> <span class="va">None</span>:</span>
+<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a>        bucket <span class="op">=</span> []               <span class="co"># a fresh list on every call that omits the argument</span></span>
+<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a>    bucket.append(item)</span>
+<span id="cb22-5"><a href="#cb22-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> bucket</span>
+<span id="cb22-6"><a href="#cb22-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-7"><a href="#cb22-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(add_item(<span class="dv">1</span>))   <span class="co"># [1]</span></span>
+<span id="cb22-8"><a href="#cb22-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(add_item(<span class="dv">2</span>))   <span class="co"># [2]   as expected</span></span></code></pre></div>
+<h3 id="internals-vs.-c-7">Internals vs. C++</h3>
+<p>The reason: the default value <code>[]</code> is a mutable object
+<strong>created once when <code>def</code> executes</strong>, held onto
+by the function object forever; every call that omits
+<code>bucket</code> reuses the same list, and the in-place
+<code>append</code> naturally accumulates. This is the inevitable result
+of three things converging: mutable object + aliasing + created only
+once. The <code>def</code> statement itself is a statement that executes
+at runtime (see section 3 of <a href="01-运行模型.html">The Execution
+Model</a>), and the default-value expression is evaluated exactly once,
+at the moment that <code>def</code> statement executes—not re-evaluated
+on every call. You can see the stored default hanging off the function
+object itself:</p>
+<div class="sourceCode" id="cb23"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> add_item(item, bucket<span class="op">=</span>[]): ...</span>
+<span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(add_item.__defaults__)   <span class="co"># ([],)  —— one object, owned by the function, forever</span></span></code></pre></div>
+<p>The rationale behind this design, and the full mechanism, are covered
+in <a href="06-函数与调用栈.html">Functions and the Call Stack</a>.</p>
+<hr />
+<h2 id="summary">Summary</h2>
+<ul>
+<li><strong>Usage level</strong>: assignment (<code>b = a</code>) never
+copies data—it makes a second name for one object, so both names see
+in-place changes. list/dict/set are mutable; int/float/str/tuple are
+not, and “changing” one builds a new object. To get an independent copy,
+ask for one: <code>a[:]</code> / <code>list(a)</code> /
+<code>copy.copy(a)</code> for one layer, <code>copy.deepcopy(a)</code>
+when the elements are mutable too. Compare values with <code>==</code>
+and reserve <code>is</code> for <code>None</code>. Never use a mutable
+object as a default argument—use <code>None</code> and build it in the
+body. In a hot loop, hoist globals and attributes into locals.</li>
+<li><strong>Internals level</strong>: a variable is a binding of a name
+to a heap object, not a memory box—this is the inevitable memory model
+that dynamic typing produces, not an arbitrary choice.</li>
+<li><code>a = b</code> copies only the reference, never the object or
+the data—the result is aliasing; <code>is</code>/<code>id()</code> tell
+you whether it’s the same object, <code>==</code> tells you whether the
+values are equal.</li>
+<li>Reference counting (<code>ob_refcnt</code>) is what CPython trades
+for “deterministic reclamation” and “easy C-extension integration,” at
+the cost of needing an extra cyclic garbage collector as a patch;
+<code>del</code> unbinds a name, it doesn’t delete the object.</li>
+<li>The mutable/immutable divide governs aliasing behavior: immutability
+is traded for safe sharing, hashability, and lower mental burden, at the
+cost that modifying content requires building a new object.</li>
+<li>Small-integer caching and string interning are CPython
+implementation optimizations that trade a small chunk of resident memory
+for avoiding repeated allocation—they are not language guarantees, so
+always test equality with <code>==</code>.</li>
+<li>Function local variables use a fast-locals array instead of a dict,
+a concrete instance of “don’t recompute at runtime what’s already known
+at compile time”; the module global namespace can’t get the same
+optimization because it must support adding and removing names
+dynamically at runtime.</li>
+<li>Shallow copy copying only one layer reflects the convention “the
+default operation is cheap, the expensive operation must be requested
+explicitly”; the mutable default argument trap is a direct corollary of
+“the <code>def</code> statement executes only once, and the default
+value is only evaluated once.”</li>
+</ul>
+<hr />
+<p><a href="02-基础语法.html">← Prev: Basic Syntax</a> · <a
+href="index.html">Index</a> · <a href="04-数据类型.html">Next: Data
+Types</a> →</p>
+</div>
+</body>
+</html>

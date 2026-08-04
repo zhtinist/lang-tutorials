@@ -29,7 +29,7 @@ LANGS = ["zh", "en"]
 # 已完成英文版、参与 zh/en 双语镜像的教程(sub 代号)。
 # 其余教程(python/go 及所有 ZH_ONLY 板块)暂时只有中文,不出现在 en 站点,也不显示语言切换按钮。
 # 以后补齐某教程英文版后,把它的 sub 代号加进来即可自动生成 en 页面并启用切换。
-BILINGUAL = {"java"}
+BILINGUAL = {"java", "python"}
 
 TOGGLE_JS = ("function switchLang(){var p=location.pathname,en=p.indexOf('/en/')>-1,"
              "n=en?p.replace('/en/','/zh/'):p.replace('/zh/','/en/');"
@@ -105,7 +105,11 @@ def build_page(md_path, out_path, lang, sub_active):
            "--include-before-body", bpath]
     if not is_index:
         cmd += ["--toc", "--toc-depth=2"]
-    r = subprocess.run(cmd + ["-o", out_path], input=text, capture_output=True, text=True)
+    # encoding 必须显式给 utf-8:Windows 下 text=True 默认用 locale 编码(cp1252),
+    # 中文写入 pandoc 的 stdin 会抛 UnicodeEncodeError,writer 线程挂了之后
+    # pandoc 等不到 EOF 会永久卡住(不报错、不退出)。
+    r = subprocess.run(cmd + ["-o", out_path], input=text,
+                       capture_output=True, text=True, encoding="utf-8")
     os.remove(bpath)
     if r.returncode != 0:
         raise SystemExit(f"pandoc 失败 {md_path}:\n{r.stderr}")
